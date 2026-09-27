@@ -33,6 +33,7 @@ import PrintCashCloseView from "./views/PrintCashCloseView.vue";
 import InvoiceRequestView from "./views/InvoiceRequestView.vue";
 import BillingView from "./views/BillingView.vue";
 import PlatformAdminView from "./views/PlatformAdminView.vue";
+import LegalView from "./views/LegalView.vue";
 
 const authMeta = (roles?: string[]) => ({
   requiresAuth: true,
@@ -47,6 +48,8 @@ const routes: RouteRecordRaw[] = [
   { path: "/forgot", name: "forgot", component: ForgotPasswordView },
   { path: "/reset/:token", name: "reset", component: ResetPasswordView },
   { path: "/invite/:token", name: "invite", component: InviteAcceptView },
+  { path: "/terminos", name: "terms", component: LegalView, props: { page: "terms" } },
+  { path: "/privacidad", name: "privacy", component: LegalView, props: { page: "privacy" } },
   { path: "/factura/:token", name: "factura", component: InvoiceRequestView },
   { path: "/setup", name: "setup", component: SetupWizard, meta: { requiresAuth: true } },
   { path: "/dashboard", name: "dashboard", component: DashboardView, meta: authMeta(["admin"]) },
@@ -121,7 +124,17 @@ const router = createRouter({
   },
 });
 
-const publicNames = new Set(["landing", "login", "register", "forgot", "reset", "invite", "factura"]);
+const publicNames = new Set([
+  "landing",
+  "login",
+  "register",
+  "forgot",
+  "reset",
+  "invite",
+  "factura",
+  "terms",
+  "privacy",
+]);
 
 router.beforeEach(async (to) => {
   if (publicNames.has(String(to.name))) {

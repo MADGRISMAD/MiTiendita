@@ -21,7 +21,6 @@ function isMpSandbox() {
   if (String(process.env.MP_SANDBOX || '').toLowerCase() === 'true') return true;
   if (String(process.env.MP_SANDBOX || '').toLowerCase() === 'false') return false;
   const t = String(process.env.MP_ACCESS_TOKEN || '');
-  // TEST-… clásico, o cuentas de prueba que igual usan prefijo APP_USR-
   return t.startsWith('TEST-') || /TEST/i.test(t);
 }
 
@@ -35,29 +34,26 @@ function isLocalHostname(hostname) {
 }
 
 /**
- * MP rechaza localhost / IPs privadas en back_url.
- * Usa MP_BACK_URL o APP_URL si son públicas; si no, un HTTPS válido
- * (el usuario vuelve a Mi Tiendita y sincroniza el pago).
+ * MP rechaza localhost y ciertos TLDs poco comunes.
+ * Si MP_BACK_URL está definido se usa tal cual (URL completa ya lista).
+ * Si no, se construye desde APP_URL.
  */
 function resolveBackUrl() {
-  const candidates = [
-    process.env.MP_BACK_URL,
-    process.env.APP_PUBLIC_URL,
-    process.env.APP_URL,
-  ];
+  const explicit = String(process.env.MP_BACK_URL || '').trim();
+  if (explicit) return explicit;
+
+  const candidates = [process.env.APP_PUBLIC_URL, process.env.APP_URL];
   for (const raw of candidates) {
     if (!raw) continue;
     try {
       const u = new URL(String(raw).trim());
       if (isLocalHostname(u.hostname)) continue;
-      // MP suele exigir URL absoluta “limpia”; path /billing está bien
       const base = `${u.protocol}//${u.host}`.replace(/\/$/, '');
-      return `${base}/billing?mp=return`;
+      return `${base}/billing`;
     } catch {
       /* next */
     }
   }
-  // Fallback para poder crear el preapproval en local sin túnel
   return 'https://www.mercadopago.com.mx';
 }
 
@@ -69,7 +65,6 @@ function resolveNotificationUrl() {
   try {
     const u = new URL(apiUrl);
     if (isLocalHostname(u.hostname)) {
-      // Webhook local no lo alcanza MP; el sync al volver cubre el caso
       return undefined;
     }
     return `${apiUrl}/billing/webhook`;
@@ -138,9 +133,11 @@ async function createPreapproval({
     console.warn(
       '[mp] back_url pública no configurada (APP_URL es localhost). ' +
         'Usando fallback; tras pagar vuelve a /billing y pulsa «Sincronizar pago». ' +
-        'Para retorno automático define MP_BACK_URL=https://tu-tunel.ngrok-free.app'
+        'Para retorno automático define MP_BACK_URL=https://tu-dominio.com/billing'
     );
   }
+
+  console.log('[mp] createPreapproval →', { plan, interval: billingInterval, amount, backUrl, notificationUrl });
 
   const res = await fetch(`${MP_API}/preapproval`, {
     method: 'POST',
@@ -198,10 +195,33 @@ async function getPreapproval(id) {
 function mapMpStatusToBilling(mpStatus) {
   const s = String(mpStatus || '').toLowerCase();
   if (s === 'authorized') return 'active';
-  if (s === 'pending') return null; // aún no pagó
+  if (s === 'pending') return null;
   if (s === 'paused') return 'past_due';
   if (s === 'cancelled' || s === 'canceled') return 'suspended';
   return null;
+}
+
+async function cancelPreapproval(id) {
+  if (!id) return { id: null, status: 'cancelled', mock: true };
+  if (!hasMpConfig() || String(id).startsWith('mock_')) {
+    return { id, status: 'cancelled', mock: true };
+  }
+  const res = await fetch(`${MP_API}/preapproval/${id}`, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${process.env.MP_ACCESS_TOKEN}`,
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify({ status: 'cancelled' }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = new Error(data.message || 'No se pudo cancelar la suscripción en Mercado Pago');
+    err.status = res.status;
+    throw err;
+  }
+  return data;
 }
 
 module.exports = {
@@ -215,5 +235,6 @@ module.exports = {
   listPlans,
   createPreapproval,
   getPreapproval,
+  cancelPreapproval,
   mapMpStatusToBilling,
 };

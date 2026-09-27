@@ -211,6 +211,98 @@ function invoiceStoreEmail({ storeName, folio, total, invoice }) {
   };
 }
 
+function welcomeEmail({ name, businessName, appUrl, trialDays }) {
+  const who = name || 'Hola';
+  const shop = businessName || 'tu tienda';
+  const days = trialDays || 14;
+  return {
+    subject: `Bienvenido a Mi Tiendita — ${days} días de prueba`,
+    html: renderMachote({
+      eyebrow: 'Bienvenida',
+      title: `${who}, ya puedes cobrar`,
+      body: [
+        paragraph(
+          `Tu cuenta para <strong>${escapeHtml(shop)}</strong> está lista. Tienes <strong>${days} días</strong> para configurar la caja, cargar productos y cobrar sin pagar.`
+        ),
+        paragraph('El camino más corto:'),
+        dataBox([
+          { label: '1', value: 'Nombra tu tienda en el asistente' },
+          { label: '2', value: 'Carga el catálogo de ejemplo o tus productos' },
+          { label: '3', value: 'Abre caja y cobra el primer ticket' },
+        ]),
+        cta(`${appUrl}/setup`, 'Configurar mi tienda'),
+      ].join(''),
+      footerNote: 'Si no creaste esta cuenta, ignora este correo.',
+    }),
+  };
+}
+
+function paymentConfirmedEmail({ businessName, planName, interval, amount, periodEnd, appUrl }) {
+  const period = interval === 'year' ? 'anual' : 'mensual';
+  return {
+    subject: `Pago confirmado — ${planName} ${period}`,
+    html: renderMachote({
+      eyebrow: 'Facturación',
+      title: 'Tu suscripción está activa',
+      body: [
+        paragraph(
+          `Ya registramos el pago de <strong>${escapeHtml(businessName || 'tu tienda')}</strong>.`
+        ),
+        dataBox([
+          { label: 'Plan', value: `${planName} ${period}` },
+          { label: 'Importe', value: amount },
+          { label: 'Vigencia', value: periodEnd },
+        ]),
+        paragraph('Puedes cambiar o cancelar el plan cuando quieras desde Facturación. Si cancelas, sigues usando el sistema hasta el fin del periodo pagado.'),
+        cta(`${appUrl}/billing`, 'Ver facturación'),
+      ].join(''),
+      footerNote: 'Recibo informativo de Mi Tiendita. El cargo aparece en Mercado Pago.',
+    }),
+  };
+}
+
+function subscriptionCancelledEmail({ businessName, planName, periodEnd, appUrl }) {
+  return {
+    subject: `Suscripción cancelada — ${planName}`,
+    html: renderMachote({
+      eyebrow: 'Facturación',
+      title: 'Cancelamos el cargo recurrente',
+      body: [
+        paragraph(
+          `La suscripción de <strong>${escapeHtml(businessName || 'tu tienda')}</strong> no se renovará.`
+        ),
+        dataBox([
+          { label: 'Plan', value: planName },
+          { label: 'Acceso hasta', value: periodEnd || 'el fin del periodo pagado' },
+        ]),
+        paragraph('Sigues cobrando con normalidad hasta esa fecha. Si cambias de opinión, vuelve a Facturación y elige un plan.'),
+        cta(`${appUrl}/billing`, 'Reactivar plan'),
+      ].join(''),
+      footerNote: 'No se harán más cargos automáticos por esta suscripción.',
+    }),
+  };
+}
+
+function supportReceivedEmail({ storeName, subject, message }) {
+  return {
+    subject: `Recibimos tu mensaje — ${subject}`,
+    html: renderMachote({
+      eyebrow: 'Soporte',
+      title: 'Ya estamos leyendo tu caso',
+      body: [
+        paragraph(
+          `Gracias, <strong>${escapeHtml(storeName || 'tu tienda')}</strong>. Respondemos a este mismo correo.`
+        ),
+        dataBox([
+          { label: 'Asunto', value: subject },
+          { label: 'Mensaje', value: message },
+        ]),
+      ].join(''),
+      footerNote: 'También puedes escribirnos de nuevo desde Configuración → Soporte.',
+    }),
+  };
+}
+
 function supportReplyEmail({ storeName, message }) {
   const body = escapeHtml(message).replace(/\n/g, '<br>');
   return {
@@ -392,6 +484,10 @@ module.exports = {
   passwordResetEmail,
   invoiceCustomerEmail,
   invoiceStoreEmail,
+  welcomeEmail,
+  paymentConfirmedEmail,
+  subscriptionCancelledEmail,
+  supportReceivedEmail,
   supportReplyEmail,
   ownerMonthlyReport,
 };

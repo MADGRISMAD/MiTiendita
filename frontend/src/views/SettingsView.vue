@@ -92,6 +92,31 @@
         </ul>
       </section>
 
+      <section v-else-if="tab === 'support'" class="panel">
+        <h2>Soporte</h2>
+        <p class="hint">Escríbenos desde aquí. El equipo de Mi Tiendita ve el mensaje en el panel de plataforma.</p>
+        <form class="support-form" @submit.prevent="sendSupport">
+          <label>Asunto<input v-model="support.subject" required maxlength="140" placeholder="No puedo abrir caja" /></label>
+          <label>Mensaje
+            <textarea v-model="support.message" required minlength="8" rows="5" placeholder="Cuéntanos qué pasa y en qué pantalla." />
+          </label>
+          <button type="submit" class="btn-primary" :disabled="supportBusy">
+            {{ supportBusy ? "Enviando…" : "Enviar a soporte" }}
+          </button>
+        </form>
+        <p v-if="supportMsg" class="ok">{{ supportMsg }}</p>
+        <p v-if="supportErr" class="err">{{ supportErr }}</p>
+        <h3 v-if="tickets.length">Conversaciones</h3>
+        <ul class="invite-list">
+          <li v-for="t in tickets" :key="t.id">
+            <div>
+              <strong>{{ t.subject }}</strong>
+              <span class="meta">{{ t.status === "open" ? "Abierta" : "Respondida" }} · {{ t.messages?.length || 0 }} mensaje(s)</span>
+            </div>
+          </li>
+        </ul>
+      </section>
+
       <section v-else class="panel">
         <h2>Preferencias</h2>
         <label class="check-row">
@@ -126,6 +151,7 @@ const tabs = [
   { id: "brand", label: "Negocio / Marca" },
   { id: "appearance", label: "Apariencia" },
   { id: "team", label: "Equipo" },
+  { id: "support", label: "Soporte" },
   { id: "prefs", label: "Preferencias" },
 ];
 
@@ -155,7 +181,12 @@ const invites = ref([]);
 const inviting = ref(false);
 const inviteMsg = ref("");
 const inviteErr = ref("");
-const invite = reactive({ email: "", role: "hosstess" });
+const invite = reactive({ email: "", role: "cashier" });
+const support = reactive({ subject: "", message: "" });
+const supportBusy = ref(false);
+const supportMsg = ref("");
+const supportErr = ref("");
+const tickets = ref([]);
 
 async function saveBrand() {
   saving.value = true;
@@ -204,6 +235,36 @@ async function loadInvites() {
   }
 }
 
+async function loadSupport() {
+  try {
+    const data = await apiService.getSupportThread();
+    tickets.value = data.tickets || [];
+  } catch {
+    tickets.value = [];
+  }
+}
+
+async function sendSupport() {
+  supportBusy.value = true;
+  supportMsg.value = "";
+  supportErr.value = "";
+  try {
+    const data = await apiService.sendSupportMessage({
+      subject: support.subject,
+      message: support.message,
+    });
+    tickets.value = data.tickets || [];
+    support.subject = "";
+    support.message = "";
+    supportMsg.value = "Mensaje enviado. Te respondemos a tu correo.";
+  } catch (e) {
+    const raw = e.response?.data;
+    supportErr.value = typeof raw === "string" ? raw : raw?.message || "No se pudo enviar.";
+  } finally {
+    supportBusy.value = false;
+  }
+}
+
 async function sendInvite() {
   inviting.value = true;
   inviteMsg.value = "";
@@ -214,7 +275,8 @@ async function sendInvite() {
     invite.email = "";
     await loadInvites();
   } catch (e) {
-    inviteErr.value = e.response?.data || "No se pudo enviar la invitación.";
+    const raw = e.response?.data;
+    inviteErr.value = typeof raw === "string" ? raw : raw?.message || "No se pudo enviar la invitación.";
   } finally {
     inviting.value = false;
   }
@@ -231,7 +293,10 @@ async function removeInvite(i) {
   await loadInvites();
 }
 
-onMounted(loadInvites);
+onMounted(() => {
+  loadInvites();
+  loadSupport();
+});
 </script>
 
 <style scoped>
@@ -319,6 +384,11 @@ input, select { border:1px solid var(--timber-line); border-radius:.65rem; paddi
 .row-actions { display:flex; gap:.35rem; }
 .row-actions button { border:1px solid var(--timber-line); background:var(--timber-panel-elevated); color:var(--timber-ink); border-radius:.55rem; padding:.4rem .6rem; cursor:pointer; font-size:.78rem; font-weight:600; }
 .danger { color:var(--timber-danger); }
+.support-form { display:grid; gap:.75rem; margin-bottom:.85rem; max-width:32rem; }
+.support-form textarea {
+  border:1px solid var(--timber-line); border-radius:.65rem; padding:.65rem .75rem;
+  font:inherit; background:var(--timber-panel-elevated); color:var(--timber-ink); resize:vertical;
+}
 .link { display:inline-block; margin-top:1rem; color:var(--timber-primary); font-weight:600; }
 .empty { color:var(--timber-muted); }
 @media (max-width:720px) { .invite-form { grid-template-columns:1fr; } }

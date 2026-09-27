@@ -113,6 +113,32 @@ async function sendPasswordResetEmail({ to, resetUrl }) {
   return { ...result, resetUrl };
 }
 
+async function sendWelcomeEmail({ to, name, businessName, appUrl, trialDays }) {
+  return sendTemplated(to, templates.welcomeEmail({ name, businessName, appUrl, trialDays }));
+}
+
+async function sendPaymentConfirmedEmail(opts) {
+  return sendTemplated(opts.to, templates.paymentConfirmedEmail(opts));
+}
+
+async function sendSubscriptionCancelledEmail(opts) {
+  return sendTemplated(opts.to, templates.subscriptionCancelledEmail(opts));
+}
+
+async function sendSupportReceivedEmail({ to, storeName, subject, message }) {
+  return sendTemplated(to, templates.supportReceivedEmail({ storeName, subject, message }));
+}
+
+async function safeSend(fn) {
+  try {
+    if (!hasSmtpConfig()) return { sent: false, skipped: true };
+    return await fn();
+  } catch (err) {
+    console.warn('[mail] envío omitido:', err.message);
+    return { sent: false, error: err.message };
+  }
+}
+
 async function sendInvoiceRequestCustomerEmail({
   to,
   storeName,
@@ -165,7 +191,12 @@ module.exports = {
   sendMail,
   sendInviteEmail,
   sendPasswordResetEmail,
+  sendWelcomeEmail,
+  sendPaymentConfirmedEmail,
+  sendSubscriptionCancelledEmail,
+  sendSupportReceivedEmail,
   sendInvoiceRequestCustomerEmail,
   sendInvoiceRequestStoreEmail,
+  safeSend,
   verifyMailConfig,
 };

@@ -2,6 +2,7 @@ const db = require('../database/mongodb');
 const { planAiQuota } = require('../services/plans.catalog');
 const gemini = require('../services/gemini.service');
 const magic = require('../services/magic-inventory.service');
+const limits = require('../services/plan-limits.service');
 
 const PLAN_NAMES = { basic: 'Básico', growth: 'Crecimiento', pro: 'Pro' };
 const IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
@@ -170,6 +171,14 @@ async function apply(req, res) {
     }
 
     let created = 0;
+    if (creates.length) {
+      try {
+        await limits.assertProductRoom(req.tenantId, req.tenant?.plan || 'basic', creates.length);
+      } catch (limitErr) {
+        if (limits.sendLimit(res, limitErr)) return;
+        throw limitErr;
+      }
+    }
     for (const row of creates) {
       const name = String(row?.name || '').trim();
       const menuId = String(row?.menuId || '').trim();

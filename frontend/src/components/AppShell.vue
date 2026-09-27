@@ -128,10 +128,20 @@ const billingBanner = computed(() => {
   if (s.billingStatus === "suspended") {
     return { tone: "danger", text: "Cuenta suspendida — contacta a Mi Tiendita o paga tu plan." };
   }
-  if (s.billingStatus === "trialing" && Number(s.trialDaysLeft) <= 3) {
+  if (s.billingStatus === "trialing") {
+    const days = Number(s.trialDaysLeft);
+    return {
+      tone: days <= 3 ? "danger" : "warn",
+      text:
+        days <= 0
+          ? "Tu prueba terminó. Activa un plan para seguir cobrando."
+          : `Prueba: te quedan ${days} día(s). Activa un plan cuando quieras.`,
+    };
+  }
+  if (s.cancelAtPeriodEnd && s.currentPeriodEnd) {
     return {
       tone: "warn",
-      text: `Tu prueba termina en ${s.trialDaysLeft} día(s). Activa un plan.`,
+      text: `La suscripción no se renovará. Acceso hasta ${new Date(s.currentPeriodEnd).toLocaleDateString("es-MX")}.`,
     };
   }
   return null;

@@ -4,8 +4,13 @@ const hasher = require('../utils/bcrypt.utils');
 const waitlist = require('../models/waitlist.model');
 const jwtCreator = require('../utils/jwt.utils');
 const db = require('../database/mongodb');
-const { createTenantDoc, newResetToken, ROLES } = require('../models/tenant.model');
-const { sendPasswordResetEmail, hasSmtpConfig } = require('../utils/mail.utils');
+const { createTenantDoc, newResetToken, ROLES, TRIAL_DAYS } = require('../models/tenant.model');
+const {
+  sendPasswordResetEmail,
+  sendWelcomeEmail,
+  hasSmtpConfig,
+  safeSend,
+} = require('../utils/mail.utils');
 const { resolveAppUrl } = require('../utils/app-url.utils');
 
 const CreateUser = async (req, res) => {
@@ -33,6 +38,14 @@ const CreateUser = async (req, res) => {
 
     await service.CreateUser(value);
 
+    await db.CreateBillingEvent({
+      tenantId,
+      type: 'trial_started',
+      plan: 'basic',
+      interval: 'month',
+      note: `Prueba de ${TRIAL_DAYS} días`,
+    }).catch(() => {});
+
     await db.CreateSettings({
       tenantId,
       businessName: tenant.name,
@@ -52,6 +65,17 @@ const CreateUser = async (req, res) => {
       userRole: 'admin',
       tenantId,
     });
+
+    const appUrl = resolveAppUrl(req);
+    safeSend(() =>
+      sendWelcomeEmail({
+        to: value.email,
+        name: value.name,
+        businessName: tenant.name,
+        appUrl,
+        trialDays: TRIAL_DAYS,
+      })
+    ).catch(() => {});
 
     return res.status(201).json({
       message: 'Usuario creado con exito',

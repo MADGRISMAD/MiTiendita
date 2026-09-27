@@ -24,10 +24,12 @@ Copia `backend/.env.example` → `backend/.env`.
 Rutas antiguas de restaurante (`/main`, `/kitchen`, `/waitlist`) redirigen al POS.
 
 ## Configuración inicial
-Tras registrarte, el wizard pide nombre de tienda, tipo (abarrotes / conveniencia / farmacia) y logo.
+Tras registrarte, el wizard pide nombre de tienda, tipo (abarrotes / conveniencia / farmacia) y logo. Puedes cargar 8 productos de ejemplo para cobrar el mismo día. Términos: `/terminos` · Privacidad: `/privacidad`.
 
 ## Billing (suscripción Mi Tiendita)
-SaaS **100% nube** (sin instalar). **Básico** $150 · **Crecimiento** $399 · **Pro** $799 /mes. Incluyen **Inventario Mágico**. Ver `/billing`.
+SaaS **100% nube** (sin instalar). Prueba **14 días**. **Básico** $349 · **Crecimiento** $599 · **Pro** $899 /mes. Incluyen **Inventario Mágico**. En `/billing` se paga, se ve el historial y se cancela la renovación (sigues activo hasta el fin del periodo).
+
+Límites: Básico 2 usuarios / 250 productos · Crecimiento 6 / 1,500 · Pro 20 / ilimitados.
 
 ## Platform admin
 ```bash

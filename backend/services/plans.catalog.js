@@ -11,57 +11,68 @@ const AI_QUOTAS = {
   pro: 30,
 };
 
+/** null = ilimitado */
+const PLAN_LIMITS = {
+  basic: { users: 2, products: 250 },
+  growth: { users: 6, products: 1500 },
+  pro: { users: 20, products: null },
+};
+
 const PLAN_CATALOG = {
   basic: {
     id: 'basic',
     name: 'Básico',
     tagline: 'Entra desde cualquier pantalla y cobra',
     pitch: 'Se daña la PC del cajero? Abres Mi Tiendita en una tablet o el celular y sigues vendiendo al instante.',
-    priceMonth: Number(process.env.MP_PLAN_BASIC_PRICE || 150),
-    priceYear: Number(process.env.MP_PLAN_BASIC_YEAR_PRICE || 1500),
+    priceMonth: Number(process.env.MP_PLAN_BASIC_PRICE || 349),
+    priceYear: Number(process.env.MP_PLAN_BASIC_YEAR_PRICE || 3490),
     aiQuota: AI_QUOTAS.basic,
+    limits: PLAN_LIMITS.basic,
     highlight: false,
     features: [
       'Celular, tablet o PC en el navegador',
-      'Sin instalar nada',
-      'Tu inventario y ventas viven en la nube',
+      'Sin instalar nada · 1 sucursal',
+      '2 usuarios (dueño + 1 cajero)',
+      'Hasta 250 productos',
       '2 actualizaciones con Inventario Mágico al mes',
-      'Tickets 80 mm · 1 sucursal',
+      'Tickets 80 mm',
     ],
   },
   growth: {
     id: 'growth',
     name: 'Crecimiento',
-    tagline: 'Pedidos y cobro donde estés',
-    pitch: 'WhatsApp, delivery y cobro en pasillo — todo en la misma caja web.',
-    priceMonth: Number(process.env.MP_PLAN_GROWTH_PRICE || 399),
-    priceYear: Number(process.env.MP_PLAN_GROWTH_YEAR_PRICE || 3990),
+    tagline: 'Más manos en caja, más catálogo',
+    pitch: 'Varios cajeros a la vez y un catálogo grande — cobras desde el celular en el pasillo.',
+    priceMonth: Number(process.env.MP_PLAN_GROWTH_PRICE || 599),
+    priceYear: Number(process.env.MP_PLAN_GROWTH_YEAR_PRICE || 5990),
     aiQuota: AI_QUOTAS.growth,
+    limits: PLAN_LIMITS.growth,
     highlight: true,
     badge: 'Recomendado',
     features: [
       'Todo lo del Básico',
+      '6 usuarios (dueño + equipo)',
+      'Hasta 1,500 productos',
       '10 actualizaciones con Inventario Mágico al mes',
-      'Pedidos de WhatsApp y delivery en una pantalla',
       'Cobra desde el celular en el pasillo',
-      'Mejoras nuevas al refrescar la página',
     ],
   },
   pro: {
     id: 'pro',
     name: 'Pro',
-    tagline: 'Varias sucursales, un solo tablero',
+    tagline: 'Catálogo grande y más Inventario Mágico',
     pitch: 'Foto a la factura del camión: la IA en la nube actualiza costos y precios. Imposible en una PC vieja local.',
-    priceMonth: Number(process.env.MP_PLAN_PRO_PRICE || 799),
-    priceYear: Number(process.env.MP_PLAN_PRO_YEAR_PRICE || 7990),
+    priceMonth: Number(process.env.MP_PLAN_PRO_PRICE || 899),
+    priceYear: Number(process.env.MP_PLAN_PRO_YEAR_PRICE || 8990),
     aiQuota: AI_QUOTAS.pro,
+    limits: PLAN_LIMITS.pro,
     highlight: false,
     features: [
       'Todo lo de Crecimiento',
+      '20 usuarios',
+      'Productos ilimitados',
       '30 actualizaciones con Inventario Mágico al mes',
-      'Lee facturas de proveedores con la cámara',
-      'Tablero en vivo de todas tus sucursales',
-      'Hardware de caja si lo necesitas',
+      'Lee listas y fotos de proveedores con IA',
     ],
   },
 };
@@ -94,6 +105,15 @@ function formatAiQuota(quota) {
   return `${quota} al mes`;
 }
 
+function planLimits(planId) {
+  const p = getPlan(planId);
+  return p?.limits || PLAN_LIMITS.basic;
+}
+
+function formatCap(n) {
+  return n == null ? 'Ilimitado' : String(n);
+}
+
 function listPlans(currency = process.env.MP_CURRENCY || 'MXN') {
   return PLANS.map((id) => {
     const p = PLAN_CATALOG[id];
@@ -114,6 +134,10 @@ function listPlans(currency = process.env.MP_CURRENCY || 'MXN') {
       savingsYear: Math.max(0, p.priceMonth * 12 - p.priceYear),
       aiQuota: p.aiQuota,
       aiQuotaLabel: formatAiQuota(p.aiQuota),
+      usersLimit: p.limits.users,
+      productsLimit: p.limits.products,
+      usersLimitLabel: formatCap(p.limits.users),
+      productsLimitLabel: formatCap(p.limits.products),
       productName: 'Inventario Mágico',
     };
   });
@@ -123,10 +147,13 @@ module.exports = {
   PLANS,
   PLAN_CATALOG,
   AI_QUOTAS,
+  PLAN_LIMITS,
   getPlan,
   planAiQuota,
+  planLimits,
   planPrice,
   planLabel,
   formatAiQuota,
+  formatCap,
   listPlans,
 };

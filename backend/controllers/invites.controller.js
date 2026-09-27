@@ -5,6 +5,7 @@ const { resolveAppUrl } = require('../utils/app-url.utils');
 const bcrypt = require('../utils/bcrypt.utils');
 const jwtCreator = require('../utils/jwt.utils');
 const { TENANT_ROLES } = require('../models/tenant.model');
+const limits = require('../services/plan-limits.service');
 
 async function list(req, res) {
   try {
@@ -18,12 +19,20 @@ async function list(req, res) {
 async function create(req, res) {
   try {
     const email = String(req.body?.email || '').trim().toLowerCase();
-    const role = req.body?.role || 'hosstess';
+    const role = req.body?.role || 'cashier';
     if (!email || !email.includes('@')) {
       return res.status(400).send('Email inválido');
     }
     if (!TENANT_ROLES.includes(role)) {
       return res.status(400).send('Rol inválido');
+    }
+
+    const tenant = await db.GetTenantById(req.tenantId);
+    try {
+      await limits.assertUserRoom(req.tenantId, tenant?.plan || 'basic', 1, { includePending: true });
+    } catch (limitErr) {
+      if (limits.sendLimit(res, limitErr)) return;
+      throw limitErr;
     }
 
     const existingUser = await db.FindUserByEmail(email);
@@ -140,7 +149,15 @@ async function accept(req, res) {
       return res.status(400).send('El usuario ya existe');
     }
 
-    const role = TENANT_ROLES.includes(invite.role) ? invite.role : 'hosstess';
+    const tenant = await db.GetTenantById(invite.tenantId);
+    try {
+      await limits.assertUserRoom(invite.tenantId, tenant?.plan || 'basic', 1);
+    } catch (limitErr) {
+      if (limits.sendLimit(res, limitErr)) return;
+      throw limitErr;
+    }
+
+    const role = TENANT_ROLES.includes(invite.role) ? invite.role : 'cashier';
     const hashed = await bcrypt.hashPassword(password);
     await db.CreateUser({
       name,

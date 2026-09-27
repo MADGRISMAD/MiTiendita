@@ -123,6 +123,12 @@ async function ListTenants() {
 async function CountUsersByTenant(tenantId) {
   return dbConnection.collection('users').countDocuments({ tenantId: String(tenantId) });
 }
+async function CountPendingInvites(tenantId) {
+  return dbConnection.collection('invites').countDocuments({
+    tenantId: String(tenantId),
+    status: 'pending',
+  });
+}
 async function ListUsersByTenant(tenantId) {
   const users = await dbConnection
     .collection('users')
@@ -293,6 +299,18 @@ async function DeleteMenu(id, tenantId) {
 async function GetFoods(tenantId) {
   const filter = tenantId ? { tenantId } : {};
   return (await dbConnection.collection('foods').find(filter).toArray()).map(withId);
+}
+async function CountFoods(tenantId) {
+  return dbConnection.collection('foods').countDocuments({ tenantId: String(tenantId) });
+}
+async function CountPaidOrders(tenantId) {
+  return dbConnection.collection('orders').countDocuments({
+    tenantId: String(tenantId),
+    paymentStatus: 'paid',
+  });
+}
+async function CountCashSessions(tenantId) {
+  return dbConnection.collection('cash_sessions').countDocuments({ tenantId: String(tenantId) });
 }
 async function GetFoodById(id, tenantId) {
   const filter = oidFilter(id, tenantId);
@@ -683,6 +701,39 @@ async function ListUnmatchedSupportMail() {
   return rows.map(publicMail);
 }
 
+async function CreateBillingEvent(data) {
+  const doc = {
+    tenantId: String(data.tenantId),
+    type: String(data.type || 'event'),
+    plan: data.plan || null,
+    interval: data.interval || null,
+    amount: data.amount == null ? null : Number(data.amount),
+    note: data.note || '',
+    mpStatus: data.mpStatus || null,
+    at: data.at || new Date(),
+  };
+  const result = await dbConnection.collection('billing_events').insertOne(doc);
+  return { id: String(result.insertedId), ...doc };
+}
+async function ListBillingEvents(tenantId, limit = 40) {
+  const rows = await dbConnection
+    .collection('billing_events')
+    .find({ tenantId: String(tenantId) })
+    .sort({ at: -1 })
+    .limit(Math.min(80, Math.max(1, Number(limit) || 40)))
+    .toArray();
+  return rows.map((row) => ({
+    id: String(row._id),
+    type: row.type,
+    plan: row.plan,
+    interval: row.interval,
+    amount: row.amount,
+    note: row.note || '',
+    mpStatus: row.mpStatus || null,
+    at: row.at,
+  }));
+}
+
 function publicMail(row) {
   return {
     id: String(row._id),
@@ -701,7 +752,7 @@ function publicMail(row) {
 }
 
 module.exports = {
-  CreateTenant, GetTenantById, UpdateTenant, ListTenants, CountUsersByTenant, ListUsersByTenant, GetTenantByMpPreapprovalId,
+  CreateTenant, GetTenantById, UpdateTenant, ListTenants, CountUsersByTenant, CountPendingInvites, ListUsersByTenant, GetTenantByMpPreapprovalId,
   CreateUser, FindUserByEmail, LoginUsuario, FindUserByUsername, UpdateUserById, FindUserByResetToken,
   ListTenantAdminEmails,
   AddMesa, UpdateStatusMesa, Getmesas, GetMesaFreeWaiter, GetMesaById, DeleteMesa, CloseMesas, GetNextMesaNumero,
@@ -709,7 +760,8 @@ module.exports = {
   AddWaitList, GetWaitList, GetWaitListByNumber, DeleteWaitList,
   GetSettings, CreateSettings, UpdateSettings,
   GetMenus, GetMenuById, CreateMenu, UpdateMenu, DeleteMenu,
-  GetFoods, GetFoodById, GetFoodByBarcode, CreateFood, UpdateFood, DecrementFoodStock, IncrementFoodStock, DeleteFood,
+  GetFoods, CountFoods, CountPaidOrders, CountCashSessions, GetFoodById, GetFoodByBarcode, CreateFood, UpdateFood, DecrementFoodStock, IncrementFoodStock, DeleteFood,
+  CreateBillingEvent, ListBillingEvents,
   GetOrders, GetOrderById, GetOrderByInvoiceToken, CreateOrder, UpdateOrder, GetOrdersByCashSession,
   SaveSupportMail, FindSupportMailByMessageIds, ListSupportMail, ListSupportMailAll, ListUnmatchedSupportMail,
   GetInvites, GetInviteByToken, CreateInvite, UpdateInvite, DeleteInvite,

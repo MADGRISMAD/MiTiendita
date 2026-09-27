@@ -114,6 +114,14 @@
           </dl>
         </div>
 
+        <label class="seed-check">
+          <input v-model="seedCatalog" type="checkbox" />
+          <span>
+            <strong>Cargar 8 productos de ejemplo</strong>
+            Coca, agua, leche, huevo… para cobrar hoy. Luego los editas o borras.
+          </span>
+        </label>
+
         <p v-if="error" class="error-text">{{ error }}</p>
       </section>
 
@@ -149,12 +157,14 @@
 import { computed, reactive, ref } from "vue";
 import { useRouter } from "vue-router";
 import { saveVenueSettings, venueStore } from "../venueStore";
+import { apiService } from "../apiService";
 import BrandName from "../components/BrandName.vue";
 
 const router = useRouter();
 const step = ref(1);
 const saving = ref(false);
 const error = ref("");
+const seedCatalog = ref(true);
 
 const stepTitles = [
   "Bienvenida",
@@ -228,6 +238,13 @@ async function finish() {
   error.value = "";
   try {
     await saveVenueSettings({ ...form });
+    if (seedCatalog.value) {
+      try {
+        await apiService.seedStarterCatalog();
+      } catch {
+        /* catálogo vacío: lo resuelve el checklist */
+      }
+    }
     router.push("/pos");
   } catch (e) {
     error.value = "No se pudo guardar la configuración. Intenta de nuevo.";
@@ -479,6 +496,21 @@ async function finish() {
   font-weight: 600;
   text-align: right;
 }
+
+.seed-check {
+  display: flex;
+  gap: 0.7rem;
+  align-items: flex-start;
+  margin-top: 1rem;
+  padding: 0.8rem 0.85rem;
+  border-radius: 0.75rem;
+  border: 1px solid #cdd5cf;
+  background: #fff;
+  cursor: pointer;
+}
+.seed-check input { margin-top: 0.2rem; }
+.seed-check span { display: grid; gap: 0.2rem; font-size: 0.88rem; color: #3a433d; }
+.seed-check strong { font-size: 0.92rem; }
 
 .error-text {
   color: #b42318;

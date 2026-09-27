@@ -64,7 +64,18 @@
           <span v-if="differentsPassword" class="error-inline">Las contraseñas no coinciden</span>
         </label>
 
-        <button type="submit" class="btn-primary" :disabled="loading">
+        <label class="terms">
+          <input v-model="acceptedTerms" type="checkbox" required />
+          <span>
+            Acepto los
+            <router-link to="/terminos">términos</router-link>
+            y el
+            <router-link to="/privacidad">aviso de privacidad</router-link>.
+            Prueba de 14 días.
+          </span>
+        </label>
+
+        <button type="submit" class="btn-primary" :disabled="loading || !acceptedTerms">
           {{ loading ? 'Registrando…' : 'Registrar' }}
         </button>
 
@@ -102,6 +113,7 @@ export default {
       Error: "",
       onError: false,
       loading: false,
+      acceptedTerms: false,
     };
   },
   watch: {
@@ -144,6 +156,12 @@ export default {
         if (num.length !== 10) {
           document.getElementById("cellphone").focus();
           this.formatCellphoneError = true;
+          return;
+        }
+
+        if (!this.acceptedTerms) {
+          this.onError = true;
+          this.Error = "Debes aceptar los términos y el aviso de privacidad.";
           return;
         }
 
@@ -248,6 +266,18 @@ export default {
   -webkit-box-shadow: 0 0 0 1000px var(--timber-panel, #fff) inset;
   transition: background-color 9999s ease-out 0s;
 }
+
+.terms {
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-start;
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--timber-muted, #64748b);
+  line-height: 1.4;
+}
+.terms input { margin-top: 0.2rem; }
+.terms a { color: var(--timber-primary, #1e5aa8); font-weight: 700; }
 
 .btn-primary {
   margin-top: 0.25rem;

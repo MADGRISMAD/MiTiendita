@@ -24,6 +24,7 @@ function createTenantDoc(name = 'Mi negocio') {
     mpPreapprovalId: null,
     mpPayerEmail: null,
     currentPeriodEnd: null,
+    cancelAtPeriodEnd: false,
     suspendedAt: null,
     suspendedReason: null,
     createdAt: now,
@@ -35,6 +36,9 @@ function isSubscriptionActive(tenant) {
   if (!tenant) return false;
   const status = tenant.billingStatus || 'trialing';
   if (status === 'suspended' || status === 'past_due') return false;
+  if (tenant.cancelAtPeriodEnd && tenant.currentPeriodEnd) {
+    if (new Date(tenant.currentPeriodEnd).getTime() <= Date.now()) return false;
+  }
   if (status === 'active') return true;
   if (status === 'trialing') {
     const ends = tenant.trialEndsAt ? new Date(tenant.trialEndsAt) : null;

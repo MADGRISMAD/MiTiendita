@@ -47,8 +47,33 @@
           </button>
         </div>
 
+        <p v-if="status.cancelAtPeriodEnd" class="cancel-note">
+          Esta suscripción no se renovará.
+          <template v-if="status.currentPeriodEnd">
+            Sigues activo hasta {{ formatDate(status.currentPeriodEnd) }}.
+          </template>
+          Elige un plan de nuevo si cambias de opinión.
+        </p>
+
+        <div v-if="status.limits" class="usage">
+          <p>
+            <strong>Usuarios</strong>
+            {{ status.limits.users?.used || 0 }}
+            / {{ capLabel(status.limits.users?.max) }}
+          </p>
+          <p>
+            <strong>Productos</strong>
+            {{ status.limits.products?.used || 0 }}
+            / {{ capLabel(status.limits.products?.max) }}
+          </p>
+          <p>
+            <strong>Inventario Mágico</strong>
+            {{ status.aiQuotaLabel }}
+          </p>
+        </div>
+
         <p v-if="interval === 'year'" class="year-tip">
-          Anual Básico <strong>$1,500</strong> — pagas una vez y olvidas el cargo del mes.
+          Anual Básico <strong>$3,490</strong> — pagas una vez y olvidas el cargo del mes.
         </p>
 
         <label v-if="status.mpConfigured && status.mpSandbox" class="payer-box">
@@ -101,7 +126,12 @@
               <li v-for="(f, i) in p.features" :key="i">{{ f }}</li>
             </ul>
 
-            <button type="button" class="cta" :disabled="busy" @click="startCheckout(p.id)">
+            <button
+              type="button"
+              class="cta"
+              :disabled="busy || (status.plan === p.id && status.active && !status.cancelAtPeriodEnd)"
+              @click="startCheckout(p.id)"
+            >
               {{ ctaLabel(p) }}
             </button>
           </article>
@@ -114,9 +144,32 @@
         </section>
         <section class="extras">
           <p>
-            <strong>Licencia perpetua:</strong> $4,990 MXN pago único — sin cuota mensual.
-            Contáctanos desde soporte o escríbenos para activarla.
+            <strong>Licencia perpetua:</strong> $7,490 MXN pago único — sin cuota mensual.
+            Escríbenos desde Configuración → Soporte para activarla.
           </p>
+        </section>
+
+        <section v-if="canCancel" class="extras cancel-box">
+          <p>
+            <strong>Cancelar renovación.</strong>
+            Sigues usando el sistema hasta el fin del periodo pagado. No hay más cargos automáticos.
+          </p>
+          <button type="button" class="cancel-btn" :disabled="busy" @click="cancelPlan">
+            Cancelar suscripción
+          </button>
+        </section>
+
+        <section v-if="history.length" class="history">
+          <h3>Historial</h3>
+          <ul>
+            <li v-for="ev in history" :key="ev.id">
+              <div>
+                <strong>{{ eventLabel(ev.type) }}</strong>
+                <span>{{ ev.note || planName(ev.plan) }}</span>
+              </div>
+              <time>{{ formatDate(ev.at) }}</time>
+            </li>
+          </ul>
         </section>
 
         <p v-if="flash" class="flash" :class="{ ok: flashOk }">{{ flash }}</p>
@@ -142,6 +195,7 @@ import { useRoute, useRouter } from "vue-router";
 import AppShell from "../components/AppShell.vue";
 import InventarioMagicoTerm from "../components/InventarioMagicoTerm.vue";
 import { apiService } from "../apiService";
+import { hasRole } from "../authStore";
 
 const route = useRoute();
 const router = useRouter();
@@ -158,9 +212,19 @@ const status = ref({
   active: true,
   mpConfigured: false,
   mpSandbox: false,
+  cancelAtPeriodEnd: false,
+  limits: null,
 });
 const plans = ref([]);
+const history = ref([]);
 const payerEmail = ref("");
+
+const canCancel = computed(
+  () =>
+    hasRole("admin") &&
+    status.value.billingStatus === "active" &&
+    !status.value.cancelAtPeriodEnd
+);
 
 const statusLabel = computed(() => {
   const map = {
@@ -193,20 +257,42 @@ function formatDate(d) {
 }
 
 function ctaLabel(p) {
-  if (!status.value.mpConfigured) return `Empezar con ${p.name}`;
-  return interval.value === "year" ? `Pagar ${p.name} anual` : `Pagar ${p.name}`;
+  const current = status.value.plan === p.id && status.value.active && !status.value.cancelAtPeriodEnd;
+  if (current) return "Plan actual";
+  if (status.value.cancelAtPeriodEnd && status.value.plan === p.id) return `Reactivar ${p.name}`;
+  if (status.value.billingStatus === "trialing") return `Empezar con ${p.name}`;
+  if (!status.value.mpConfigured) return `Activar ${p.name}`;
+  return interval.value === "year" ? `Cambiar a ${p.name} anual` : `Cambiar a ${p.name}`;
+}
+
+function capLabel(n) {
+  return n == null ? "Ilimitado" : String(n);
+}
+
+function eventLabel(type) {
+  return (
+    {
+      checkout: "Checkout iniciado",
+      activated: "Pago confirmado",
+      cancelled: "Cancelación",
+      webhook: "Actualización Mercado Pago",
+      trial_started: "Prueba iniciada",
+    }[type] || type
+  );
 }
 
 async function load() {
   loading.value = true;
   err.value = "";
   try {
-    const [s, p] = await Promise.all([
+    const [s, p, h] = await Promise.all([
       apiService.getBillingStatus(),
       apiService.getBillingPlans(),
+      apiService.getBillingHistory().catch(() => ({ events: [] })),
     ]);
     status.value = s;
     plans.value = p.plans || [];
+    history.value = h.events || [];
     if (!payerEmail.value && s.mpPayerEmail) payerEmail.value = s.mpPayerEmail;
   } catch (e) {
     err.value = e.response?.data?.message || e.response?.data || "No se pudo cargar facturación";
@@ -292,6 +378,29 @@ async function handleReturnFromMp() {
     await load();
   }
   router.replace({ path: "/billing" });
+}
+
+async function cancelPlan() {
+  if (
+    !confirm(
+      "¿Cancelar la renovación? Sigues usando Mi Tiendita hasta el fin del periodo ya pagado."
+    )
+  ) {
+    return;
+  }
+  busy.value = true;
+  flash.value = "";
+  try {
+    const res = await apiService.billingCancel();
+    await load();
+    flashOk.value = true;
+    flash.value = res.message || "Suscripción cancelada. No habrá más cargos automáticos.";
+  } catch (e) {
+    flashOk.value = false;
+    flash.value = e.response?.data || "No se pudo cancelar";
+  } finally {
+    busy.value = false;
+  }
 }
 
 async function syncNow() {
@@ -668,4 +777,62 @@ onMounted(async () => {
 }
 .extras p { margin: 0; }
 .extras strong { color: var(--timber-ink); }
+
+.usage {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem 1.25rem;
+  padding: 0.75rem 1rem;
+  border-radius: 0.9rem;
+  background: var(--timber-panel);
+  border: 1px solid var(--timber-line);
+  font-size: 0.86rem;
+  color: var(--timber-muted);
+}
+.usage p { margin: 0; }
+.usage strong { color: var(--timber-ink); margin-right: 0.25rem; }
+
+.cancel-note {
+  margin: 0;
+  padding: 0.7rem 0.9rem;
+  border-radius: 0.75rem;
+  background: var(--timber-warning-soft);
+  color: var(--timber-warning);
+  font-weight: 700;
+  font-size: 0.88rem;
+}
+.cancel-box {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+}
+.cancel-btn {
+  border: 1px solid color-mix(in srgb, var(--timber-danger) 40%, var(--timber-line));
+  background: var(--timber-danger-soft);
+  color: var(--timber-danger);
+  border-radius: 0.7rem;
+  min-height: 2.4rem;
+  padding: 0 0.9rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+.history h3 {
+  margin: 0 0 0.55rem;
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+}
+.history ul { list-style: none; margin: 0; padding: 0; }
+.history li {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.55rem 0;
+  border-bottom: 1px solid var(--timber-line);
+  font-size: 0.88rem;
+}
+.history strong { display: block; color: var(--timber-ink); }
+.history span { color: var(--timber-muted); font-size: 0.8rem; }
+.history time { color: var(--timber-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 </style>

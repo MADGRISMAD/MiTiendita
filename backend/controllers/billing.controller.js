@@ -1,6 +1,13 @@
 const db = require('../database/mongodb');
 const mp = require('../services/mercadopago.service');
+const limits = require('../services/plan-limits.service');
 const { PLANS, isSubscriptionActive, trialEndsFrom } = require('../models/tenant.model');
+const {
+  safeSend,
+  sendPaymentConfirmedEmail,
+  sendSubscriptionCancelledEmail,
+} = require('../utils/mail.utils');
+const { resolveAppUrl } = require('../utils/app-url.utils');
 
 function daysLeft(trialEndsAt) {
   if (!trialEndsAt) return 0;
@@ -32,14 +39,90 @@ async function applyPreapprovalToTenant(tenant, pre, dataId) {
     patch.billingInterval = interval;
     patch.suspendedAt = null;
     patch.suspendedReason = null;
+    patch.cancelAtPeriodEnd = false;
     if (PLANS.includes(plan)) patch.plan = plan;
   }
   if (billingStatus === 'suspended') {
-    patch.suspendedAt = new Date();
-    patch.suspendedReason = 'mercado_pago';
+    const stillCovered =
+      tenant.cancelAtPeriodEnd &&
+      tenant.currentPeriodEnd &&
+      new Date(tenant.currentPeriodEnd).getTime() > Date.now();
+    if (stillCovered) {
+      patch.billingStatus = 'active';
+      patch.cancelAtPeriodEnd = true;
+    } else {
+      patch.suspendedAt = new Date();
+      patch.suspendedReason = 'mercado_pago';
+    }
   }
 
-  return db.UpdateTenant(tenant.id, patch);
+  const updated = await db.UpdateTenant(tenant.id, patch);
+  await recordEvent({
+    tenantId: tenant.id,
+    type: billingStatus === 'active' ? 'activated' : billingStatus || 'webhook',
+    plan: updated?.plan || tenant.plan,
+    interval: updated?.billingInterval || tenant.billingInterval,
+    amount: mp.planPrice(updated?.plan || tenant.plan, updated?.billingInterval || tenant.billingInterval),
+    mpStatus: pre.status,
+    note: billingStatus === 'active' ? 'Pago confirmado' : `Mercado Pago: ${pre.status || billingStatus}`,
+  });
+  if (billingStatus === 'active' && tenant.billingStatus !== 'active') {
+    notifyPayment(updated || tenant).catch(() => {});
+  }
+  return updated;
+}
+
+async function recordEvent(data) {
+  try {
+    return await db.CreateBillingEvent(data);
+  } catch (err) {
+    console.warn('[billing] no se pudo guardar evento:', err.message);
+    return null;
+  }
+}
+
+function formatMoney(n) {
+  return Number(n || 0).toLocaleString('es-MX', {
+    style: 'currency',
+    currency: process.env.MP_CURRENCY || 'MXN',
+    maximumFractionDigits: 0,
+  });
+}
+
+function formatDate(d) {
+  if (!d) return '';
+  try {
+    return new Date(d).toLocaleDateString('es-MX', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    });
+  } catch {
+    return '';
+  }
+}
+
+async function payerEmailFor(tenant) {
+  if (tenant?.mpPayerEmail) return tenant.mpPayerEmail;
+  const emails = await db.ListTenantAdminEmails(tenant.id);
+  return emails[0] || null;
+}
+
+async function notifyPayment(tenant) {
+  const to = await payerEmailFor(tenant);
+  if (!to) return;
+  const settings = await db.GetSettings(tenant.id);
+  await safeSend(() =>
+    sendPaymentConfirmedEmail({
+      to,
+      businessName: settings?.businessName || tenant.name,
+      planName: limits.planName(tenant.plan),
+      interval: tenant.billingInterval || 'month',
+      amount: formatMoney(mp.planPrice(tenant.plan, tenant.billingInterval || 'month')),
+      periodEnd: formatDate(tenant.currentPeriodEnd),
+      appUrl: (process.env.APP_URL || 'http://localhost:5173').replace(/\/$/, ''),
+    })
+  );
 }
 
 async function getPlans(req, res) {
@@ -55,6 +138,7 @@ async function getStatus(req, res) {
     const tenant = await db.GetTenantById(req.tenantId);
     if (!tenant) return res.status(404).send('Tenant no encontrado');
     const plan = tenant.plan || 'basic';
+    const usage = await limits.usageFor(req.tenantId, plan);
     return res.status(200).json({
       plan,
       billingInterval: tenant.billingInterval || 'month',
@@ -62,6 +146,7 @@ async function getStatus(req, res) {
       trialEndsAt: tenant.trialEndsAt || null,
       trialDaysLeft: daysLeft(tenant.trialEndsAt),
       currentPeriodEnd: tenant.currentPeriodEnd || null,
+      cancelAtPeriodEnd: Boolean(tenant.cancelAtPeriodEnd),
       active: isSubscriptionActive(tenant),
       mpConfigured: mp.hasMpConfig(),
       mpSandbox: mp.hasMpConfig() ? mp.isMpSandbox() : false,
@@ -69,6 +154,7 @@ async function getStatus(req, res) {
       mpPayerEmail: tenant.mpPayerEmail || null,
       aiQuota: mp.planAiQuota(plan),
       aiQuotaLabel: mp.formatAiQuota(mp.planAiQuota(plan)),
+      limits: usage,
     });
   } catch (err) {
     console.error(err);
@@ -135,8 +221,17 @@ async function checkout(req, res) {
     await db.UpdateTenant(req.tenantId, {
       plan,
       billingInterval: interval,
+      cancelAtPeriodEnd: false,
       mpPreapprovalId: preapproval.id || null,
       mpPayerEmail: email,
+    });
+    await recordEvent({
+      tenantId: req.tenantId,
+      type: 'checkout',
+      plan,
+      interval,
+      amount: preapproval.amount || mp.planPrice(plan, interval),
+      note: preapproval.mock ? 'Checkout (modo desarrollo)' : 'Checkout Mercado Pago',
     });
 
     return res.status(200).json({
@@ -177,10 +272,20 @@ async function devActivate(req, res) {
       billingInterval: interval,
       billingStatus: 'active',
       currentPeriodEnd: periodEndFor(interval),
+      cancelAtPeriodEnd: false,
       suspendedAt: null,
       suspendedReason: null,
       mpPreapprovalId: req.body?.preapprovalId || `mock_dev_${Date.now()}`,
     });
+    await recordEvent({
+      tenantId: req.tenantId,
+      type: 'activated',
+      plan,
+      interval,
+      amount: mp.planPrice(plan, interval),
+      note: 'Activación en modo desarrollo',
+    });
+    notifyPayment(updated).catch(() => {});
 
     return res.status(200).json({
       ok: true,
@@ -274,11 +379,84 @@ async function webhook(req, res) {
   }
 }
 
+async function history(req, res) {
+  try {
+    const events = await db.ListBillingEvents(req.tenantId);
+    return res.status(200).json({ events });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).send(err.message || 'Error al leer historial');
+  }
+}
+
+async function cancel(req, res) {
+  try {
+    const tenant = await db.GetTenantById(req.tenantId);
+    if (!tenant) return res.status(404).send('Tenant no encontrado');
+    if (tenant.billingStatus !== 'active') {
+      return res.status(400).send('No hay una suscripción activa para cancelar.');
+    }
+    if (tenant.cancelAtPeriodEnd) {
+      return res.status(200).json({
+        ok: true,
+        already: true,
+        cancelAtPeriodEnd: true,
+        currentPeriodEnd: tenant.currentPeriodEnd,
+        message: 'Esta suscripción ya está programada para no renovarse.',
+      });
+    }
+
+    if (tenant.mpPreapprovalId) {
+      await mp.cancelPreapproval(tenant.mpPreapprovalId);
+    }
+
+    const updated = await db.UpdateTenant(req.tenantId, {
+      cancelAtPeriodEnd: true,
+    });
+    await recordEvent({
+      tenantId: req.tenantId,
+      type: 'cancelled',
+      plan: tenant.plan,
+      interval: tenant.billingInterval,
+      amount: mp.planPrice(tenant.plan, tenant.billingInterval || 'month'),
+      note: 'Cancelación al fin del periodo',
+    });
+
+    const to = await payerEmailFor(updated || tenant);
+    if (to) {
+      const settings = await db.GetSettings(req.tenantId);
+      const appUrl = resolveAppUrl(req);
+      safeSend(() =>
+        sendSubscriptionCancelledEmail({
+          to,
+          businessName: settings?.businessName || tenant.name,
+          planName: limits.planName(tenant.plan),
+          periodEnd: formatDate(tenant.currentPeriodEnd),
+          appUrl,
+        })
+      ).catch(() => {});
+    }
+
+    return res.status(200).json({
+      ok: true,
+      cancelAtPeriodEnd: true,
+      currentPeriodEnd: updated?.currentPeriodEnd || tenant.currentPeriodEnd,
+      active: isSubscriptionActive(updated || tenant),
+      message: 'Cancelamos el cargo recurrente. Sigues usando el sistema hasta el fin del periodo pagado.',
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(err.status || 500).send(err.message || 'Error al cancelar');
+  }
+}
+
 module.exports = {
   getPlans,
   getStatus,
   checkout,
   sync,
+  cancel,
+  history,
   devActivate,
   webhook,
   daysLeft,

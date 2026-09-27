@@ -124,7 +124,14 @@
               </tbody>
             </table>
             <p v-if="!lines.length" class="ticket-empty">
-              Escanea productos. El catálogo se administra en Productos.
+              <template v-if="!menus.length">
+                Aún no hay productos.
+                <router-link to="/products">Carga el catálogo</router-link>
+                para poder cobrar.
+              </template>
+              <template v-else>
+                Escanea productos. El catálogo se administra en Productos.
+              </template>
             </p>
             <div v-if="pageCount > 1" class="ticket-pager">
               <button type="button" :disabled="ticketPage <= 0" @click="ticketPage--">‹</button>
@@ -211,7 +218,20 @@
                   <span class="price">{{ money(producto.price) }}</span>
                 </div>
               </button>
-              <p v-if="!productos.length" class="empty">Crea categorías y productos con su código de barras.</p>
+              <div v-if="!productos.length" class="empty-box">
+                <p class="empty">
+                  {{ menus.length ? "Esta categoría está vacía." : "Aún no hay catálogo." }}
+                  Crea una categoría o carga 8 productos de ejemplo para probar la caja.
+                </p>
+                <button
+                  v-if="!menus.length"
+                  type="button"
+                  class="add-food"
+                  :disabled="seeding"
+                  @click="seedStarter"
+                >{{ seeding ? "Cargando…" : "Cargar 8 productos de ejemplo" }}</button>
+                <p v-if="seedErr" class="empty">{{ seedErr }}</p>
+              </div>
               <button
                 v-if="selectedMenuId"
                 type="button"
@@ -413,6 +433,8 @@ export default {
     const menus = ref([]);
     const productos = ref([]);
     const selectedMenuId = ref("");
+    const seeding = ref(false);
+    const seedErr = ref("");
     const mode = ref(props.initialMode === "manage" || route.name === "products" ? "manage" : "pos");
 
     const scanInput = ref(null);
@@ -994,6 +1016,20 @@ export default {
       }
     }
 
+    async function seedStarter() {
+      seeding.value = true;
+      seedErr.value = "";
+      try {
+        await apiService.seedStarterCatalog();
+        await fetchMenus();
+      } catch (error) {
+        const raw = error.response?.data;
+        seedErr.value = typeof raw === "string" ? raw : raw?.message || "No se pudo cargar el ejemplo.";
+      } finally {
+        seeding.value = false;
+      }
+    }
+
     async function fetchMenus() {
       try {
         menus.value = (await apiService.getAllMenus()) || [];
@@ -1122,9 +1158,12 @@ export default {
       } catch (error) {
         const status = error.response?.status;
         const data = error.response?.data;
-        foodError.value = status === 403
-          ? "No tienes permiso para agregar productos. Pide a un administrador que lo registre."
-          : (typeof data === "string" && data ? data : "No se pudo guardar el producto");
+        foodError.value =
+          (typeof data === "object" && data?.message) ||
+          (typeof data === "string" && data) ||
+          (status === 403
+            ? "No tienes permiso para agregar productos. Pide a un administrador que lo registre."
+            : "No se pudo guardar el producto");
       }
     }
 
@@ -1171,6 +1210,9 @@ export default {
       menus,
       productos,
       selectedMenuId,
+      seeding,
+      seedErr,
+      seedStarter,
       businessName,
       scanInput,
       priceInput,
@@ -1570,6 +1612,7 @@ export default {
   font-size: 1.1rem;
   cursor: pointer;
 }
+.ticket-empty a { color: var(--timber-primary); font-weight: 800; }
 .ticket-empty {
   margin: auto;
   padding: 1rem;
@@ -1860,6 +1903,8 @@ export default {
   color: var(--timber-primary);
 }
 .empty { color: var(--timber-muted); grid-column: 1 / -1; margin: 1.5rem 0; text-align: center; }
+.empty-box { grid-column: 1 / -1; display: grid; gap: 0.65rem; justify-items: center; padding: 0.5rem 0 1rem; }
+.empty-box .empty { margin: 0; max-width: 22rem; }
 .add-food {
   grid-column: 1 / -1;
   min-height: 3rem;

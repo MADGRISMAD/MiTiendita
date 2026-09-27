@@ -253,16 +253,37 @@ export const apiService = {
   getBillingStatus() {
     return axios.get('/billing/status').then((r) => r.data);
   },
+  getBillingHistory() {
+    return axios.get('/billing/history').then((r) => r.data);
+  },
   billingCheckout(plan: string, email?: string, interval: 'month' | 'year' = 'month') {
     return axios.post('/billing/checkout', { plan, email, interval }).then((r) => r.data);
   },
   billingSync(preapprovalId?: string) {
     return axios.post('/billing/sync', { preapprovalId }).then((r) => r.data);
   },
+  billingCancel() {
+    return axios.post('/billing/cancel').then((r) => r.data);
+  },
   billingDevActivate(plan: string, preapprovalId?: string, interval: 'month' | 'year' = 'month') {
     return axios
       .post('/billing/dev/activate', { plan, preapprovalId, interval })
       .then((r) => r.data);
+  },
+  getOnboarding() {
+    return axios.get('/settings/onboarding').then((r) => r.data);
+  },
+  dismissOnboarding() {
+    return axios.post('/settings/onboarding/dismiss').then((r) => r.data);
+  },
+  seedStarterCatalog() {
+    return axios.post('/menus/seed-starter').then((r) => r.data);
+  },
+  getSupportThread() {
+    return axios.get('/settings/support').then((r) => r.data);
+  },
+  sendSupportMessage(payload: { subject: string; message: string }) {
+    return axios.post('/settings/support', payload).then((r) => r.data);
   },
 
   aiQuota() {

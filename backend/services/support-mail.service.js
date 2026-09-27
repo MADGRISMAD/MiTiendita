@@ -1,7 +1,7 @@
 const { ImapFlow } = require('imapflow');
 const { simpleParser } = require('mailparser');
 const db = require('../database/mongodb');
-const { sendMail } = require('../utils/mail.utils');
+const { sendMail, safeSend, sendSupportReceivedEmail, hasSmtpConfig } = require('../utils/mail.utils');
 const templates = require('../utils/mail-templates');
 
 const SYNC_MS = 25_000;
@@ -233,10 +233,54 @@ function buildTickets(messages) {
     });
 }
 
+async function threadForLocal(tenantId) {
+  const messages = await db.ListSupportMail(tenantId);
+  return { messages, tickets: buildTickets(messages) };
+}
+
 async function threadFor(tenantId) {
   const sync = await syncInbox();
   const messages = await db.ListSupportMail(tenantId);
   return { messages, tickets: buildTickets(messages), inboxError: sync.ok ? '' : sync.reason || '' };
+}
+
+async function sendFromClient({ tenantId, from, storeName, subject, message }) {
+  const body = String(message || '').trim();
+  const title = String(subject || '').trim();
+  if (title.length < 3) {
+    const err = new Error('Escribe un asunto.');
+    err.status = 400;
+    throw err;
+  }
+  if (body.length < 8) {
+    const err = new Error('Escribe el mensaje.');
+    err.status = 400;
+    throw err;
+  }
+  const messageId = makeMessageId();
+  const ticketId = bareId(messageId);
+  await rememberMessage({
+    messageId,
+    tenantId: String(tenantId),
+    ticketId,
+    direction: 'in',
+    from: String(from || '').toLowerCase(),
+    to: mailboxAddress(),
+    subject: title,
+    text: body,
+    at: new Date(),
+  });
+  if (hasSmtpConfig() && from) {
+    await safeSend(() =>
+      sendSupportReceivedEmail({
+        to: from,
+        storeName,
+        subject: title,
+        message: body,
+      })
+    );
+  }
+  return threadForLocal(tenantId);
 }
 
 async function sendToClient({ tenantId, to, subject, message, storeName, ticketId }) {
@@ -359,6 +403,8 @@ async function waitingInbox() {
 
 module.exports = {
   threadFor,
+  threadForLocal,
+  sendFromClient,
   sendToClient,
   unmatchedInbox,
   waitingInbox,

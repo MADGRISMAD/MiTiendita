@@ -7,8 +7,10 @@ router.get('/plans', billing.getPlans);
 router.post('/webhook', billing.webhook);
 
 router.get('/status', requireAuth, requireRoles('admin', 'cashier'), billing.getStatus);
+router.get('/history', requireAuth, requireRoles('admin', 'cashier'), billing.history);
 router.post('/checkout', requireAuth, requireRoles('admin'), billing.checkout);
 router.post('/sync', requireAuth, requireRoles('admin'), billing.sync);
+router.post('/cancel', requireAuth, requireRoles('admin'), billing.cancel);
 router.post('/dev/activate', requireAuth, requireRoles('admin'), billing.devActivate);
 
 module.exports = router;

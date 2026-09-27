@@ -12,6 +12,8 @@
         </div>
       </div>
 
+      <GettingStarted />
+
       <div class="cash-pill" :class="cashOpen ? 'open' : 'closed'">
         <span class="dot" />
         <strong>{{ cashOpen ? 'Caja abierta' : 'Caja cerrada' }}</strong>
@@ -141,6 +143,7 @@
 <script setup>
 import { computed, onMounted, ref } from "vue";
 import AppShell from "../components/AppShell.vue";
+import GettingStarted from "../components/GettingStarted.vue";
 import { apiService } from "../apiService";
 import { venueStore, formatTodayLabel } from "../venueStore";
 import { labelOf, paymentStatusLabel } from "../labels";
