@@ -97,6 +97,12 @@ export const apiService = {
       .get('/foods/lookup', { params: { code } })
       .then((r) => r.data);
   },
+  getLowStockFoods() {
+    return axios.get('/foods/low-stock').then((r) => r.data);
+  },
+  searchFoods(q: string) {
+    return axios.get('/foods/search', { params: { q } }).then((r) => r.data);
+  },
   createFood(foodDTO: {
     name: string;
     price: number;
@@ -107,6 +113,8 @@ export const apiService = {
     barcode?: string;
     priceIncludesTax?: boolean;
     stock?: number | null;
+    cost?: number | null;
+    lowStockThreshold?: number | null;
   }) {
     return axios.post('/foods', foodDTO).then((r) => r.data);
   },
@@ -145,9 +153,22 @@ export const apiService = {
   updateOrderStatus(orderId: string, status: string) {
     return axios.put(`/orders/${orderId}/status`, { status }).then((r) => r.data);
   },
-  payOrder(orderId: string, paymentMethod: string, opts: { cardExtraIva?: boolean } = {}) {
+  payOrder(
+    orderId: string,
+    paymentMethod: string,
+    opts: {
+      cardExtraIva?: boolean;
+      cashReceived?: number;
+      cardAmount?: number;
+    } = {}
+  ) {
     return axios
-      .put(`/orders/${orderId}/pay`, { paymentMethod, cardExtraIva: Boolean(opts.cardExtraIva) })
+      .put(`/orders/${orderId}/pay`, {
+        paymentMethod,
+        cardExtraIva: Boolean(opts.cardExtraIva),
+        cashReceived: opts.cashReceived ?? null,
+        cardAmount: opts.cardAmount ?? null,
+      })
       .then((r) => r.data);
   },
   voidOrder(orderId: string) {
@@ -307,6 +328,12 @@ export const apiService = {
     return axios.post('/ai/apply', { updates, creates: creates || [] }).then((r) => r.data);
   },
 
+  changePassword(currentPassword: string, newPassword: string) {
+    return axios
+      .put('/usuarios/change-password', { currentPassword, newPassword })
+      .then((r) => r.data);
+  },
+
   platformOverview() {
     return axios.get('/platform/overview').then((r) => r.data);
   },
@@ -345,5 +372,30 @@ export const apiService = {
   },
   platformSetPlan(id: string, plan: string) {
     return axios.patch(`/platform/tenants/${id}/plan`, { plan }).then((r) => r.data);
+  },
+
+  // ── Clientes ──
+  getCustomers(q?: string) {
+    return axios.get('/customers', { params: q ? { q } : {} }).then((r) => r.data);
+  },
+  getCustomerById(id: string) {
+    return axios.get(`/customers/${id}`).then((r) => r.data);
+  },
+  createCustomer(data: { name: string; phone?: string; email?: string; notes?: string }) {
+    return axios.post('/customers', data).then((r) => r.data);
+  },
+  updateCustomer(id: string, data: Record<string, unknown>) {
+    return axios.put(`/customers/${id}`, data).then((r) => r.data);
+  },
+  deleteCustomer(id: string) {
+    return axios.delete(`/customers/${id}`).then((r) => r.status === 200);
+  },
+
+  // ── Reportes de ventas ──
+  getOrdersReport(from: string, to: string) {
+    return axios.get('/orders/report', { params: { from, to } }).then((r) => r.data);
+  },
+  getOrdersReportSummary(from: string, to: string) {
+    return axios.get('/orders/report/summary', { params: { from, to } }).then((r) => r.data);
   },
 };

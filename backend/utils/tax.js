@@ -1,4 +1,4 @@
-const DEFAULT_TAX_RATE = 0.08;
+const DEFAULT_TAX_RATE = 0.16;
 
 /**
  * Desglosa una línea de venta.

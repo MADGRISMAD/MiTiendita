@@ -1,6 +1,11 @@
 <template>
   <AppShell>
     <div class="pos" :class="{ manage: mode === 'manage' }">
+      <!-- Aviso de caja abierta mucho tiempo -->
+      <div v-if="cashOpenWarning" class="cash-warning-banner">
+        ⚠️ ¡Cuidado! La caja lleva abierta más de 12 horas. ¿Olvidaste hacer corte?
+      </div>
+
       <!-- ═══════════ MODO VENTA — escritorio tipo Mr Tienda ═══════════ -->
       <template v-if="mode === 'pos'">
         <div class="desk">
@@ -179,6 +184,35 @@
           </div>
         </div>
 
+        <!-- Alerta de stock bajo -->
+        <div v-if="lowStockItems.length" class="low-stock-banner">
+          <span class="low-stock-icon">⚠️</span>
+          <div class="low-stock-body">
+            <strong>Stock bajo ({{ lowStockItems.length }})</strong>
+            <span class="low-stock-list">
+              {{ lowStockItems.slice(0, 5).map(p => p.name + ' (' + (Number(p.stock) || 0) + ')').join(', ') }}
+              <template v-if="lowStockItems.length > 5"> y {{ lowStockItems.length - 5 }} más…</template>
+            </span>
+          </div>
+        </div>
+
+        <!-- Barra de búsqueda y toggle de vista -->
+        <div class="catalog-search-bar">
+          <input
+            v-model="catalogSearch"
+            class="catalog-search-input"
+            type="text"
+            placeholder="Buscar por nombre, código o SKU…"
+            autocomplete="off"
+            autocorrect="off"
+            spellcheck="false"
+          />
+          <div class="view-toggle">
+            <button type="button" :class="{ on: viewMode === 'grid' }" @click="viewMode = 'grid'" title="Vista cuadrícula">▦</button>
+            <button type="button" :class="{ on: viewMode === 'list' }" @click="viewMode = 'list'" title="Vista lista">☰</button>
+          </div>
+        </div>
+
         <div class="manage-body">
           <aside class="cats-rail">
             <button
@@ -197,9 +231,11 @@
               <span class="magic-title">Actualizar precios</span>
               <span class="magic-sub">Con una foto o una lista</span>
             </button>
-            <div class="products">
+
+            <!-- Vista de cuadrícula (grid) -->
+            <div v-if="viewMode === 'grid'" class="products">
               <button
-                v-for="producto in productos"
+                v-for="producto in filteredProducts"
                 :key="producto.id"
                 type="button"
                 class="prod"
@@ -212,13 +248,19 @@
                 <div class="prod-meta">
                   <span class="pname">{{ producto.name }}</span>
                   <span class="psku">{{ producto.barcode || producto.sku || 'Sin código' }} · {{ producto.priceIncludesTax ? 'Bruto' : 'Neto' }}</span>
-                  <span v-if="inventoryOn" class="pstock" :class="{ low: Number(producto.stock || 0) <= 5 }">
+                  <span v-if="inventoryOn" class="pstock" :class="{ low: Number(producto.stock || 0) <= Number(producto.lowStockThreshold || 5) }">
                     Stock {{ Number(producto.stock) || 0 }}
                   </span>
                   <span class="price">{{ money(producto.price) }}</span>
+                  <span v-if="Number(producto.cost)" class="pcost">
+                    Costo {{ money(producto.cost) }} · Margen {{ money(producto.price - producto.cost) }}
+                  </span>
                 </div>
               </button>
-              <div v-if="!productos.length" class="empty-box">
+              <div v-if="!filteredProducts.length && catalogSearch" class="empty-box">
+                <p class="empty">No se encontraron productos con "{{ catalogSearch }}".</p>
+              </div>
+              <div v-if="!productos.length && !catalogSearch" class="empty-box">
                 <p class="empty">
                   {{ menus.length ? "Esta categoría está vacía." : "Aún no hay catálogo." }}
                   Crea una categoría o carga 8 productos de ejemplo para probar la caja.
@@ -232,6 +274,47 @@
                 >{{ seeding ? "Cargando…" : "Cargar 8 productos de ejemplo" }}</button>
                 <p v-if="seedErr" class="empty">{{ seedErr }}</p>
               </div>
+              <button
+                v-if="selectedMenuId"
+                type="button"
+                class="add-food"
+                @click="openNewFood"
+              >+ Agregar a mano</button>
+            </div>
+
+            <!-- Vista de lista (tabla) -->
+            <div v-else class="products-list-wrap">
+              <table class="products-list-table">
+                <thead>
+                  <tr>
+                    <th>Nombre</th>
+                    <th>Precio</th>
+                    <th>Costo</th>
+                    <th>Margen</th>
+                    <th>Stock</th>
+                    <th>Categoría</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    v-for="producto in filteredProducts"
+                    :key="producto.id"
+                    class="list-row"
+                    @click="editFood(producto)"
+                  >
+                    <td class="list-name">{{ producto.name }}</td>
+                    <td>{{ money(producto.price) }}</td>
+                    <td>{{ Number(producto.cost) ? money(producto.cost) : '—' }}</td>
+                    <td>{{ Number(producto.cost) ? money(producto.price - producto.cost) : '—' }}</td>
+                    <td :class="{ 'low-text': Number(producto.stock || 0) <= Number(producto.lowStockThreshold || 5) }">
+                      {{ Number(producto.stock) || 0 }}
+                    </td>
+                    <td class="list-cat">{{ menus.find(m => m.id === producto.menuId)?.name || '—' }}</td>
+                  </tr>
+                </tbody>
+              </table>
+              <p v-if="!filteredProducts.length && catalogSearch" class="empty">No se encontraron productos con "{{ catalogSearch }}".</p>
+              <p v-if="!productos.length && !catalogSearch" class="empty">Sin productos en esta categoría.</p>
               <button
                 v-if="selectedMenuId"
                 type="button"
@@ -325,6 +408,79 @@
         @manual="onMagicManual"
       />
 
+      <!-- Modal de pago / cobro -->
+      <Teleport to="body">
+        <div v-if="showPayment" class="sheet-bg" @click.self="closePayment">
+          <div class="sheet pay-sheet">
+            <h3>Cobrar venta</h3>
+
+            <div class="pay-summary">
+              <div class="pay-summary-row">
+                <span>Subtotal</span>
+                <strong>{{ money(subtotalAfterDiscount) }}</strong>
+              </div>
+              <div class="pay-summary-row">
+                <span>IVA ({{ Math.round((Number(venueStore?.taxRate) || 0.16) * 100) }}%)</span>
+                <strong>{{ money(tax) }}</strong>
+              </div>
+              <div class="pay-summary-row pay-total-row">
+                <span>Total a pagar</span>
+                <strong>{{ money(total) }}</strong>
+              </div>
+            </div>
+
+            <div class="pay-methods">
+              <label class="pay-method-card" :class="{ on: payMethod === 'cash' }">
+                <input v-model="payMethod" type="radio" value="cash" />
+                <span>💵 Efectivo</span>
+              </label>
+              <label class="pay-method-card" :class="{ on: payMethod === 'card' }">
+                <input v-model="payMethod" type="radio" value="card" />
+                <span>💳 Tarjeta</span>
+              </label>
+              <label class="pay-method-card" :class="{ on: payMethod === 'split' }">
+                <input v-model="payMethod" type="radio" value="split" />
+                <span>🔀 Mixto</span>
+              </label>
+            </div>
+
+            <template v-if="payMethod === 'cash'">
+              <label class="field">
+                <span>Efectivo recibido</span>
+                <input v-model.number="payCashReceived" class="inp pay-inp" type="number" min="0" step="0.01" placeholder="0.00" />
+              </label>
+              <div v-if="payChange > 0" class="pay-change">
+                Cambio: <strong>{{ money(payChange) }}</strong>
+              </div>
+            </template>
+
+            <template v-if="payMethod === 'split'">
+              <label class="field">
+                <span>Monto con tarjeta</span>
+                <input v-model.number="payCardAmount" class="inp pay-inp" type="number" min="0" :max="total" step="0.01" placeholder="0.00" />
+              </label>
+              <div class="pay-split-info">
+                Efectivo: <strong>{{ money(payCashPortion) }}</strong>
+              </div>
+              <label class="field">
+                <span>Efectivo recibido</span>
+                <input v-model.number="payCashReceived" class="inp pay-inp" type="number" min="0" step="0.01" placeholder="0.00" />
+              </label>
+              <div v-if="payChange > 0" class="pay-change">
+                Cambio: <strong>{{ money(payChange) }}</strong>
+              </div>
+            </template>
+
+            <p v-if="payError" class="scan-msg err">{{ payError }}</p>
+
+            <button type="button" class="act primary pay-confirm" :disabled="sending" @click="confirmPayment">
+              {{ sending ? 'Cobrando…' : 'Confirmar cobro' }}
+            </button>
+            <button type="button" class="act" @click="closePayment">Cancelar</button>
+          </div>
+        </div>
+      </Teleport>
+
       <Teleport to="body">
         <div v-if="showFoodForm" class="sheet-bg product-modal" @click.self="closeFoodForm">
           <form class="sheet product-sheet" @submit.prevent="createFood">
@@ -357,11 +513,19 @@
                 <span>Precio</span>
                 <input v-model.number="foodForm.price" class="inp" type="number" min="0" step="0.01" required />
               </label>
+              <label class="field">
+                <span>Costo</span>
+                <input v-model.number="foodForm.cost" class="inp" type="number" min="0" step="0.01" placeholder="0.00" />
+              </label>
               <label v-if="inventoryOn" class="field">
                 <span>Existencias</span>
                 <input v-model.number="foodForm.stock" class="inp" type="number" min="0" step="1" />
               </label>
-              <label v-else class="field">
+              <label v-if="inventoryOn" class="field">
+                <span>Stock mínimo</span>
+                <input v-model.number="foodForm.lowStockThreshold" class="inp" type="number" min="0" step="1" placeholder="5" />
+              </label>
+              <label v-if="!inventoryOn" class="field">
                 <span>Código de barras</span>
                 <input v-model="foodForm.barcode" class="inp" placeholder="Escanea o escribe" autocomplete="off" data-scan="barcode" />
               </label>
@@ -420,7 +584,8 @@ import { useRoute, useRouter } from "vue-router";
 import { apiService } from "../apiService";
 import { store } from "../store";
 import { venueStore, fetchVenueSettings } from "../venueStore";
-import { cartTotals, lineBreakdown, TAX_RATE } from "../tax";
+import { cartTotals, lineBreakdown } from "../tax";
+import { apiService as apiSvc } from "../apiService";
 
 export default {
   components: { AppShell, MagicPricesSheet },
@@ -473,14 +638,75 @@ export default {
     const foodForm = reactive({
       name: "",
       price: 0,
+      cost: 0,
       description: "",
       imgUrl: "",
       barcode: "",
       priceMode: "gross", // gross = el precio ya incluye IVA
       stock: 0,
+      lowStockThreshold: 5,
     });
 
+    // Búsqueda y vista de lista en modo catálogo
+    const catalogSearch = ref("");
+    const viewMode = ref("grid"); // "grid" o "list"
+    const lowStockItems = ref([]);
+
     const inventoryOn = computed(() => Boolean(venueStore.inventoryEnabled));
+    const TAX_RATE = computed(() => Number(venueStore.taxRate) || 0.16);
+
+    // Estado del modal de pago
+    const showPayment = ref(false);
+    const payMethod = ref("cash"); // 'cash' | 'card' | 'split'
+    const payCashReceived = ref(0);
+    const payCardAmount = ref(0);
+    const payError = ref("");
+    const payChange = computed(() => {
+      if (payMethod.value === "card") return 0;
+      const cashPart = payMethod.value === "split"
+        ? total.value - Number(payCardAmount.value || 0)
+        : total.value;
+      const received = Number(payCashReceived.value || 0);
+      return Math.max(0, Number((received - cashPart).toFixed(2)));
+    });
+    const payCashPortion = computed(() => {
+      if (payMethod.value === "card") return 0;
+      if (payMethod.value === "split") return Math.max(0, total.value - Number(payCardAmount.value || 0));
+      return total.value;
+    });
+
+    // Aviso de caja abierta mucho tiempo
+    const cashSession = ref(null);
+    const cashOpenWarning = ref(false);
+
+    async function loadCashSession() {
+      try {
+        const data = await apiSvc.getCashSession();
+        if (data.open && data.session) {
+          cashSession.value = data.session;
+          const opened = new Date(data.session.createdAt || data.session.openedAt);
+          const hoursOpen = (Date.now() - opened.getTime()) / 3600000;
+          cashOpenWarning.value = hoursOpen >= 12;
+        } else {
+          cashSession.value = null;
+          cashOpenWarning.value = false;
+        }
+      } catch {
+        cashSession.value = null;
+        cashOpenWarning.value = false;
+      }
+    }
+
+    // Productos filtrados por la barra de búsqueda del catálogo
+    const filteredProducts = computed(() => {
+      const q = catalogSearch.value.trim().toLowerCase();
+      if (!q) return productos.value;
+      return productos.value.filter((p) => {
+        const name = String(p.name || "").toLowerCase();
+        const code = String(p.barcode || p.sku || "").toLowerCase();
+        return name.includes(q) || code.includes(q);
+      });
+    });
 
     let flashTimer = null;
     let searchTimer = null;
@@ -502,7 +728,7 @@ export default {
     const totals = computed(() =>
       cartTotals(lines.value, {
         discountPercent: ticketDiscount.value,
-        taxRate: TAX_RATE,
+        taxRate: TAX_RATE.value,
       })
     );
     const tax = computed(() => totals.value.tax);
@@ -511,15 +737,16 @@ export default {
 
     const foodPricePreview = computed(() => {
       const p = Number(foodForm.price) || 0;
+      const rate = TAX_RATE.value;
       if (foodForm.priceMode === "gross") {
-        const net = TAX_RATE > 0 ? p / (1 + TAX_RATE) : p;
+        const net = rate > 0 ? p / (1 + rate) : p;
         return { net, tax: p - net, gross: p };
       }
-      return { net: p, tax: p * TAX_RATE, gross: p * (1 + TAX_RATE) };
+      return { net: p, tax: p * rate, gross: p * (1 + rate) };
     });
 
     function lineGross(line) {
-      return lineBreakdown(line.price, line.quantity, line.priceIncludesTax, TAX_RATE).gross;
+      return lineBreakdown(line.price, line.quantity, line.priceIncludesTax, TAX_RATE.value).gross;
     }
 
     const displayLast = computed(() => {
@@ -543,7 +770,7 @@ export default {
         displayLast.value.price,
         qty,
         displayLast.value.priceIncludesTax,
-        TAX_RATE
+        TAX_RATE.value
       ).gross;
       const d = Math.min(100, Math.max(0, Number(ticketDiscount.value) || 0));
       return gross * (1 - d / 100);
@@ -596,6 +823,7 @@ export default {
           showFoodForm.value ||
           showMenuForm.value ||
           showMagic.value ||
+          showPayment.value ||
           missingCode.value;
         if (mode.value === "pos" && !blocked && scanInput.value) {
           scanInput.value.focus();
@@ -858,8 +1086,45 @@ export default {
       }, 280);
     });
 
-    async function finalizeOrder() {
+    function finalizeOrder() {
       if (!lines.value.length || sending.value) return;
+      // Abrir modal de pago
+      payMethod.value = "cash";
+      payCashReceived.value = 0;
+      payCardAmount.value = 0;
+      payError.value = "";
+      showPayment.value = true;
+    }
+
+    function closePayment() {
+      showPayment.value = false;
+      payError.value = "";
+      focusScan();
+    }
+
+    async function confirmPayment() {
+      if (!lines.value.length || sending.value) return;
+      payError.value = "";
+
+      // Validaciones de pago dividido
+      if (payMethod.value === "split") {
+        const card = Number(payCardAmount.value || 0);
+        if (card <= 0 || card >= total.value) {
+          payError.value = "El monto de tarjeta debe ser mayor a 0 y menor al total";
+          return;
+        }
+      }
+
+      // Validar que el efectivo recibido sea suficiente
+      if (payMethod.value === "cash" || payMethod.value === "split") {
+        const cashNeeded = payCashPortion.value;
+        const received = Number(payCashReceived.value || 0);
+        if (received > 0 && received < cashNeeded) {
+          payError.value = `Efectivo insuficiente. Faltan ${money(cashNeeded - received)}`;
+          return;
+        }
+      }
+
       sending.value = true;
       msg.value = "";
       try {
@@ -877,11 +1142,22 @@ export default {
             priceIncludesTax: Boolean(p.priceIncludesTax),
           })),
         });
+
+        // Cobrar inmediatamente con la forma de pago seleccionada
+        await apiService.payOrder(response.id, payMethod.value, {
+          cashReceived: payMethod.value !== "card" ? Number(payCashReceived.value || 0) : undefined,
+          cardAmount: payMethod.value === "split" ? Number(payCardAmount.value || 0) : undefined,
+        });
+
+        const cambio = payChange.value;
+        showPayment.value = false;
         clearCart();
-        msg.value = `Ticket ${String(response.id || "").slice(-6)} listo`;
-        setTimeout(() => router.push("/orders"), 350);
+        msg.value = cambio > 0
+          ? `Ticket ${String(response.id || "").slice(-6)} cobrado · Cambio: ${money(cambio)}`
+          : `Ticket ${String(response.id || "").slice(-6)} cobrado`;
+        setTimeout(() => router.push("/orders"), 600);
       } catch (error) {
-        msg.value = error.response?.data || "Error al registrar la venta.";
+        payError.value = error.response?.data || "Error al registrar la venta.";
       } finally {
         sending.value = false;
       }
@@ -1030,6 +1306,14 @@ export default {
       }
     }
 
+    async function fetchLowStock() {
+      try {
+        lowStockItems.value = (await apiService.getLowStockFoods()) || [];
+      } catch {
+        lowStockItems.value = [];
+      }
+    }
+
     async function fetchMenus() {
       try {
         menus.value = (await apiService.getAllMenus()) || [];
@@ -1037,6 +1321,7 @@ export default {
       } catch {
         menus.value = [];
       }
+      fetchLowStock();
     }
 
     async function loadMenuProducts(menuId) {
@@ -1071,11 +1356,13 @@ export default {
       editingFood.value = producto;
       foodForm.name = producto.name;
       foodForm.price = producto.price;
+      foodForm.cost = Number(producto.cost) || 0;
       foodForm.description = producto.description || "";
       foodForm.imgUrl = producto.imgUrl || "";
       foodForm.barcode = producto.barcode || producto.sku || "";
       foodForm.priceMode = producto.priceIncludesTax ? "gross" : "net";
       foodForm.stock = Number(producto.stock) || 0;
+      foodForm.lowStockThreshold = producto.lowStockThreshold != null ? Number(producto.lowStockThreshold) : 5;
       showFoodForm.value = true;
     }
 
@@ -1106,11 +1393,13 @@ export default {
       editingFood.value = null;
       foodForm.name = "";
       foodForm.price = 0;
+      foodForm.cost = 0;
       foodForm.description = "";
       foodForm.imgUrl = "";
       foodForm.barcode = "";
       foodForm.priceMode = "gross";
       foodForm.stock = 0;
+      foodForm.lowStockThreshold = 5;
       foodError.value = "";
       addAfterSave.value = false;
       pendingBarcode.value = "";
@@ -1124,13 +1413,15 @@ export default {
       const payload = {
         name: foodForm.name,
         price: foodForm.price,
+        cost: Number(foodForm.cost) || 0,
         description: foodForm.description,
         imgUrl: (foodForm.imgUrl || "").trim(),
         barcode: (foodForm.barcode || "").trim(),
         sku: (foodForm.barcode || "").trim(),
         priceIncludesTax: foodForm.priceMode === "gross",
         menuId: selectedMenuId.value,
-        stock: inventoryOn.value ? Number(foodForm.stock) || 0 : Number(foodForm.stock) || 0,
+        stock: Number(foodForm.stock) || 0,
+        lowStockThreshold: Number(foodForm.lowStockThreshold) || 5,
       };
       try {
         let saved;
@@ -1191,6 +1482,7 @@ export default {
 
     onMounted(async () => {
       await fetchMenus();
+      loadCashSession();
       focusScan();
       window.addEventListener("keydown", onHotkey);
       window.addEventListener("focus", focusScan);
@@ -1254,6 +1546,10 @@ export default {
       foodPricePreview,
       editingFood,
       inventoryOn,
+      catalogSearch,
+      viewMode,
+      lowStockItems,
+      filteredProducts,
       lastLineQty,
       lastLineTotal,
       ticketPage,
@@ -1281,6 +1577,18 @@ export default {
       money,
       formatQty,
       initial,
+      showPayment,
+      payMethod,
+      payCashReceived,
+      payCardAmount,
+      payChange,
+      payError,
+      payCashPortion,
+      closePayment,
+      confirmPayment,
+      cashOpenWarning,
+      cashSession,
+      venueStore,
     };
   },
 };
@@ -2170,6 +2478,94 @@ export default {
 .act.primary { background: var(--timber-primary); color: var(--timber-on-primary); }
 .act.danger { background: var(--timber-danger-soft); color: var(--timber-danger); }
 
+/* Aviso de caja abierta mucho tiempo */
+.cash-warning-banner {
+  background: var(--timber-warning-soft, #fff3cd);
+  color: var(--timber-warning, #856404);
+  border: 1px solid var(--timber-warning, #ffc107);
+  border-radius: 0.65rem;
+  padding: 0.65rem 0.85rem;
+  margin: 0.35rem 0.5rem;
+  font-weight: 700;
+  font-size: 0.88rem;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+/* Modal de pago */
+.pay-sheet { max-width: 26rem; }
+.pay-summary {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.75rem 0.85rem;
+  background: var(--timber-surface);
+  border-radius: 0.75rem;
+  border: 1px solid var(--timber-line);
+}
+.pay-summary-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.pay-total-row {
+  border-top: 1px solid var(--timber-line);
+  padding-top: 0.4rem;
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: var(--timber-primary);
+}
+.pay-methods {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 0.4rem;
+}
+.pay-method-card {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.65rem 0.45rem;
+  border: 1.5px solid var(--timber-line);
+  border-radius: 0.75rem;
+  background: var(--timber-panel);
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 0.88rem;
+  text-align: center;
+}
+.pay-method-card.on {
+  border-color: var(--timber-primary);
+  background: color-mix(in srgb, var(--timber-primary) 10%, var(--timber-panel));
+}
+.pay-method-card input { display: none; }
+.pay-inp {
+  font-size: 1.25rem !important;
+  font-weight: 800 !important;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.pay-change {
+  text-align: center;
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: var(--timber-success);
+  padding: 0.45rem;
+  background: var(--timber-success-soft, #d4edda);
+  border-radius: 0.65rem;
+}
+.pay-split-info {
+  text-align: center;
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--timber-accent);
+  padding: 0.3rem;
+}
+.pay-confirm {
+  font-size: 1.1rem !important;
+  min-height: 3.5rem !important;
+}
+
 @media (max-width: 767.98px) {
   .fkey {
     min-width: 0;
@@ -2289,5 +2685,115 @@ export default {
   .product-sheet .inp { min-height: 2.35rem; }
   .iva-card { padding: 0.4rem 0.55rem; }
 }
+
+/* —— Alerta de stock bajo —— */
+.low-stock-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin: 0 0.55rem;
+  padding: 0.65rem 0.85rem;
+  background: color-mix(in srgb, var(--timber-warning) 12%, var(--timber-panel));
+  border: 1px solid color-mix(in srgb, var(--timber-warning) 35%, var(--timber-line));
+  border-radius: 0.75rem;
+  font-size: 0.88rem;
+  color: var(--timber-ink);
+}
+.low-stock-icon { font-size: 1.3rem; flex-shrink: 0; }
+.low-stock-body { display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; }
+.low-stock-body strong { font-size: 0.82rem; color: var(--timber-warning); }
+.low-stock-list {
+  font-size: 0.8rem;
+  color: var(--timber-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* —— Barra de búsqueda del catálogo —— */
+.catalog-search-bar {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.45rem 0.65rem;
+  border-bottom: 1px solid var(--timber-line);
+  background: var(--timber-panel);
+}
+.catalog-search-input {
+  flex: 1;
+  min-height: 2.5rem;
+  border: 1px solid var(--timber-line);
+  border-radius: 0.6rem;
+  padding: 0.35rem 0.7rem;
+  font: inherit;
+  font-size: 0.92rem;
+  background: var(--timber-panel-elevated);
+  color: var(--timber-ink);
+  box-sizing: border-box;
+}
+.view-toggle {
+  display: flex;
+  gap: 0.15rem;
+  background: var(--timber-surface);
+  border-radius: 0.5rem;
+  padding: 0.15rem;
+  border: 1px solid var(--timber-line);
+}
+.view-toggle button {
+  width: 2.4rem;
+  height: 2.4rem;
+  border: none;
+  border-radius: 0.4rem;
+  background: transparent;
+  color: var(--timber-muted);
+  font-size: 1.1rem;
+  cursor: pointer;
+  font-weight: 700;
+}
+.view-toggle button.on {
+  background: var(--timber-primary);
+  color: var(--timber-on-primary);
+}
+
+/* —— Costo y margen en tarjeta de producto —— */
+.pcost {
+  font-size: 0.68rem;
+  color: var(--timber-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* —— Vista de lista (tabla de productos) —— */
+.products-list-wrap {
+  overflow-x: auto;
+}
+.products-list-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+  font-variant-numeric: tabular-nums;
+}
+.products-list-table th {
+  background: var(--timber-panel-elevated);
+  border-bottom: 1px solid var(--timber-line);
+  padding: 0.5rem 0.6rem;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--timber-muted);
+  text-align: left;
+  white-space: nowrap;
+}
+.products-list-table td {
+  padding: 0.55rem 0.6rem;
+  border-bottom: 1px solid var(--timber-line);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+.list-row { cursor: pointer; }
+.list-row:hover { background: color-mix(in srgb, var(--timber-primary) 6%, transparent); }
+.list-name { font-weight: 700; white-space: normal; max-width: 14rem; }
+.list-cat { color: var(--timber-muted); font-size: 0.82rem; }
+.low-text { color: var(--timber-warning); font-weight: 800; }
 
 </style>

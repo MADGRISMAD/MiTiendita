@@ -87,6 +87,8 @@ export const routeRoles = {
   platformExpenses: ["platform_admin"],
   printOrder: ["admin", "cashier"],
   printCash: ["admin", "cashier"],
+  customers: ["admin", "cashier"],
+  reports: ["admin", "cashier"],
 };
 
 export function canAccessRoute(name) {

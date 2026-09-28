@@ -2,7 +2,7 @@ const crypto = require('crypto');
 const { cartTotals, DEFAULT_TAX_RATE } = require('../utils/tax');
 
 const orderStatuses = ['pending', 'preparing', 'ready', 'served', 'cancelled'];
-const paymentMethods = ['cash', 'card', 'transfer', 'other'];
+const paymentMethods = ['cash', 'card', 'transfer', 'split', 'other'];
 
 function normalizeOrder(body = {}) {
   const items = Array.isArray(body.items)

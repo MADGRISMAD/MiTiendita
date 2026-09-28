@@ -7,6 +7,8 @@ const writeRoles = requireRoles('admin');
 
 router.get('/', requireAuth, requireActiveSubscription, readRoles, menus.listFoods);
 router.get('/lookup', requireAuth, requireActiveSubscription, readRoles, menus.lookupFood);
+router.get('/low-stock', requireAuth, requireActiveSubscription, readRoles, menus.lowStockFoods);
+router.get('/search', requireAuth, requireActiveSubscription, readRoles, menus.searchFoods);
 router.get('/:id', requireAuth, requireActiveSubscription, readRoles, menus.getFood);
 router.post('/', requireAuth, requireActiveSubscription, writeRoles, menus.createFood);
 router.put('/:id', requireAuth, requireActiveSubscription, writeRoles, menus.updateFood);

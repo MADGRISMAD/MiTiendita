@@ -171,6 +171,8 @@ const allDock = [
 
 const allMore = [
   { to: "/dashboard", name: "dashboard", label: "Resumen / Dashboard" },
+  { to: "/customers", name: "customers", label: "Clientes" },
+  { to: "/reports", name: "reports", label: "Reportes" },
   { to: "/staff", name: "staff", label: "Empleados" },
   { to: "/billing", name: "billing", label: "Facturación / Planes" },
   { to: "/settings", name: "settings", label: "Configuración" },

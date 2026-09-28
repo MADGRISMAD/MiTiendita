@@ -132,6 +132,11 @@ async function pay(req, res) {
       }
     }
 
+    // Datos de pago dividido / efectivo recibido
+    const cashReceived = Number(req.body?.cashReceived ?? 0);
+    const cardAmount = Number(req.body?.cardAmount ?? 0);
+    const change = cashReceived > 0 ? Number((cashReceived - (method === 'split' ? (total - cardAmount) : total)).toFixed(2)) : 0;
+
     const updated = await db.UpdateOrder(
       req.params.id,
       {
@@ -145,6 +150,9 @@ async function pay(req, res) {
         cardExtraIva,
         cardExtraTax: totals.cardExtraTax,
         total,
+        cashReceived: cashReceived || null,
+        cardAmount: method === 'split' ? cardAmount : null,
+        change: change > 0 ? change : 0,
         inventoryApplied: Boolean(settings?.inventoryEnabled),
       },
       req.tenantId
@@ -258,4 +266,28 @@ async function voidSale(req, res) {
   }
 }
 
-module.exports = { list, getById, create, updateStatus, pay, markInvoiceIssued, voidSale };
+module.exports = { list, getById, create, updateStatus, pay, markInvoiceIssued, voidSale, report, reportSummary };
+
+async function report(req, res) {
+  try {
+    const { from, to } = req.query;
+    if (!from || !to) return res.status(400).send('Parámetros from y to son requeridos');
+    const orders = await db.GetOrdersByDateRange(req.tenantId, from, to);
+    return res.status(200).json(orders);
+  } catch (err) {
+    console.error(err);
+    return res.status(500).send(err.message || 'Error al obtener reporte');
+  }
+}
+
+async function reportSummary(req, res) {
+  try {
+    const { from, to } = req.query;
+    if (!from || !to) return res.status(400).send('Parámetros from y to son requeridos');
+    const summary = await db.GetSalesReport(req.tenantId, from, to);
+    return res.status(200).json(summary);
+  } catch (err) {
+    console.error(err);
+    return res.status(500).send(err.message || 'Error al obtener resumen de ventas');
+  }
+}

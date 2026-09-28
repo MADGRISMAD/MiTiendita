@@ -95,6 +95,7 @@ async function createFood(req, res) {
       barcode,
       priceIncludesTax,
       stock,
+      lowStockThreshold,
     } = req.body || {};
     if (!name || price == null || !menuId) {
       return res.status(400).send('name, price y menuId son requeridos');
@@ -118,6 +119,7 @@ async function createFood(req, res) {
       menuId: String(menuId),
       tenantId: req.tenantId,
       stock: stock == null || stock === '' ? 0 : Math.max(0, Number(stock) || 0),
+      lowStockThreshold: lowStockThreshold == null || lowStockThreshold === '' ? 5 : Math.max(0, Number(lowStockThreshold) || 5),
     });
     return res.status(201).json(created);
   } catch (err) {
@@ -144,6 +146,9 @@ async function updateFood(req, res) {
     delete body.trackStock;
     if (body.stock != null && body.stock !== '') {
       body.stock = Math.max(0, Number(body.stock) || 0);
+    }
+    if (body.lowStockThreshold != null && body.lowStockThreshold !== '') {
+      body.lowStockThreshold = Math.max(0, Number(body.lowStockThreshold) || 5);
     }
     const updated = await db.UpdateFood(req.params.id, body, req.tenantId);
     if (!updated) return res.status(404).send('Producto no encontrado');
@@ -217,6 +222,30 @@ async function seedStarter(req, res) {
   }
 }
 
+/** Devuelve productos con stock bajo o igual al umbral mínimo. */
+async function lowStockFoods(req, res) {
+  try {
+    const items = await db.GetLowStockFoods(req.tenantId);
+    return res.status(200).json(items);
+  } catch (err) {
+    console.error(err);
+    return res.status(500).send(err.message || 'Error al consultar stock bajo');
+  }
+}
+
+/** Busca productos por nombre, barcode o SKU. */
+async function searchFoods(req, res) {
+  try {
+    const q = String(req.query.q || '').trim();
+    if (!q) return res.status(200).json([]);
+    const items = await db.SearchFoods(req.tenantId, q);
+    return res.status(200).json(items);
+  } catch (err) {
+    console.error(err);
+    return res.status(500).send(err.message || 'Error al buscar productos');
+  }
+}
+
 module.exports = {
   listMenus,
   getMenu,
@@ -230,4 +259,6 @@ module.exports = {
   updateFood,
   deleteFood,
   seedStarter,
+  lowStockFoods,
+  searchFoods,
 };

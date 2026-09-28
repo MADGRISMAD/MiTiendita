@@ -251,6 +251,31 @@ const Me = async (req, res) => {
   });
 };
 
+const ChangePassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body || {};
+    if (!currentPassword || !newPassword) {
+      return res.status(400).send('Contraseña actual y nueva son requeridas');
+    }
+    if (String(newPassword).length < 6) {
+      return res.status(400).send('La nueva contraseña debe tener al menos 6 caracteres');
+    }
+
+    const user = await service.FindUserByUsername(req.user.username);
+    if (!user) return res.status(404).send('Usuario no encontrado');
+
+    const valid = await hasher.checkPassword(currentPassword, user.password);
+    if (!valid) return res.status(400).send('La contraseña actual es incorrecta');
+
+    const hashed = await hasher.hashPassword(newPassword);
+    await db.UpdateUserById(String(user._id), { password: hashed });
+    return res.status(200).json({ ok: true, message: 'Contraseña actualizada' });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).send(err.message || 'Error al cambiar contraseña');
+  }
+};
+
 module.exports = {
   CreateUser,
   FindUserByEmail,
@@ -263,4 +288,5 @@ module.exports = {
   ForgotPassword,
   ResetPassword,
   Me,
+  ChangePassword,
 };

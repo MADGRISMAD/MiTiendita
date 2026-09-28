@@ -34,6 +34,8 @@ import InvoiceRequestView from "./views/InvoiceRequestView.vue";
 import BillingView from "./views/BillingView.vue";
 import PlatformAdminView from "./views/PlatformAdminView.vue";
 import LegalView from "./views/LegalView.vue";
+import CustomersView from "./views/CustomersView.vue";
+import ReportsView from "./views/ReportsView.vue";
 
 const authMeta = (roles?: string[]) => ({
   requiresAuth: true,
@@ -65,6 +67,8 @@ const routes: RouteRecordRaw[] = [
   { path: "/staff", name: "staff", component: StaffView, meta: authMeta(["admin"]) },
   { path: "/orders", name: "orders", component: OrdersView, meta: authMeta(["admin", "cashier"]) },
   { path: "/settings", name: "settings", component: SettingsView, meta: authMeta(["admin"]) },
+  { path: "/customers", name: "customers", component: CustomersView, meta: authMeta(["admin", "cashier"]) },
+  { path: "/reports", name: "reports", component: ReportsView, meta: authMeta(["admin", "cashier"]) },
   {
     path: "/billing",
     name: "billing",

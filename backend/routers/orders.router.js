@@ -8,6 +8,18 @@ router.get(
   requireRoles('admin', 'cashier', 'waiter', 'kitchen', 'hosstess'),
   orders.list
 );
+// Reportes de ventas por rango de fechas (va antes de /:id para evitar conflicto)
+router.get(
+  '/report',
+  requireAuth, requireActiveSubscription, requireRoles('admin', 'cashier'),
+  orders.report
+);
+router.get(
+  '/report/summary',
+  requireAuth, requireActiveSubscription, requireRoles('admin', 'cashier'),
+  orders.reportSummary
+);
+
 router.get(
   '/:id',
   requireAuth, requireActiveSubscription,

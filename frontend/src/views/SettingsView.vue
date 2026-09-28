@@ -117,7 +117,7 @@
         </ul>
       </section>
 
-      <section v-else class="panel">
+      <section v-else-if="tab === 'prefs'" class="panel">
         <h2>Preferencias</h2>
         <label class="check-row">
           <input v-model="form.inventoryEnabled" type="checkbox" />
@@ -126,6 +126,13 @@
             <small>Al cobrar, se resta la cantidad de todos los productos. Si lo apagas, las ventas no tocan existencias.</small>
           </span>
         </label>
+
+        <label class="field-inline">
+          <strong>Tasa de IVA (%)</strong>
+          <small>Porcentaje de impuesto aplicado a ventas. México: 16%, Colombia: 19%.</small>
+          <input v-model.number="form.taxRate" type="number" min="0" max="100" step="1" class="tax-input" />
+        </label>
+
         <button type="button" class="btn-primary" :disabled="saving" @click="savePrefs">
           {{ saving ? "Guardando…" : "Guardar preferencias" }}
         </button>
@@ -133,6 +140,27 @@
         <hr class="prefs-rule" />
         <p class="hint">Puedes volver a ejecutar el asistente de configuración inicial.</p>
         <router-link to="/setup" class="link">Volver a ejecutar el wizard</router-link>
+      </section>
+
+      <section v-else class="panel">
+        <h2>Cambiar contraseña</h2>
+        <p class="hint">Actualiza tu contraseña de acceso. Mínimo 6 caracteres.</p>
+        <form class="pw-form" @submit.prevent="changePassword">
+          <label>Contraseña actual
+            <input v-model="pwForm.current" type="password" required autocomplete="current-password" />
+          </label>
+          <label>Nueva contraseña
+            <input v-model="pwForm.newPw" type="password" required minlength="6" autocomplete="new-password" />
+          </label>
+          <label>Confirmar nueva contraseña
+            <input v-model="pwForm.confirm" type="password" required minlength="6" autocomplete="new-password" />
+          </label>
+          <button type="submit" class="btn-primary" :disabled="pwBusy">
+            {{ pwBusy ? "Cambiando…" : "Cambiar contraseña" }}
+          </button>
+        </form>
+        <p v-if="pwMsg" class="ok">{{ pwMsg }}</p>
+        <p v-if="pwErr" class="err">{{ pwErr }}</p>
       </section>
     </div>
   </AppShell>
@@ -153,6 +181,7 @@ const tabs = [
   { id: "team", label: "Equipo" },
   { id: "support", label: "Soporte" },
   { id: "prefs", label: "Preferencias" },
+  { id: "security", label: "Seguridad" },
 ];
 
 const isDark = computed(() => themeStore.mode === "dark");
@@ -172,6 +201,7 @@ const form = reactive({
   timezone: venueStore.timezone || "America/Mexico_City",
   initialTables: venueStore.initialTables || 8,
   inventoryEnabled: Boolean(venueStore.inventoryEnabled),
+  taxRate: venueStore.taxRate != null ? Number(venueStore.taxRate) * 100 : 16,
 });
 
 const saving = ref(false);
@@ -186,6 +216,12 @@ const support = reactive({ subject: "", message: "" });
 const supportBusy = ref(false);
 const supportMsg = ref("");
 const supportErr = ref("");
+
+// Cambiar contraseña
+const pwForm = reactive({ current: "", newPw: "", confirm: "" });
+const pwBusy = ref(false);
+const pwMsg = ref("");
+const pwErr = ref("");
 const tickets = ref([]);
 
 async function saveBrand() {
@@ -205,6 +241,7 @@ async function savePrefs() {
   saving.value = true;
   prefsMsg.value = "";
   try {
+    const taxDecimal = Math.min(100, Math.max(0, Number(form.taxRate) || 0)) / 100;
     await saveVenueSettings({
       businessName: venueStore.businessName || form.businessName,
       businessType: venueStore.businessType || form.businessType,
@@ -216,14 +253,45 @@ async function savePrefs() {
       timezone: venueStore.timezone || form.timezone,
       initialTables: venueStore.initialTables || form.initialTables,
       inventoryEnabled: form.inventoryEnabled,
+      taxRate: taxDecimal,
     });
     prefsMsg.value = form.inventoryEnabled
       ? "Inventario activado. Aplica a todo el catálogo."
-      : "Inventario desactivado.";
+      : "Preferencias guardadas.";
   } catch {
     prefsMsg.value = "No se pudo guardar.";
   } finally {
     saving.value = false;
+  }
+}
+
+async function changePassword() {
+  pwMsg.value = "";
+  pwErr.value = "";
+  if (!pwForm.current || !pwForm.newPw) {
+    pwErr.value = "Llena todos los campos.";
+    return;
+  }
+  if (pwForm.newPw.length < 6) {
+    pwErr.value = "La nueva contraseña debe tener al menos 6 caracteres.";
+    return;
+  }
+  if (pwForm.newPw !== pwForm.confirm) {
+    pwErr.value = "Las contraseñas no coinciden.";
+    return;
+  }
+  pwBusy.value = true;
+  try {
+    await apiService.changePassword(pwForm.current, pwForm.newPw);
+    pwMsg.value = "Contraseña actualizada correctamente.";
+    pwForm.current = "";
+    pwForm.newPw = "";
+    pwForm.confirm = "";
+  } catch (e) {
+    const raw = e.response?.data;
+    pwErr.value = typeof raw === "string" ? raw : raw?.message || "No se pudo cambiar la contraseña.";
+  } finally {
+    pwBusy.value = false;
   }
 }
 
@@ -391,5 +459,30 @@ input, select { border:1px solid var(--timber-line); border-radius:.65rem; paddi
 }
 .link { display:inline-block; margin-top:1rem; color:var(--timber-primary); font-weight:600; }
 .empty { color:var(--timber-muted); }
+.field-inline {
+  display: grid;
+  gap: 0.3rem;
+  margin: 0 0 1rem;
+  padding: 0.85rem 0.9rem;
+  border-radius: 0.85rem;
+  border: 1px solid var(--timber-line);
+  background: var(--timber-panel-elevated);
+}
+.field-inline strong { font-size: 0.95rem; color: var(--timber-ink); }
+.field-inline small { color: var(--timber-muted); font-size: 0.82rem; line-height: 1.4; font-weight: 500; }
+.tax-input {
+  width: 6rem;
+  min-height: 2.6rem;
+  border: 1px solid var(--timber-line);
+  border-radius: 0.65rem;
+  padding: 0.5rem 0.65rem;
+  font: inherit;
+  font-size: 1.1rem;
+  font-weight: 700;
+  background: var(--timber-panel);
+  color: var(--timber-ink);
+  text-align: center;
+}
+.pw-form { display: grid; gap: 0.75rem; max-width: 24rem; margin-bottom: 0.85rem; }
 @media (max-width:720px) { .invite-form { grid-template-columns:1fr; } }
 </style>

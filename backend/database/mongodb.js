@@ -386,6 +386,32 @@ async function DeleteFood(id, tenantId) {
   return await dbConnection.collection('foods').deleteOne(filter);
 }
 
+/** Productos cuyo stock está por debajo o igual al umbral mínimo. */
+async function GetLowStockFoods(tenantId) {
+  const filter = {
+    ...(tenantId ? { tenantId } : {}),
+    $expr: {
+      $lte: [
+        { $ifNull: ['$stock', 0] },
+        { $ifNull: ['$lowStockThreshold', 5] },
+      ],
+    },
+  };
+  return (await dbConnection.collection('foods').find(filter).toArray()).map(withId);
+}
+
+/** Busca productos por nombre, barcode o SKU (regex case-insensitive). */
+async function SearchFoods(tenantId, query) {
+  const q = String(query || '').trim();
+  if (!q) return [];
+  const regex = { $regex: q, $options: 'i' };
+  const filter = {
+    ...(tenantId ? { tenantId } : {}),
+    $or: [{ name: regex }, { barcode: regex }, { sku: regex }],
+  };
+  return (await dbConnection.collection('foods').find(filter).toArray()).map(withId);
+}
+
 async function AddWaiter(data) {
   return await dbConnection.collection('waiters').insertOne(data);
 }
@@ -768,6 +794,89 @@ function publicMail(row) {
   };
 }
 
+// ── Clientes ──
+async function CreateCustomer(data) {
+  const result = await dbConnection.collection('customers').insertOne(data);
+  return withId(await dbConnection.collection('customers').findOne({ _id: result.insertedId }));
+}
+async function GetCustomers(tenantId) {
+  const filter = tenantId ? { tenantId } : {};
+  return (await dbConnection.collection('customers').find(filter).sort({ createdAt: -1 }).toArray()).map(withId);
+}
+async function GetCustomerById(id, tenantId) {
+  const filter = oidFilter(id, tenantId);
+  if (!filter) return null;
+  return withId(await dbConnection.collection('customers').findOne(filter));
+}
+async function UpdateCustomer(id, data, tenantId) {
+  const filter = oidFilter(id, tenantId);
+  if (!filter) return null;
+  const clean = { ...data, updatedAt: new Date() };
+  delete clean.id;
+  delete clean._id;
+  await dbConnection.collection('customers').updateOne(filter, { $set: clean });
+  return GetCustomerById(id, tenantId);
+}
+async function DeleteCustomer(id, tenantId) {
+  const filter = oidFilter(id, tenantId);
+  if (!filter) return { deletedCount: 0 };
+  return await dbConnection.collection('customers').deleteOne(filter);
+}
+async function SearchCustomers(tenantId, query) {
+  const q = String(query || '').trim();
+  if (!q) return GetCustomers(tenantId);
+  const regex = { $regex: q, $options: 'i' };
+  const filter = {
+    tenantId,
+    $or: [{ name: regex }, { phone: regex }],
+  };
+  return (await dbConnection.collection('customers').find(filter).sort({ name: 1 }).toArray()).map(withId);
+}
+
+// ── Reportes de ventas ──
+async function GetOrdersByDateRange(tenantId, from, to) {
+  const filter = {
+    tenantId,
+    createdAt: { $gte: new Date(from), $lte: new Date(to) },
+  };
+  return (await dbConnection.collection('orders').find(filter).sort({ createdAt: -1 }).toArray()).map(withId);
+}
+async function GetSalesReport(tenantId, from, to) {
+  const match = {
+    tenantId,
+    paymentStatus: 'paid',
+    createdAt: { $gte: new Date(from), $lte: new Date(to) },
+  };
+  const orders = await dbConnection.collection('orders').find(match).toArray();
+
+  const totalOrders = orders.length;
+  const totalSales = orders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+  const averageTicket = totalOrders ? totalSales / totalOrders : 0;
+
+  // Top productos vendidos en el rango
+  const productMap = {};
+  for (const order of orders) {
+    for (const item of order.items || []) {
+      const key = item.foodId || item.name || 'Desconocido';
+      if (!productMap[key]) {
+        productMap[key] = { name: item.name || key, quantity: 0, revenue: 0 };
+      }
+      productMap[key].quantity += Number(item.quantity) || 1;
+      productMap[key].revenue += (Number(item.price) || 0) * (Number(item.quantity) || 1);
+    }
+  }
+  const topProducts = Object.values(productMap)
+    .sort((a, b) => b.quantity - a.quantity)
+    .slice(0, 5);
+
+  return {
+    totalSales: Number(totalSales.toFixed(2)),
+    totalOrders,
+    averageTicket: Number(averageTicket.toFixed(2)),
+    topProducts,
+  };
+}
+
 module.exports = {
   ensureConnection,
   CreateTenant, GetTenantById, UpdateTenant, ListTenants, CountUsersByTenant, CountPendingInvites, ListUsersByTenant, GetTenantByMpPreapprovalId,
@@ -778,13 +887,15 @@ module.exports = {
   AddWaitList, GetWaitList, GetWaitListByNumber, DeleteWaitList,
   GetSettings, CreateSettings, UpdateSettings,
   GetMenus, GetMenuById, CreateMenu, UpdateMenu, DeleteMenu,
-  GetFoods, CountFoods, CountPaidOrders, CountCashSessions, GetFoodById, GetFoodByBarcode, CreateFood, UpdateFood, DecrementFoodStock, IncrementFoodStock, DeleteFood,
+  GetFoods, CountFoods, CountPaidOrders, CountCashSessions, GetFoodById, GetFoodByBarcode, CreateFood, UpdateFood, DecrementFoodStock, IncrementFoodStock, DeleteFood, GetLowStockFoods, SearchFoods,
   CreateBillingEvent, ListBillingEvents,
   GetOrders, GetOrderById, GetOrderByInvoiceToken, CreateOrder, UpdateOrder, GetOrdersByCashSession,
+  GetOrdersByDateRange, GetSalesReport,
   SaveSupportMail, FindSupportMailByMessageIds, ListSupportMail, ListSupportMailAll, ListUnmatchedSupportMail,
   GetInvites, GetInviteByToken, CreateInvite, UpdateInvite, DeleteInvite,
   GetOpenCashSession, GetCashSessionById, CreateCashSession, UpdateCashSession,
   aiMonthKey, GetAiUsage, ReserveAiUse, RefundAiUse, ListAiUsage, ListAiUsageAll,
   ListPlatformExpenses, ListPlatformExpensesAll, CreatePlatformExpense, DeletePlatformExpense,
   SavePlatformSnapshot, ListPlatformSnapshots,
+  CreateCustomer, GetCustomers, GetCustomerById, UpdateCustomer, DeleteCustomer, SearchCustomers,
 };

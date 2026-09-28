@@ -1,4 +1,4 @@
-export const TAX_RATE = 0.08;
+export const TAX_RATE = 0.16;
 
 export function lineBreakdown(price, quantity, priceIncludesTax, taxRate = TAX_RATE) {
   const qty = Number(quantity) || 0;

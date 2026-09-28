@@ -20,8 +20,13 @@
         <span v-if="cashOpen && cashSession">
           Fondo {{ formatMoney(cashSession.openingFloat) }}
           · Ventas turno {{ formatMoney(cashTotals.total) }}
+          <template v-if="cashOpenSince"> · Desde {{ cashOpenSince }}</template>
         </span>
         <span v-else>Abre caja para cobrar</span>
+      </div>
+
+      <div v-if="cashOpenWarning" class="cash-warning-banner">
+        ⚠️ ¡Cuidado! La caja lleva abierta más de 12 horas. ¿Olvidaste hacer corte?
       </div>
 
       <div class="kpi-grid">
@@ -54,6 +59,21 @@
           <p class="kpi-sub">{{ productCount }} en catálogo</p>
         </div>
       </div>
+
+      <!-- Widget de alertas de stock bajo -->
+      <section v-if="lowStockItems.length" class="t-card low-stock-widget">
+        <div class="panel-head">
+          <h3>⚠️ Stock bajo</h3>
+          <router-link to="/products">Ver catálogo</router-link>
+        </div>
+        <ul class="low-stock-wlist">
+          <li v-for="item in lowStockItems.slice(0, 8)" :key="item.id">
+            <span class="lsw-name">{{ item.name }}</span>
+            <span class="lsw-stock">{{ Number(item.stock) || 0 }} uds</span>
+            <span class="lsw-threshold">mín. {{ item.lowStockThreshold != null ? item.lowStockThreshold : 5 }}</span>
+          </li>
+        </ul>
+      </section>
 
       <div class="mid">
         <section class="t-card panel">
@@ -150,12 +170,27 @@ import { labelOf, paymentStatusLabel } from "../labels";
 
 const orders = ref([]);
 const productCount = ref(0);
+const lowStockItems = ref([]);
 const cashOpen = ref(false);
 const cashSession = ref(null);
 const cashTotals = ref({ cash: 0, card: 0, transfer: 0, other: 0, total: 0 });
 
 const businessName = computed(() => venueStore.businessName || "Tu tienda");
 const todayLabel = computed(() => formatTodayLabel(venueStore.timezone));
+
+// Hora de apertura y aviso de caja abierta mucho tiempo
+const cashOpenSince = computed(() => {
+  if (!cashOpen.value || !cashSession.value) return "";
+  const d = new Date(cashSession.value.createdAt || cashSession.value.openedAt);
+  if (isNaN(d.getTime())) return "";
+  return d.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
+});
+const cashOpenWarning = computed(() => {
+  if (!cashOpen.value || !cashSession.value) return false;
+  const d = new Date(cashSession.value.createdAt || cashSession.value.openedAt);
+  if (isNaN(d.getTime())) return false;
+  return (Date.now() - d.getTime()) / 3600000 >= 12;
+});
 
 function startOfToday() {
   const start = new Date();
@@ -204,6 +239,7 @@ const payBreakdown = computed(() => {
     cash: { id: "cash", label: "Efectivo", amount: 0, count: 0 },
     card: { id: "card", label: "Tarjeta", amount: 0, count: 0 },
     transfer: { id: "transfer", label: "Transferencia", amount: 0, count: 0 },
+    split: { id: "split", label: "Mixto", amount: 0, count: 0 },
     other: { id: "other", label: "Otro", amount: 0, count: 0 },
   };
   for (const o of paidToday.value) {
@@ -272,7 +308,7 @@ function paymentText(s) {
   return labelOf(paymentStatusLabel, s);
 }
 function methodText(m) {
-  const map = { cash: "Efectivo", card: "Tarjeta", transfer: "Transfer.", other: "Otro" };
+  const map = { cash: "Efectivo", card: "Tarjeta", transfer: "Transfer.", split: "Mixto", other: "Otro" };
   return map[m] || (m ? String(m) : "—");
 }
 function shortId(id) {
@@ -293,6 +329,11 @@ onMounted(async () => {
     productCount.value = Array.isArray(foods) ? foods.length : 0;
   } catch {
     productCount.value = 0;
+  }
+  try {
+    lowStockItems.value = (await apiService.getLowStockFoods()) || [];
+  } catch {
+    lowStockItems.value = [];
   }
   try {
     const data = await apiService.getCashSession();
@@ -351,6 +392,17 @@ onMounted(async () => {
 .cash-pill.open .dot {
   background: var(--timber-success);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--timber-success) 25%, transparent);
+}
+.cash-warning-banner {
+  background: var(--timber-warning-soft, #fff3cd);
+  color: var(--timber-warning, #856404);
+  border: 1px solid var(--timber-warning, #ffc107);
+  border-radius: 0.65rem;
+  padding: 0.65rem 0.85rem;
+  margin-bottom: 1rem;
+  font-weight: 700;
+  font-size: 0.88rem;
+  text-align: center;
 }
 
 .kpi-grid {
@@ -553,4 +605,33 @@ onMounted(async () => {
 
 .t-badge.paid { background: var(--timber-success-soft); color: var(--timber-success); }
 .t-badge.unpaid { background: var(--timber-warning-soft); color: var(--timber-warning); }
+
+/* —— Widget de stock bajo —— */
+.low-stock-widget {
+  padding: 1rem;
+  margin-bottom: 0.85rem;
+  background: color-mix(in srgb, var(--timber-warning) 8%, var(--timber-panel));
+  border-color: color-mix(in srgb, var(--timber-warning) 30%, var(--timber-line));
+}
+.low-stock-wlist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+  gap: 0.45rem;
+}
+.low-stock-wlist li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.65rem;
+  border-radius: 0.55rem;
+  background: var(--timber-panel);
+  border: 1px solid var(--timber-line);
+  font-size: 0.85rem;
+}
+.lsw-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; }
+.lsw-stock { font-weight: 800; color: var(--timber-warning); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.lsw-threshold { font-size: 0.72rem; color: var(--timber-muted); flex-shrink: 0; }
 </style>
