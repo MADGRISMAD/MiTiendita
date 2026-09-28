@@ -399,12 +399,13 @@ Aceite 1L  48 pesos</pre>
 
           <aside class="plan-extra">
             <p>
-              ¿Prefieres pagar una sola vez? Hay <strong>licencia perpetua por $7,490</strong>.
+              ¿Prefieres pagar una sola vez? Hay <strong>licencia perpetua</strong>,
+              sin Inventario Mágico ni Precio Mágico.
             </p>
             <router-link :to="loggedIn ? { name: 'billing' } : '/register?plan=perpetual'">
-              Más información →
+              Preguntar por ella →
             </router-link>
-            <p v-if="!loggedIn" class="perpetual-note">Regístrate y actívala desde Facturación → Soporte.</p>
+            <p v-if="!loggedIn" class="perpetual-note">Regístrate y escríbenos desde Configuración → Soporte.</p>
           </aside>
         </div>
       </section>

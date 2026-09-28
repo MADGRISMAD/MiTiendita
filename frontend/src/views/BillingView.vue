@@ -152,8 +152,9 @@
           </section>
           <section class="extras">
             <p>
-              <strong>Licencia perpetua · $7,490</strong>
-              Pago único, sin cuota mensual. Actívala desde Configuración → Soporte.
+              <strong>Licencia perpetua</strong>
+              Pago único, sin cuota mensual. No incluye Inventario Mágico ni Precio Mágico.
+              Si te interesa, escríbenos desde Configuración → Soporte.
             </p>
           </section>
           <section v-if="canCancel" class="extras cancel-box">
