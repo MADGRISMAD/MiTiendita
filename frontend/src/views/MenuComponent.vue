@@ -6,11 +6,10 @@
         ⚠️ ¡Cuidado! La caja lleva abierta más de 12 horas. ¿Olvidaste hacer corte?
       </div>
 
-      <!-- ═══════════ MODO VENTA — escritorio tipo Mr Tienda ═══════════ -->
+      <!-- ═══════════ MODO VENTA ═══════════ -->
       <template v-if="mode === 'pos'">
         <div class="desk">
-          <!-- Barra de funciones: en móvil sin teclas F ni Cobrar duplicado -->
-          <nav class="fkey-bar" aria-label="Funciones rápidas">
+          <nav class="fkey-bar hide-mobile" aria-label="Funciones rápidas">
             <button type="button" class="fkey" @click="removeSelected" :disabled="selectedIdx < 0">
               <span class="fk only-pc">F2</span>
               <span class="fl">Anular</span>
@@ -37,8 +36,8 @@
             </button>
           </nav>
 
-          <div class="status-bar">
-            <span class="hide-mobile">{{ businessName }}</span>
+          <div class="status-bar hide-mobile">
+            <span>{{ businessName }}</span>
             <span>{{ itemCount }} artículos</span>
             <span v-if="ticketDiscount">Dcto {{ ticketDiscount }}%</span>
             <span class="status-hint only-pc">Escáner listo · Enter agrega</span>
@@ -47,24 +46,35 @@
 
           <div class="desk-top">
             <div class="scan-box" :class="{ flash: scanFlash, err: !!scanError }">
-              <label class="scan-label" for="pos-scan">Código / búsqueda</label>
-              <input
-                id="pos-scan"
-                ref="scanInput"
-                v-model="scanCode"
-                type="text"
-                class="scan-input"
-                placeholder="Escanea o escribe…"
-                autocomplete="off"
-                autocorrect="off"
-                autocapitalize="off"
-                spellcheck="false"
-                @keydown.enter.prevent="onScanEnter"
-              />
+              <label class="scan-label hide-mobile" for="pos-scan">Código / búsqueda</label>
+              <div class="scan-row">
+                <input
+                  id="pos-scan"
+                  ref="scanInput"
+                  v-model="scanCode"
+                  type="search"
+                  inputmode="search"
+                  enterkeyhint="search"
+                  class="scan-input"
+                  :placeholder="compactPos ? 'Buscar o escanear' : 'Busca o escanea un producto'"
+                  autocomplete="off"
+                  autocorrect="off"
+                  autocapitalize="off"
+                  spellcheck="false"
+                  @keydown.enter.prevent="onScanEnter"
+                />
+                <button
+                  type="button"
+                  class="m-tool only-mobile"
+                  @click="showPriceCheck = true"
+                >
+                  Precio
+                </button>
+              </div>
               <p v-if="scanError" class="scan-msg err">{{ scanError }}</p>
               <p v-else-if="lastAdded" class="scan-msg ok">+ {{ lastAdded.name }}</p>
 
-              <div v-if="nameHits.length" class="hits">
+              <div v-if="nameHits.length" class="hits hide-mobile">
                 <button
                   v-for="p in nameHits"
                   :key="p.id"
@@ -78,7 +88,7 @@
               </div>
             </div>
 
-            <aside class="price-board" aria-live="polite">
+            <aside class="price-board hide-mobile" aria-live="polite">
               <div class="board-screen">
                 <div class="board-row">
                   <span class="board-name">{{ displayLast ? displayLast.name : 'Esperando producto' }}</span>
@@ -92,7 +102,49 @@
             </aside>
           </div>
 
-          <div class="ticket-wrap">
+          <div class="m-sell only-mobile">
+            <div v-if="menus.length > 1" class="m-cats" role="tablist">
+              <button type="button" class="m-cat" :class="{ on: !pickMenuId }" @click="pickMenuId = ''">
+                Todos
+              </button>
+              <button
+                v-for="menu in menus"
+                :key="menu.id"
+                type="button"
+                class="m-cat"
+                :class="{ on: pickMenuId === menu.id }"
+                @click="pickMenuId = menu.id"
+              >
+                {{ menu.name }}
+              </button>
+            </div>
+
+            <div class="m-grid">
+              <button
+                v-for="p in pickList"
+                :key="p.id"
+                type="button"
+                class="m-prod"
+                :class="{ in: qtyInCart(p.id) > 0 }"
+                @click="addProduct(p)"
+              >
+                <span class="m-prod-inner">
+                  <span class="m-prod-thumb" :class="{ empty: !p.imgUrl }">
+                    <img v-if="p.imgUrl" :src="p.imgUrl" alt="" />
+                    <span v-else>{{ initial(p.name) }}</span>
+                    <em v-if="qtyInCart(p.id)" class="m-badge">{{ formatQty(qtyInCart(p.id)) }}</em>
+                  </span>
+                  <span class="m-prod-name">{{ p.name }}</span>
+                  <strong>{{ money(p.price) }}</strong>
+                </span>
+              </button>
+              <p v-if="!pickList.length" class="m-empty">
+                {{ scanCode.trim() ? 'Nada coincide. Prueba otro nombre.' : 'Aún no hay productos en el catálogo.' }}
+              </p>
+            </div>
+          </div>
+
+          <div class="ticket-wrap hide-mobile">
             <table class="ticket-table">
               <thead>
                 <tr>
@@ -145,7 +197,7 @@
             </div>
           </div>
 
-          <footer class="last-bar">
+          <footer class="last-bar hide-mobile">
             <div class="last-thumb hide-mobile" :class="{ empty: !displayLast?.imgUrl }">
               <img v-if="displayLast?.imgUrl" :src="displayLast.imgUrl" alt="" @error="$event.target.style.display = 'none'" />
               <span v-else>{{ displayLast ? initial(displayLast.name) : '·' }}</span>
@@ -178,6 +230,37 @@
               @click="finalizeOrder"
             >
               {{ sending ? '…' : 'COBRAR' }}
+            </button>
+          </footer>
+
+          <footer class="m-pay only-mobile">
+            <button
+              type="button"
+              class="m-pay-ticket"
+              :disabled="!lines.length"
+              @click="showMobileCart = true"
+            >
+              <span class="m-pay-count">{{ formatQty(itemCount) }}</span>
+              <span class="m-pay-copy">
+                <strong>{{ money(total) }}</strong>
+                <small>
+                  {{
+                    !lines.length
+                      ? 'Toca para agregar'
+                      : lastAdded
+                        ? lastAdded.name
+                        : 'Ver ticket'
+                  }}
+                </small>
+              </span>
+            </button>
+            <button
+              type="button"
+              class="m-pay-go"
+              :disabled="!lines.length || sending"
+              @click="finalizeOrder"
+            >
+              {{ sending ? '…' : 'Cobrar' }}
             </button>
           </footer>
         </div>
@@ -334,6 +417,54 @@
           </section>
         </div>
       </template>
+
+      <!-- Ticket móvil -->
+      <Teleport to="body">
+        <div v-if="showMobileCart" class="sheet-bg m-cart-bg" @click.self="showMobileCart = false">
+          <div class="m-cart-sheet" role="dialog" aria-labelledby="m-cart-title">
+            <header class="m-cart-head">
+              <div>
+                <h3 id="m-cart-title">Tu ticket</h3>
+                <p>{{ formatQty(itemCount) }} artículo{{ itemCount === 1 ? '' : 's' }}</p>
+              </div>
+              <button type="button" class="m-cart-close" @click="showMobileCart = false">Seguir</button>
+            </header>
+            <ul class="m-cart-list">
+              <li v-for="(line, i) in lines" :key="line.id + '-' + i">
+                <div class="m-cart-info">
+                  <strong>{{ line.name }}</strong>
+                  <span>{{ money(line.price) }} c/u</span>
+                </div>
+                <strong class="m-cart-imp">{{ money(lineGross(line)) }}</strong>
+                <div class="qty">
+                  <button type="button" @click="bumpQty(i, -1)">−</button>
+                  <span>{{ formatQty(line.quantity) }}</span>
+                  <button type="button" @click="bumpQty(i, 1)">+</button>
+                </div>
+                <button type="button" class="m-cart-del" @click="removeAt(i)">Quitar</button>
+              </li>
+            </ul>
+            <p v-if="!lines.length" class="m-empty">El ticket está vacío.</p>
+            <p v-if="ticketDiscount" class="m-cart-dcto">Descuento {{ ticketDiscount }}%</p>
+            <div class="m-cart-total">
+              <span>Total</span>
+              <strong>{{ money(total) }}</strong>
+            </div>
+            <div class="m-cart-acts">
+              <button type="button" class="act" @click="showDiscount = true">Descuento</button>
+              <button type="button" class="act" :disabled="!lines.length" @click="clearCart">Vaciar</button>
+              <button
+                type="button"
+                class="act primary"
+                :disabled="!lines.length || sending"
+                @click="payFromMobileCart"
+              >
+                Cobrar
+              </button>
+            </div>
+          </div>
+        </div>
+      </Teleport>
 
       <!-- Precio F4 -->
       <Teleport to="body">
@@ -629,6 +760,12 @@ export default {
     const router = useRouter();
     const menus = ref([]);
     const productos = ref([]);
+    const pickFoods = ref([]);
+    const pickMenuId = ref("");
+    const showMobileCart = ref(false);
+    const compactPos = ref(
+      typeof window !== "undefined" && window.matchMedia("(max-width: 767.98px)").matches
+    );
     const selectedMenuId = ref("");
     const seeding = ref(false);
     const seedErr = ref("");
@@ -769,6 +906,7 @@ export default {
     let flashTimer = null;
     let searchTimer = null;
     let priceTimer = null;
+    let compactMq = null;
     let wedgeBuf = "";
     let wedgeLast = 0;
     let wedgeTimer = null;
@@ -783,6 +921,35 @@ export default {
     const itemCount = computed(() =>
       lines.value.reduce((s, p) => s + Number(p.quantity || 0), 0)
     );
+    const pickList = computed(() => {
+      const q = String(scanCode.value || "").trim().toLowerCase();
+      let list = pickFoods.value;
+      if (pickMenuId.value) {
+        list = list.filter((p) => String(p.menuId || "") === String(pickMenuId.value));
+      }
+      const digitsOnly = /^\d+$/.test(q);
+      const shouldFilter = q && (!digitsOnly || q.length >= 4);
+      if (shouldFilter) {
+        list = list.filter((p) => {
+          const name = String(p.name || "").toLowerCase();
+          const code = String(p.barcode || p.sku || "").toLowerCase();
+          return name.includes(q) || code.includes(q);
+        });
+      }
+      return shouldFilter ? list.slice(0, 80) : list.slice(0, 60);
+    });
+    function qtyInCart(id) {
+      const line = lines.value.find((p) => p.id === id);
+      return line ? Number(line.quantity || 0) : 0;
+    }
+    function isCompactPos() {
+      return typeof window !== "undefined" && window.matchMedia("(max-width: 767.98px)").matches;
+    }
+    function onCompactChange(e) {
+      compactPos.value = !!e.matches;
+      if (compactPos.value) scanInput.value?.blur();
+      else focusScan();
+    }
     const totals = computed(() =>
       cartTotals(lines.value, {
         discountPercent: ticketDiscount.value,
@@ -874,6 +1041,7 @@ export default {
     }
 
     function focusScan() {
+      if (isCompactPos()) return;
       nextTick(() => {
         const blocked =
           showPriceCheck.value ||
@@ -973,6 +1141,15 @@ export default {
         scanFlash.value = false;
       }, 220);
       scanCode.value = "";
+      if (isCompactPos()) {
+        scanInput.value?.blur();
+        try {
+          navigator.vibrate?.(12);
+        } catch {
+          /* ignore */
+        }
+        return;
+      }
       focusScan();
     }
 
@@ -1090,6 +1267,7 @@ export default {
       selectedIdx.value = -1;
       lastAdded.value = null;
       ticketDiscount.value = 0;
+      showMobileCart.value = false;
       focusScan();
     }
 
@@ -1152,8 +1330,13 @@ export default {
       payCardAmount.value = 0;
       payError.value = "";
       openingFloat.value = 0;
+      showMobileCart.value = false;
       showPayment.value = true;
       loadCashSession();
+    }
+
+    function payFromMobileCart() {
+      finalizeOrder();
     }
 
     function closePayment() {
@@ -1385,6 +1568,11 @@ export default {
       } catch {
         menus.value = [];
       }
+      try {
+        pickFoods.value = (await apiService.getAllFoods()) || [];
+      } catch {
+        pickFoods.value = [];
+      }
       fetchLowStock();
     }
 
@@ -1497,6 +1685,9 @@ export default {
           saved = await apiService.createFood(payload);
           productos.value.push(saved);
         }
+        const pidx = pickFoods.value.findIndex((p) => p.id === saved.id);
+        if (pidx >= 0) pickFoods.value[pidx] = saved;
+        else pickFoods.value.push(saved);
         closeFoodForm();
         if (shouldAdd && saved?.id) {
           if (intent === "price") {
@@ -1528,6 +1719,7 @@ export default {
       if (!window.confirm(`¿Seguro que quieres quitar “${name}” del catálogo?`)) return;
       await apiService.deleteFood(editingFood.value.id);
       productos.value = productos.value.filter((p) => p.id !== editingFood.value.id);
+      pickFoods.value = pickFoods.value.filter((p) => p.id !== editingFood.value.id);
       closeFoodForm();
     }
 
@@ -1547,7 +1739,12 @@ export default {
     onMounted(async () => {
       await fetchMenus();
       loadCashSession();
-      focusScan();
+      compactPos.value = isCompactPos();
+      compactMq = window.matchMedia("(max-width: 767.98px)");
+      if (compactMq.addEventListener) compactMq.addEventListener("change", onCompactChange);
+      else compactMq.addListener(onCompactChange);
+      if (compactPos.value) scanInput.value?.blur();
+      else focusScan();
       window.addEventListener("keydown", onHotkey);
       window.addEventListener("focus", focusScan);
     });
@@ -1555,6 +1752,10 @@ export default {
     onUnmounted(() => {
       window.removeEventListener("keydown", onHotkey);
       window.removeEventListener("focus", focusScan);
+      if (compactMq) {
+        if (compactMq.removeEventListener) compactMq.removeEventListener("change", onCompactChange);
+        else compactMq.removeListener(onCompactChange);
+      }
       clearTimeout(flashTimer);
       clearTimeout(searchTimer);
       clearTimeout(priceTimer);
@@ -1580,6 +1781,12 @@ export default {
       nameHits,
       lines,
       itemCount,
+      pickMenuId,
+      pickList,
+      qtyInCart,
+      compactPos,
+      showMobileCart,
+      payFromMobileCart,
       totals,
       subtotalAfterDiscount,
       tax,
@@ -2021,6 +2228,8 @@ export default {
   cursor: pointer;
 }
 .ticket-pager button:disabled { opacity: 0.35; }
+
+.scan-row { display: block; }
 
 .last-bar {
   display: flex;
@@ -2649,31 +2858,363 @@ export default {
 }
 
 @media (max-width: 767.98px) {
-  .fkey {
-    min-width: 0;
-    flex: 1;
-    min-height: 2.75rem;
-  }
-  .fkey .fl { font-size: 0.78rem; }
   .desk-top {
     grid-template-columns: 1fr;
-    gap: 0.35rem;
-    padding: 0.35rem 0.45rem;
+    gap: 0.3rem;
+    padding: 0.5rem 0.75rem 0.35rem;
+    background: var(--timber-panel);
+    border-bottom: none;
   }
-  .price-board { order: -1; }
-  .board-num { font-size: 2.15rem; }
-  .scan-input { min-height: 2.85rem; font-size: 1.05rem; }
-  .c-code,
-  .c-price,
-  .ticket-table th.c-code,
-  .ticket-table th.c-price { display: none; }
-  .c-qty { width: 6.5rem; }
-  .c-imp { width: 28%; }
-  .btn-cobrar {
-    min-width: 6.2rem;
-    min-height: 3.1rem;
+  .scan-box {
+    padding: 0;
+    border: none;
+    background: transparent;
+    border-radius: 0;
+  }
+  .scan-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.45rem;
+    align-items: stretch;
+  }
+  .scan-input {
+    min-height: 2.85rem;
     font-size: 1rem;
+    font-weight: 600;
+    border-width: 1px;
+    border-radius: 0.95rem;
+    background: var(--timber-panel-elevated);
+    padding-left: 0.9rem;
   }
+  .m-tool {
+    min-width: 4.4rem;
+    padding: 0 0.7rem;
+    border: 1px solid var(--timber-line);
+    border-radius: 0.95rem;
+    background: var(--timber-panel-elevated);
+    color: var(--timber-ink);
+    font: inherit;
+    font-weight: 800;
+    font-size: 0.8rem;
+  }
+  .scan-msg { padding: 0.2rem 0.1rem 0; }
+  .scan-msg.ok { display: none; }
+
+  .m-sell {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--timber-surface);
+  }
+  .m-cats {
+    display: flex;
+    gap: 0.4rem;
+    padding: 0 0.75rem 0.5rem;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    flex-shrink: 0;
+  }
+  .m-cats::-webkit-scrollbar { display: none; }
+  .m-cat {
+    flex: 0 0 auto;
+    min-height: 2.15rem;
+    padding: 0.28rem 0.9rem;
+    border: none;
+    border-radius: 999px;
+    background: var(--timber-panel);
+    color: var(--timber-muted);
+    font: inherit;
+    font-weight: 800;
+    font-size: 0.82rem;
+  }
+  .m-cat.on {
+    background: var(--timber-primary);
+    color: var(--timber-on-primary);
+  }
+  .m-grid {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: stretch;
+    gap: 0.45rem;
+    padding: 0.1rem 0.75rem 0.75rem;
+  }
+  .m-prod {
+    display: flex;
+    width: 100%;
+    align-self: start;
+    height: auto;
+    min-height: 0 !important;
+    margin: 0;
+    padding: 0;
+    line-height: 0;
+    appearance: none;
+    -webkit-appearance: none;
+    text-align: left;
+    border: 1px solid var(--timber-line);
+    border-radius: 1rem;
+    background: var(--timber-panel);
+    color: inherit;
+    font: inherit;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    box-shadow: 0 4px 12px color-mix(in srgb, var(--timber-ink) 6%, transparent);
+  }
+  .m-prod-inner {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.7rem;
+    flex: 1 1 auto;
+    width: 100%;
+    min-height: 3.6rem;
+    padding: 0.45rem 0.7rem;
+    line-height: 1.25;
+    box-sizing: border-box;
+  }
+  .m-prod:active { transform: scale(0.99); }
+  .m-prod.in {
+    border-color: var(--timber-primary);
+    background: color-mix(in srgb, var(--timber-primary) 12%, var(--timber-panel));
+  }
+  .m-prod-thumb {
+    position: relative;
+    flex: 0 0 2.7rem;
+    width: 2.7rem;
+    height: 2.7rem;
+    border-radius: 0.8rem;
+    overflow: visible;
+    display: grid;
+    place-items: center;
+    background: color-mix(in srgb, var(--timber-primary) 16%, var(--timber-panel-elevated));
+    color: var(--timber-primary);
+    font-weight: 800;
+    font-size: 1.05rem;
+  }
+  .m-prod-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 0.8rem;
+  }
+  .m-prod-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-weight: 800;
+    font-size: 0.95rem;
+    line-height: 1.25;
+  }
+  .m-prod strong {
+    flex: 0 0 auto;
+    font-size: 1.05rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--timber-primary);
+    white-space: nowrap;
+  }
+  .m-badge {
+    position: absolute;
+    top: -0.3rem;
+    right: -0.3rem;
+    min-width: 1.35rem;
+    height: 1.35rem;
+    padding: 0 0.28rem;
+    border-radius: 999px;
+    background: var(--timber-primary);
+    color: var(--timber-on-primary);
+    font-size: 0.68rem;
+    font-style: normal;
+    font-weight: 800;
+    display: grid;
+    place-items: center;
+  }
+  .m-empty {
+    grid-column: 1 / -1;
+    margin: 1.5rem 0.4rem;
+    text-align: center;
+    color: var(--timber-muted);
+    font-weight: 700;
+  }
+
+  .m-pay {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.5rem;
+    align-items: stretch;
+    margin-top: auto;
+    padding: 0.5rem 0.75rem 0.55rem;
+    background: var(--timber-panel);
+    border-top: 1px solid var(--timber-line);
+    box-shadow: 0 -12px 28px color-mix(in srgb, var(--timber-ink) 10%, transparent);
+    flex-shrink: 0;
+    z-index: 8;
+  }
+  .m-pay-ticket {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    min-height: 3.5rem;
+    min-width: 0;
+    padding: 0.35rem 0.75rem;
+    border: 1px solid var(--timber-line);
+    border-radius: 1.05rem;
+    background: var(--timber-surface);
+    color: inherit;
+    font: inherit;
+    text-align: left;
+  }
+  .m-pay-ticket:disabled { opacity: 0.7; }
+  .m-pay-count {
+    min-width: 1.95rem;
+    height: 1.95rem;
+    border-radius: 999px;
+    background: var(--timber-primary);
+    color: var(--timber-on-primary);
+    display: grid;
+    place-items: center;
+    font-weight: 800;
+    font-size: 0.88rem;
+    flex-shrink: 0;
+  }
+  .m-pay-copy {
+    display: grid;
+    min-width: 0;
+  }
+  .m-pay-copy strong {
+    font-size: 1.12rem;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.15;
+  }
+  .m-pay-copy small {
+    color: var(--timber-muted);
+    font-weight: 700;
+    font-size: 0.7rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .m-pay-go {
+    min-width: 7.4rem;
+    min-height: 3.5rem;
+    padding: 0 1.15rem;
+    border: none;
+    border-radius: 1.05rem;
+    background: var(--timber-accent);
+    color: #1a1208;
+    font: inherit;
+    font-weight: 800;
+    font-size: 1.12rem;
+    letter-spacing: 0.02em;
+    touch-action: manipulation;
+  }
+  .m-pay-go:disabled { opacity: 0.4; }
+
+  .m-cart-bg { align-items: flex-end; padding: 0; }
+  .m-cart-sheet {
+    width: 100%;
+    max-height: 88dvh;
+    overflow: auto;
+    padding: 1.05rem 1rem calc(1.05rem + env(safe-area-inset-bottom, 0px));
+    border-radius: 1.25rem 1.25rem 0 0;
+    background: var(--timber-panel);
+    color: var(--timber-ink);
+    display: grid;
+    gap: 0.7rem;
+  }
+  .m-cart-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+  .m-cart-head h3 { margin: 0; font-size: 1.3rem; }
+  .m-cart-head p { margin: 0.15rem 0 0; color: var(--timber-muted); font-weight: 700; font-size: 0.85rem; }
+  .m-cart-close {
+    border: none;
+    background: var(--timber-surface);
+    color: var(--timber-ink);
+    font: inherit;
+    font-weight: 800;
+    border-radius: 999px;
+    min-height: 2.5rem;
+    padding: 0 0.95rem;
+  }
+  .m-cart-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.5rem;
+  }
+  .m-cart-list li {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "info imp"
+      "qty del";
+    gap: 0.35rem 0.65rem;
+    align-items: center;
+    padding: 0.75rem 0.75rem;
+    border-radius: 1rem;
+    background: var(--timber-surface);
+  }
+  .m-cart-info { display: grid; gap: 0.1rem; min-width: 0; grid-area: info; }
+  .m-cart-info strong {
+    font-size: 0.95rem;
+    line-height: 1.25;
+  }
+  .m-cart-info span { color: var(--timber-muted); font-size: 0.78rem; font-weight: 700; }
+  .m-cart-imp {
+    font-variant-numeric: tabular-nums;
+    font-size: 1rem;
+    grid-area: imp;
+    justify-self: end;
+  }
+  .m-cart-sheet .qty {
+    grid-area: qty;
+    margin: 0;
+    justify-self: start;
+  }
+  .m-cart-sheet .qty button {
+    width: 2.55rem;
+    height: 2.55rem;
+    font-size: 1.2rem;
+    border-radius: 0.7rem;
+  }
+  .m-cart-del {
+    grid-area: del;
+    justify-self: end;
+    border: none;
+    background: transparent;
+    color: var(--timber-danger);
+    font: inherit;
+    font-weight: 800;
+    font-size: 0.82rem;
+    min-height: 2.2rem;
+    padding: 0 0.2rem;
+  }
+  .m-cart-dcto { margin: 0; font-weight: 800; color: var(--timber-accent); }
+  .m-cart-total {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-size: 1.15rem;
+    font-weight: 800;
+  }
+  .m-cart-total strong { font-variant-numeric: tabular-nums; font-size: 1.5rem; }
+  .m-cart-acts {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+  }
+  .m-cart-acts .primary { grid-column: 1 / -1; min-height: 3.35rem; }
+
+  .pay-methods { grid-template-columns: 1fr; }
+  .pay-method-card { min-height: 3.1rem; font-size: 1rem; }
   .toolbar-right { display: none; }
 }
 
