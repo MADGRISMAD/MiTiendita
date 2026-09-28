@@ -39,7 +39,7 @@
 
           <div class="status-bar">
             <span class="hide-mobile">{{ businessName }}</span>
-            <span>{{ itemCount }} arts</span>
+            <span>{{ itemCount }} artículos</span>
             <span v-if="ticketDiscount">Dcto {{ ticketDiscount }}%</span>
             <span class="status-hint only-pc">Escáner listo · Enter agrega</span>
             <span class="status-hint only-tablet">Listo para escanear</span>
@@ -147,7 +147,7 @@
 
           <footer class="last-bar">
             <div class="last-thumb hide-mobile" :class="{ empty: !displayLast?.imgUrl }">
-              <img v-if="displayLast?.imgUrl" :src="displayLast.imgUrl" alt="" />
+              <img v-if="displayLast?.imgUrl" :src="displayLast.imgUrl" alt="" @error="$event.target.style.display = 'none'" />
               <span v-else>{{ displayLast ? initial(displayLast.name) : '·' }}</span>
             </div>
             <div class="last-meta">
@@ -543,7 +543,7 @@
                   <input v-model="foodForm.priceMode" type="radio" value="net" />
                   <span>
                     <strong>No, hay que sumarle IVA</strong>
-                    <small>Al cobrar se agrega el 16%</small>
+                    <small>Al cobrar se agrega el {{ Math.round(TAX_RATE * 100) }}%</small>
                   </span>
                 </label>
                 <p class="price-preview">El cliente paga {{ money(foodPricePreview.gross) }}</p>
@@ -1027,6 +1027,7 @@ export default {
     }
 
     function clearCart() {
+      if (lines.value.length && !window.confirm("¿Vaciar el carrito? Se perderán todos los productos agregados.")) return;
       store.platillosSeleccionados.splice(0, store.platillosSeleccionados.length);
       selectedIdx.value = -1;
       lastAdded.value = null;
@@ -1134,6 +1135,7 @@ export default {
           modality: "retail",
           status: "pending",
           discountPercent: ticketDiscount.value || 0,
+          taxRate: TAX_RATE.value,
           items: lines.value.map((p) => ({
             foodId: p.id,
             name: p.name,

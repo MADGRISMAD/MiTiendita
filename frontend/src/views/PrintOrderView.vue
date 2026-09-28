@@ -52,12 +52,12 @@
         <div class="rule dashed"></div>
 
         <div class="totals">
-          <div class="row"><span>Subtotal</span><span>{{ moneyPlain(order.subtotal) }}</span></div>
+          <div class="row"><span>Subtotal</span><span>{{ moneyPlain(order.subtotalNet != null ? order.subtotalNet : order.subtotal) }}</span></div>
           <div v-if="order.discountAmount" class="row">
             <span>Descuento {{ order.discountPercent || 0 }}%</span>
             <span>-{{ moneyPlain(order.discountAmount) }}</span>
           </div>
-          <div class="row"><span>IVA (8%)</span><span>{{ moneyPlain(order.tax) }}</span></div>
+          <div class="row"><span>IVA ({{ Math.round((order.taxRate || 0.16) * 100) }}%)</span><span>{{ moneyPlain(order.tax) }}</span></div>
           <div v-if="order.cardExtraTax" class="row">
             <span>IVA extra tarjeta</span>
             <span>{{ moneyPlain(order.cardExtraTax) }}</span>
@@ -104,7 +104,7 @@ import QRCode from "qrcode";
 import { apiService, appPublicOrigin } from "../apiService";
 import { venueStore, fetchVenueSettings } from "../venueStore";
 import { authStore } from "../authStore";
-import { lineBreakdown, TAX_RATE } from "../tax";
+import { lineBreakdown } from "../tax";
 
 const route = useRoute();
 const order = ref(null);
@@ -151,7 +151,8 @@ function formatQty(q) {
   return Number.isInteger(n) ? String(n) : n.toFixed(3);
 }
 function lineGross(item) {
-  return lineBreakdown(item.price, item.quantity, item.priceIncludesTax, TAX_RATE).gross;
+  const rate = order.value?.taxRate || 0.16;
+  return lineBreakdown(item.price, item.quantity, item.priceIncludesTax, rate).gross;
 }
 function formatDate(d) {
   if (!d) return "";

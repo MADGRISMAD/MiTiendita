@@ -25,9 +25,11 @@ function normalizeOrder(body = {}) {
   const deliveryFee =
     modality === 'takeaway' ? Number(body.deliveryFee ?? 0) : 0;
 
+  const taxRate = Number(body.taxRate) > 0 ? Number(body.taxRate) : DEFAULT_TAX_RATE;
+
   const totals = cartTotals(items, {
     discountPercent: body.discountPercent,
-    taxRate: DEFAULT_TAX_RATE,
+    taxRate,
     cardExtraIva: false,
   });
 

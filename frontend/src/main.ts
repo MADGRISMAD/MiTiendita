@@ -117,6 +117,19 @@ const routes: RouteRecordRaw[] = [
     component: PrintCashCloseView,
     meta: { requiresAuth: true, roles: ["admin", "cashier"] },
   },
+  {
+    path: "/:pathMatch(.*)*",
+    name: "notFound",
+    component: {
+      template: `
+        <div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:var(--font-sans,system-ui,sans-serif);color:var(--timber-ink,#1a2332);text-align:center;padding:2rem;">
+          <h1 style="font-size:3rem;margin:0;">404</h1>
+          <p style="font-size:1.1rem;color:var(--timber-muted,#64748b);margin:0.5rem 0 1.5rem;">Esta página no existe.</p>
+          <a href="/" style="color:var(--timber-primary,#1e5aa8);font-weight:700;text-decoration:none;">← Volver al inicio</a>
+        </div>
+      `,
+    },
+  },
 ];
 
 const router = createRouter({

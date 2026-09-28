@@ -54,7 +54,7 @@
           </p>
         </div>
         <div class="kpi">
-          <p class="kpi-label">Arts. vendidos</p>
+          <p class="kpi-label">Artículos vendidos</p>
           <p class="kpi-value">{{ todayArts }}</p>
           <p class="kpi-sub">{{ productCount }} en catálogo</p>
         </div>
@@ -124,7 +124,7 @@
                 <strong>#{{ shortId(o.id) }}</strong>
                 <span class="meta">
                   {{ formatTime(o.createdAt) }}
-                  · {{ itemCount(o) }} arts
+                  · {{ itemCount(o) }} artículos
                   · {{ methodText(o.paymentMethod) }}
                 </span>
               </div>
@@ -193,9 +193,16 @@ const cashOpenWarning = computed(() => {
 });
 
 function startOfToday() {
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
-  return start;
+  const tz = venueStore.timezone || "America/Mexico_City";
+  try {
+    const now = new Date();
+    const todayStr = now.toLocaleDateString("en-CA", { timeZone: tz });
+    return new Date(todayStr + "T00:00:00");
+  } catch {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    return start;
+  }
 }
 
 const todayOrders = computed(() => {
@@ -302,7 +309,13 @@ function formatMoney(n) {
 }
 function formatTime(d) {
   if (!d) return "";
-  return new Date(d).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
+  const dt = new Date(d);
+  const start = startOfToday();
+  if (dt >= start) {
+    return dt.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
+  }
+  return dt.toLocaleDateString("es-MX", { day: "numeric", month: "short" })
+    + " " + dt.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
 }
 function paymentText(s) {
   return labelOf(paymentStatusLabel, s);

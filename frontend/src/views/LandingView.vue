@@ -383,9 +383,10 @@ Aceite 1L  48 pesos</pre>
             <p>
               ¿Prefieres pagar una sola vez? Hay <strong>licencia perpetua por $7,490</strong>.
             </p>
-            <router-link :to="loggedIn ? { name: 'billing' } : '/register'">
+            <router-link :to="loggedIn ? { name: 'billing' } : '/register?plan=perpetual'">
               Más información →
             </router-link>
+            <p v-if="!loggedIn" class="perpetual-note">Regístrate y actívala desde Facturación → Soporte.</p>
           </aside>
         </div>
       </section>
@@ -1599,6 +1600,7 @@ main,
   text-decoration: none;
 }
 .plan-extra a:hover { text-decoration: underline; }
+.perpetual-note { margin: 0.25rem 0 0; font-size: 0.78rem; color: var(--timber-muted); }
 
 /* ═══════════════════════════════════════════
    HARDWARE

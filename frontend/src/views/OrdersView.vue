@@ -5,7 +5,7 @@
       <section class="caja-card" :class="cashOpen ? 'is-open' : 'is-closed'">
         <div class="caja-head">
           <div>
-            <p class="caja-kicker">{{ cashOpen ? 'Ya puedes cobrar' : 'Primero abre la caja' }}</p>
+            <p class="caja-kicker">{{ cashOpen ? (unpaidOrders.length ? 'Tienes ventas por cobrar' : 'Caja lista') : 'Primero abre la caja' }}</p>
             <h2>{{ cashOpen ? 'Caja abierta' : 'Caja cerrada' }}</h2>
           </div>
           <button
@@ -112,7 +112,7 @@
             <h3>{{ voidOrder.paymentStatus === 'paid' ? 'Devolver venta' : 'Cancelar venta' }}</h3>
             <p class="modal-hint">
               <template v-if="voidOrder.paymentStatus === 'paid'">
-                Regresas {{ money(voidOrder.total) }} y los productos vuelven al inventario.
+                Regresas {{ money(voidOrder.total) }}<template v-if="voidOrder.inventoryApplied"> y los productos vuelven al inventario</template>.
               </template>
               <template v-else>
                 Esta venta no se cobró. Solo se quita de la lista.
@@ -239,18 +239,20 @@ import {
   orderStatusLabel,
   paymentStatusLabel,
 } from "../labels";
-import { TAX_RATE } from "../tax";
+import { venueStore } from "../venueStore";
 
 const router = useRouter();
 const orders = ref([]);
 const filter = ref("open");
 const payOrder = ref(null);
 const payMethod = ref("cash");
-const cardExtraIva = ref(true);
+const cardExtraIva = ref(false);
+
+const TAX_RATE = computed(() => Number(venueStore.taxRate) || 0.16);
 
 const cardExtraAmount = computed(() => {
   if (!payOrder.value || payMethod.value !== "card" || !cardExtraIva.value) return 0;
-  return Number((Number(payOrder.value.total || 0) * TAX_RATE).toFixed(2));
+  return Number((Number(payOrder.value.total || 0) * TAX_RATE.value).toFixed(2));
 });
 const payTotal = computed(() =>
   Number((Number(payOrder.value?.total || 0) + cardExtraAmount.value).toFixed(2))
@@ -296,6 +298,9 @@ const expectedCash = computed(
     Number(session.value?.cashRefunds || 0)
 );
 const difference = computed(() => Number(countedCash.value || 0) - expectedCash.value);
+const unpaidOrders = computed(() =>
+  orders.value.filter((o) => o.paymentStatus === "unpaid" && o.status !== "cancelled")
+);
 
 function money(n) {
   return Number(n || 0).toLocaleString("es-MX", { style: "currency", currency: "MXN" });
@@ -456,7 +461,7 @@ async function confirmPay() {
     const id = payOrder.value.id;
     payOrder.value = null;
     await loadCash();
-    if (confirm("¿Imprimir cuenta?")) {
+    if (confirm("¿Imprimir ticket?")) {
       window.open(`/print/order/${id}?mode=receipt&autoprint=1`, "_blank");
     }
   } catch (e) {

@@ -5,7 +5,7 @@
         <p class="kicker">100% en la nube</p>
         <h1>Tu caja en celular, tablet o PC</h1>
         <p class="lede">
-          Sin instalar. Si se daña la PC, abres Mi Tiendita en la tablet o el celular y sigues cobrando.
+          Sin instalar. ¿Se daña la PC? Abres Mi Tiendita en la tablet o el celular y sigues cobrando.
           <InventarioMagicoTerm /> actualiza precios desde la nube — en segundos.
         </p>
       </header>
@@ -73,7 +73,7 @@
         </div>
 
         <p v-if="interval === 'year'" class="year-tip">
-          Anual Básico <strong>$3,490</strong> — pagas una vez y olvidas el cargo del mes.
+          Anual Básico <strong>$3,490</strong> — pagas una vez al año y te olvidas del cargo mensual.
         </p>
 
         <label v-if="status.mpConfigured && status.mpSandbox" class="payer-box">
@@ -96,7 +96,7 @@
             v-for="p in plans"
             :key="p.id"
             class="plan"
-            :class="{ hot: p.highlight, current: status.plan === p.id && status.active }"
+            :class="{ hot: p.highlight, current: status.plan === p.id && status.active && matchesInterval(p) }"
           >
             <header class="plan-top">
               <div>
@@ -129,7 +129,7 @@
             <button
               type="button"
               class="cta"
-              :disabled="busy || (status.plan === p.id && status.active && !status.cancelAtPeriodEnd)"
+              :disabled="busy || (status.plan === p.id && status.active && !status.cancelAtPeriodEnd && matchesInterval(p))"
               @click="startCheckout(p.id)"
             >
               {{ ctaLabel(p) }}
@@ -256,8 +256,13 @@ function formatDate(d) {
   }
 }
 
+function matchesInterval(p) {
+  const si = status.value.interval || "month";
+  return interval.value === si;
+}
+
 function ctaLabel(p) {
-  const current = status.value.plan === p.id && status.value.active && !status.value.cancelAtPeriodEnd;
+  const current = status.value.plan === p.id && status.value.active && !status.value.cancelAtPeriodEnd && matchesInterval(p);
   if (current) return "Plan actual";
   if (status.value.cancelAtPeriodEnd && status.value.plan === p.id) return `Reactivar ${p.name}`;
   if (status.value.billingStatus === "trialing") return `Empezar con ${p.name}`;

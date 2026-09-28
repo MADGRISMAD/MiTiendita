@@ -29,7 +29,7 @@
             v-model="cellphone"
             type="tel"
             maxlength="14"
-            placeholder="(xxx)-xxx-xxxx"
+            placeholder="10 dígitos"
             autocomplete="tel"
             required
           />
@@ -75,9 +75,12 @@
           </span>
         </label>
 
-        <button type="submit" class="btn-primary" :disabled="loading || !acceptedTerms">
+        <button type="submit" class="btn-primary" :disabled="loading || !acceptedTerms || password.length < 6 || password !== confirmPassword">
           {{ loading ? 'Registrando…' : 'Registrar' }}
         </button>
+        <p v-if="!acceptedTerms && password.length >= 1" class="hint-disabled">Acepta los términos para continuar.</p>
+        <p v-else-if="password.length > 0 && password.length < 6" class="hint-disabled">La contraseña debe tener al menos 6 caracteres.</p>
+        <p v-else-if="confirmPassword.length > 0 && password !== confirmPassword" class="hint-disabled">Las contraseñas no coinciden.</p>
 
         <router-link v-if="confirmRequest" to="/setup" class="success-link">
           Registro exitoso. Continúa con la configuración
@@ -300,6 +303,7 @@ export default {
 .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
 
 .error-inline { color: #b42318; font-size: 0.8rem; font-weight: 500; }
+.hint-disabled { margin: -0.25rem 0 0; text-align: center; color: var(--timber-muted, #94a3b8); font-size: 0.8rem; font-weight: 500; }
 .error-text { margin: 0; text-align: center; color: #b42318; font-size: 0.85rem; }
 .success-link {
   display: block;

@@ -115,9 +115,14 @@ const ownerMode = computed(() => isPlatformAdmin());
 const businessName = computed(() => (ownerMode.value ? "Soporte" : venueStore.businessName || "Mi negocio"));
 const logoSrc = computed(() => venueStore.logoUrl || "/logo.svg");
 const isDark = computed(() => themeStore.mode === "dark");
-const clock = computed(() =>
-  now.value.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })
-);
+const clock = computed(() => {
+  const tz = venueStore.timezone || "America/Mexico_City";
+  try {
+    return now.value.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit", timeZone: tz });
+  } catch {
+    return now.value.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
+  }
+});
 
 const billingBanner = computed(() => {
   const s = billingStatus.value;
@@ -359,6 +364,7 @@ onUnmounted(() => clearInterval(timer));
   min-height: 0;
   overflow: hidden;
   padding: 0.55rem 0.65rem;
+  padding-bottom: calc(0.55rem + env(safe-area-inset-bottom, 0px));
   display: flex;
   flex-direction: column;
 }

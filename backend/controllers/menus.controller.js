@@ -107,6 +107,12 @@ async function createFood(req, res) {
       throw limitErr;
     }
     const code = String(barcode || sku || '').trim();
+    if (code) {
+      const existing = await db.GetFoodByBarcode(code, req.tenantId).catch(() => null);
+      if (existing) {
+        return res.status(409).send(`Ya existe un producto con el código "${code}": ${existing.name}`);
+      }
+    }
     const created = await db.CreateFood({
       name,
       price: Number(price),
