@@ -5,7 +5,13 @@ const { createTenantDoc } = require('../models/tenant.model');
 const _url = process.env.DATABASE_URI || 'mongodb://127.0.0.1:27017';
 const _dbName = process.env.DATABASE_NAME || 'timber';
 
-const connection = new MongoClient(_url);
+const connection = new MongoClient(_url, {
+  maxPoolSize: 10,
+  minPoolSize: 0,
+  maxIdleTimeMS: 30000,
+  serverSelectionTimeoutMS: 5000,
+  connectTimeoutMS: 10000,
+});
 let dbConnection = connection.db(_dbName);
 let connected = false;
 
@@ -27,11 +33,22 @@ function oidFilter(id, tenantId) {
 }
 
 async function ensureConnection() {
-  if (connected) return;
+  if (connected) {
+    try {
+      await connection.db('admin').command({ ping: 1 });
+      return;
+    } catch {
+      connected = false;
+    }
+  }
   await connection.connect();
   dbConnection = connection.db(_dbName);
   connected = true;
   console.log(`MongoDB connected → ${_dbName} @ ${_url}`);
+
+  connection.on('close', () => { connected = false; });
+  connection.on('error', () => { connected = false; });
+
   await migrateLegacyTenant();
 }
 
@@ -752,6 +769,7 @@ function publicMail(row) {
 }
 
 module.exports = {
+  ensureConnection,
   CreateTenant, GetTenantById, UpdateTenant, ListTenants, CountUsersByTenant, CountPendingInvites, ListUsersByTenant, GetTenantByMpPreapprovalId,
   CreateUser, FindUserByEmail, LoginUsuario, FindUserByUsername, UpdateUserById, FindUserByResetToken,
   ListTenantAdminEmails,

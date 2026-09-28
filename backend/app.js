@@ -18,6 +18,14 @@ app.use(compression());
 let corsoptions = require('./configurations/cors.configuration');
 app.use(cors(corsoptions));
 
+const { ensureConnection } = require('./database/mongodb');
+app.use(async (_req, _res, next) => {
+  try { await ensureConnection(); } catch (err) {
+    console.error('[db] reconnect failed:', err.message);
+  }
+  next();
+});
+
 app.use('/usuarios', require('./routers/usuarios.router'));
 app.use('/mesas', require('./routers/tables.router'));
 app.use('/tables', require('./routers/tables.router'));
