@@ -1,12 +1,13 @@
 const db = require('../database/mongodb');
 const { PLANS, BILLING_STATUSES, trialEndsFrom } = require('../models/tenant.model');
-const { planAiQuota, planPrice, PLAN_CATALOG } = require('../services/plans.catalog');
+const { planAiQuota, planPrice, PLAN_CATALOG, isPerpetual, hasAiFeatures } = require('../services/plans.catalog');
+const mp = require('../services/mercadopago.service');
 const supportMail = require('../services/support-mail.service');
 const { ownerMonthlyReport } = require('../utils/mail-templates');
 
 const SHORT_MONTHS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 
-const PLAN_NAMES = { basic: 'Básico', growth: 'Crecimiento', pro: 'Pro' };
+const PLAN_NAMES = { basic: 'Básico', growth: 'Crecimiento', pro: 'Pro', perpetual: 'Perpetua' };
 const STATUS_NAMES = {
   trialing: 'Prueba',
   active: 'Activo',
@@ -16,6 +17,38 @@ const STATUS_NAMES = {
 
 function ownerOf(users) {
   return users.find((user) => user.role === 'admin') || users[0] || null;
+}
+
+async function dropMercadoPago(tenant, patch) {
+  if (!tenant?.mpPreapprovalId) return;
+  try {
+    await mp.cancelPreapproval(tenant.mpPreapprovalId);
+  } catch (err) {
+    console.warn('[platform] no pude cancelar Mercado Pago al pasar a perpetua:', err.message);
+  }
+  patch.mpPreapprovalId = null;
+}
+
+function stampPerpetual(patch, billingStatus) {
+  if (billingStatus !== 'suspended') patch.billingStatus = 'active';
+  patch.billingInterval = 'lifetime';
+  patch.currentPeriodEnd = null;
+  patch.cancelAtPeriodEnd = false;
+}
+
+async function noteLicense(tenantId, plan, note) {
+  try {
+    await db.CreateBillingEvent({
+      tenantId,
+      type: 'support',
+      plan,
+      interval: isPerpetual(plan) ? 'lifetime' : 'month',
+      amount: 0,
+      note,
+    });
+  } catch (err) {
+    console.warn('[platform] no pude guardar el evento de licencia:', err.message);
+  }
 }
 
 function dateInput(value) {
@@ -42,7 +75,10 @@ async function clientCard(tenant, { withUsers = false } = {}) {
     plan,
     planName: PLAN_NAMES[plan] || 'Básico',
     billingStatus: tenant.billingStatus || 'trialing',
-    billingStatusName: STATUS_NAMES[tenant.billingStatus] || 'Prueba',
+    billingStatusName:
+      isPerpetual(plan) && (tenant.billingStatus || 'trialing') === 'active'
+        ? 'Perpetua'
+        : STATUS_NAMES[tenant.billingStatus] || 'Prueba',
     trialEndsAt: tenant.trialEndsAt || null,
     trialEndsOn: dateInput(tenant.trialEndsAt),
     currentPeriodEnd: tenant.currentPeriodEnd || null,
@@ -54,8 +90,10 @@ async function clientCard(tenant, { withUsers = false } = {}) {
     ownerEmail: owner?.email || '',
     ownerUsername: owner?.username || '',
     ownerPhone: owner?.cellphone || '',
-    aiUsed,
-    aiLimit: planAiQuota(plan),
+    aiUsed: hasAiFeatures(plan) ? aiUsed : 0,
+    aiLimit: hasAiFeatures(plan) ? planAiQuota(plan) : 0,
+    aiEnabled: hasAiFeatures(plan),
+    isPerpetual: isPerpetual(plan),
   };
   if (withUsers) card.users = users;
   return card;
@@ -118,7 +156,13 @@ async function updateTenant(req, res) {
       plan,
       billingStatus,
     };
-    if (body.trialEndsOn) {
+    if (isPerpetual(plan)) {
+      stampPerpetual(patch, billingStatus);
+      if (!isPerpetual(tenant.plan)) await dropMercadoPago(tenant, patch);
+    } else if (tenant.billingInterval === 'lifetime') {
+      patch.billingInterval = 'month';
+    }
+    if (body.trialEndsOn && !isPerpetual(plan)) {
       const trial = new Date(`${body.trialEndsOn}T12:00:00`);
       if (Number.isNaN(trial.getTime())) return res.status(400).send('La fecha de prueba no es válida.');
       patch.trialEndsAt = trial;
@@ -130,13 +174,16 @@ async function updateTenant(req, res) {
       patch.suspendedAt = null;
       patch.suspendedReason = null;
     }
-    if (billingStatus === 'active' && !tenant.currentPeriodEnd) {
+    if (!isPerpetual(plan) && billingStatus === 'active' && !tenant.currentPeriodEnd) {
       const periodEnd = new Date();
       periodEnd.setMonth(periodEnd.getMonth() + 1);
       patch.currentPeriodEnd = periodEnd;
     }
 
     await db.UpdateTenant(tenant.id, patch);
+    if (isPerpetual(plan) && !isPerpetual(tenant.plan)) {
+      await noteLicense(tenant.id, 'perpetual', 'Soporte activó la licencia perpetua (sin magia)');
+    }
     await db.UpdateSettings(
       {
         tenantId: tenant.id,
@@ -253,9 +300,21 @@ async function setPlan(req, res) {
   try {
     const plan = String(req.body?.plan || '');
     if (!PLANS.includes(plan)) {
-      return res.status(400).send('plan debe ser basic, growth o pro');
+      return res.status(400).send('plan debe ser basic, growth, pro o perpetual');
     }
-    const updated = await db.UpdateTenant(req.params.id, { plan });
+    const tenant = await db.GetTenantById(req.params.id);
+    if (!tenant) return res.status(404).send('Tenant no encontrado');
+    const patch = { plan };
+    if (isPerpetual(plan)) {
+      stampPerpetual(patch, 'active');
+      if (!isPerpetual(tenant.plan)) await dropMercadoPago(tenant, patch);
+    } else if (tenant.billingInterval === 'lifetime') {
+      patch.billingInterval = 'month';
+    }
+    const updated = await db.UpdateTenant(req.params.id, patch);
+    if (isPerpetual(plan) && !isPerpetual(tenant.plan)) {
+      await noteLicense(req.params.id, 'perpetual', 'Soporte activó la licencia perpetua (sin magia)');
+    }
     if (!updated) return res.status(404).send('Tenant no encontrado');
     return res.status(200).json(updated);
   } catch (err) {
@@ -266,6 +325,7 @@ async function setPlan(req, res) {
 
 function monthlyFee(tenant) {
   if ((tenant.billingStatus || 'trialing') !== 'active') return 0;
+  if (isPerpetual(tenant.plan)) return 0;
   const yearly = tenant.billingInterval === 'year';
   const price = planPrice(tenant.plan || 'basic', yearly ? 'year' : 'month');
   return yearly ? price / 12 : price;

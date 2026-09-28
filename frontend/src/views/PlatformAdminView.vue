@@ -261,23 +261,32 @@
                   <option value="basic">Básico</option>
                   <option value="growth">Crecimiento</option>
                   <option value="pro">Pro</option>
+                  <option value="perpetual">Perpetua (sin magia)</option>
                 </select>
               </label>
+              <p v-if="draft.plan === 'perpetual'" class="hint wide">
+                Activa la licencia perpetua: la tienda sigue cobrando normal y desaparecen
+                Inventario Mágico y Precio Mágico. Si tenía cobro en Mercado Pago, se cancela.
+              </p>
               <label>
                 Estado
                 <select v-model="draft.billingStatus">
-                  <option value="trialing">Prueba</option>
+                  <option v-if="draft.plan !== 'perpetual'" value="trialing">Prueba</option>
                   <option value="active">Activo</option>
-                  <option value="past_due">Pago atrasado</option>
+                  <option v-if="draft.plan !== 'perpetual'" value="past_due">Pago atrasado</option>
                   <option value="suspended">Suspendido</option>
                 </select>
               </label>
-              <label>Fin de la prueba<input v-model="draft.trialEndsOn" type="date" /></label>
+              <label v-if="draft.plan !== 'perpetual'">Fin de la prueba<input v-model="draft.trialEndsOn" type="date" /></label>
               <label v-if="draft.billingStatus === 'suspended'">Motivo<input v-model="draft.suspendedReason" /></label>
               <label class="check"><input v-model="draft.inventoryEnabled" type="checkbox" /> Lleva inventario</label>
               <div class="mini-facts">
                 <div><span>Alta</span><strong>{{ formatDate(detail.createdAt) }}</strong></div>
-                <div><span>Inventario y Precio Mágico</span><strong>{{ detail.aiUsed }} de {{ detail.aiLimit ?? '—' }}</strong></div>
+                <div>
+                  <span>Inventario y Precio Mágico</span>
+                  <strong v-if="detail.aiEnabled">{{ detail.aiUsed }} de {{ detail.aiLimit ?? '—' }}</strong>
+                  <strong v-else>No incluido</strong>
+                </div>
                 <div><span>Correo del dueño</span><strong>{{ detail.ownerEmail || 'Sin correo' }}</strong></div>
               </div>
               <p v-if="saveErr" class="err">{{ saveErr }}</p>
@@ -762,7 +771,10 @@ async function save() {
     fillDraft(updated);
     const index = clients.value.findIndex((client) => client.id === updated.id);
     if (index >= 0) clients.value[index] = { ...clients.value[index], ...updated };
-    saveOk.value = "Cambios guardados.";
+    saveOk.value =
+      updated.plan === "perpetual"
+        ? "Licencia perpetua activa. Inventario Mágico y Precio Mágico ya no aparecen en esa tienda."
+        : "Cambios guardados.";
     loadBooks();
   } catch (e) {
     saveErr.value = e.response?.data || "No pude guardar.";
@@ -843,6 +855,15 @@ async function sendMail() {
     sendingMail.value = false;
   }
 }
+
+watch(
+  () => draft.plan,
+  (plan) => {
+    if (plan === "perpetual" && draft.billingStatus !== "suspended") {
+      draft.billingStatus = "active";
+    }
+  }
+);
 
 watch(
   () => route.name,

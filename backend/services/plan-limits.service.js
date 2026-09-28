@@ -1,7 +1,7 @@
 const { planLimits, getPlan } = require('./plans.catalog');
 const db = require('../database/mongodb');
 
-const PLAN_NAMES = { basic: 'Básico', growth: 'Crecimiento', pro: 'Pro' };
+const PLAN_NAMES = { basic: 'Básico', growth: 'Crecimiento', pro: 'Pro', perpetual: 'Perpetua' };
 
 function limitError(kind, used, max, plan) {
   const name = PLAN_NAMES[plan] || 'Básico';

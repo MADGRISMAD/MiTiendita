@@ -236,7 +236,7 @@
           </aside>
 
           <section class="grid-pane">
-            <button type="button" class="magic-open" @click="showMagic = true">
+            <button v-if="aiEnabled" type="button" class="magic-open" @click="showMagic = true">
               <span class="magic-title">Actualizar precios</span>
               <span class="magic-sub">Inventario Mágico · Precio Mágico</span>
             </button>
@@ -409,7 +409,7 @@
       </Teleport>
 
       <MagicPricesSheet
-        v-if="showMagic"
+        v-if="aiEnabled && showMagic"
         :menus="menus"
         :default-menu-id="selectedMenuId"
         @close="showMagic = false"
@@ -615,6 +615,7 @@ import { useRoute, useRouter } from "vue-router";
 import { apiService } from "../apiService";
 import { store } from "../store";
 import { venueStore, fetchVenueSettings } from "../venueStore";
+import { billingStore } from "../billingStore";
 import { cartTotals, lineBreakdown } from "../tax";
 import { apiService as apiSvc } from "../apiService";
 
@@ -664,6 +665,9 @@ export default {
     const showMenuForm = ref(false);
     const showFoodForm = ref(false);
     const showMagic = ref(false);
+    const aiEnabled = computed(
+      () => billingStore.loaded && billingStore.aiEnabled === true && !billingStore.isPerpetual
+    );
     const editingFood = ref(null);
     const menuForm = reactive({ name: "", description: "" });
     const foodForm = reactive({
@@ -1598,6 +1602,7 @@ export default {
       showMenuForm,
       showFoodForm,
       showMagic,
+      aiEnabled,
       onMagicApplied,
       onMagicManual,
       openNewFood,

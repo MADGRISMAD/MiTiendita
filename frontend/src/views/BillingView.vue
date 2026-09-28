@@ -6,11 +6,16 @@
           <p class="kicker">Facturación</p>
           <h1>Planes de Mi Tiendita</h1>
           <p class="lede">
-            Celular, tablet o PC. Sin instalar.
-            <InventarioMagicoTerm /> y <InventarioMagicoTerm kind="precio" /> van incluidos en los tres planes.
+            <template v-if="isPerpetual">
+              Licencia perpetua: caja, catálogo y tickets. Sin cuota mensual.
+            </template>
+            <template v-else>
+              Celular, tablet o PC. Sin instalar.
+              <InventarioMagicoTerm /> y <InventarioMagicoTerm kind="precio" /> van incluidos en los tres planes.
+            </template>
           </p>
         </div>
-        <div v-if="!loading && !err" class="head-tools">
+        <div v-if="!loading && !err && !isPerpetual" class="head-tools">
           <div class="switch" role="group" aria-label="Periodo">
             <button type="button" :class="{ on: interval === 'month' }" @click="interval = 'month'">
               Mensual
@@ -43,7 +48,8 @@
             <div>
               <strong>{{ statusLabel }}</strong>
               <span>
-                <template v-if="status.billingStatus === 'trialing'">
+                <template v-if="isPerpetual">Sin cuota mensual</template>
+                <template v-else-if="status.billingStatus === 'trialing'">
                   {{ status.trialDaysLeft }} días de prueba
                 </template>
                 <template v-else-if="status.currentPeriodEnd">
@@ -62,7 +68,7 @@
               <strong>Productos</strong>
               {{ status.limits.products?.used || 0 }} / {{ capLabel(status.limits.products?.max) }}
             </p>
-            <p>
+            <p v-if="status.aiEnabled">
               <strong>Magia</strong>
               {{ status.aiQuotaLabel }}
             </p>
@@ -77,12 +83,16 @@
           Elige un plan de nuevo si cambias de opinión.
         </p>
 
-        <p v-if="interval === 'year'" class="year-tip">
+        <p v-if="isPerpetual" class="year-tip">
+          Esta tienda no incluye Inventario Mágico ni Precio Mágico. Si más adelante los quieres, escríbenos a soporte.
+        </p>
+
+        <p v-else-if="interval === 'year'" class="year-tip">
           Anual: pagas una vez y te olvidas. Básico <strong>$3,490</strong> · Crecimiento
           <strong>$5,990</strong> · Pro <strong>$8,990</strong>.
         </p>
 
-        <label v-if="status.mpConfigured && status.mpSandbox" class="payer-box">
+        <label v-if="!isPerpetual && status.mpConfigured && status.mpSandbox" class="payer-box">
           <span>Correo del comprador de prueba (Mercado Pago)</span>
           <input
             v-model="payerEmail"
@@ -97,7 +107,7 @@
           </small>
         </label>
 
-        <div class="plans">
+        <div v-if="!isPerpetual" class="plans">
           <article
             v-for="p in plans"
             :key="p.id"
@@ -150,7 +160,7 @@
               Si lo necesitas, te vendemos tablet, impresora o escáner.
             </p>
           </section>
-          <section class="extras">
+          <section v-if="!isPerpetual" class="extras">
             <p>
               <strong>Licencia perpetua</strong>
               Pago único, sin cuota mensual. No incluye Inventario Mágico ni Precio Mágico.
@@ -181,13 +191,13 @@
           </ul>
         </section>
 
-        <p v-if="status.mpConfigured && status.mpSandbox" class="dev sandbox">
+        <p v-if="!isPerpetual && status.mpConfigured && status.mpSandbox" class="dev sandbox">
           Mercado Pago en <strong>modo prueba (sandbox)</strong>. Usa tarjetas de test de MP.
         </p>
-        <p v-else-if="status.mpConfigured" class="dev live">
+        <p v-else-if="!isPerpetual && status.mpConfigured" class="dev live">
           Mercado Pago conectado · cobros reales.
         </p>
-        <p v-else class="dev">
+        <p v-else-if="!isPerpetual" class="dev">
           Modo desarrollo: al activar se simula el pago (sin Mercado Pago).
           Configura <code>MP_ACCESS_TOKEN</code> en el backend para cobrar de verdad.
         </p>
@@ -203,6 +213,7 @@ import AppShell from "../components/AppShell.vue";
 import InventarioMagicoTerm from "../components/InventarioMagicoTerm.vue";
 import { apiService } from "../apiService";
 import { hasRole } from "../authStore";
+import { applyBillingStatus, billingStore } from "../billingStore";
 
 const route = useRoute();
 const router = useRouter();
@@ -213,7 +224,10 @@ const flash = ref("");
 const flashOk = ref(true);
 const interval = ref(route.query.interval === "year" ? "year" : "month");
 const status = ref({
-  plan: "basic",
+  plan: billingStore.plan || "basic",
+  planName: billingStore.planName || "",
+  isPerpetual: billingStore.isPerpetual,
+  aiEnabled: billingStore.aiEnabled,
   billingStatus: "trialing",
   trialDaysLeft: 14,
   active: true,
@@ -229,11 +243,20 @@ const payerEmail = ref("");
 const canCancel = computed(
   () =>
     hasRole("admin") &&
+    !isPerpetual.value &&
     status.value.billingStatus === "active" &&
     !status.value.cancelAtPeriodEnd
 );
 
+const isPerpetual = computed(
+  () =>
+    Boolean(status.value.isPerpetual) ||
+    status.value.plan === "perpetual" ||
+    billingStore.isPerpetual
+);
+
 const statusLabel = computed(() => {
+  if (isPerpetual.value && status.value.billingStatus === "active") return "Licencia perpetua";
   const map = {
     trialing: "Prueba activa",
     active: "Suscripción activa",
@@ -244,7 +267,8 @@ const statusLabel = computed(() => {
 });
 
 function planName(id) {
-  return plans.value.find((p) => p.id === id)?.name || id;
+  if (id === "perpetual") return "Perpetua";
+  return plans.value.find((p) => p.id === id)?.name || status.value.planName || id;
 }
 
 function formatInt(n) {
@@ -264,7 +288,7 @@ function formatDate(d) {
 }
 
 function matchesInterval(p) {
-  const si = status.value.interval || "month";
+  const si = status.value.billingInterval || "month";
   return interval.value === si;
 }
 
@@ -284,11 +308,12 @@ function capLabel(n) {
 function eventLabel(type) {
   return (
     {
-      checkout: "Checkout iniciado",
+              checkout: "Checkout iniciado",
       activated: "Pago confirmado",
       cancelled: "Cancelación",
       webhook: "Actualización Mercado Pago",
       trial_started: "Prueba iniciada",
+      support: "Cambio desde soporte",
     }[type] || type
   );
 }
@@ -303,6 +328,7 @@ async function load() {
       apiService.getBillingHistory().catch(() => ({ events: [] })),
     ]);
     status.value = s;
+    applyBillingStatus(s);
     plans.value = p.plans || [];
     history.value = h.events || [];
     if (!payerEmail.value && s.mpPayerEmail) payerEmail.value = s.mpPayerEmail;

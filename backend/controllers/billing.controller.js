@@ -1,7 +1,8 @@
 const db = require('../database/mongodb');
 const mp = require('../services/mercadopago.service');
 const limits = require('../services/plan-limits.service');
-const { PLANS, isSubscriptionActive, trialEndsFrom } = require('../models/tenant.model');
+const { PUBLIC_PLANS, isSubscriptionActive, trialEndsFrom } = require('../models/tenant.model');
+const { hasAiFeatures, isPerpetual, formatAiQuota, planAiQuota } = require('../services/plans.catalog');
 const {
   safeSend,
   sendPaymentConfirmedEmail,
@@ -23,6 +24,7 @@ function periodEndFor(interval) {
 }
 
 async function applyPreapprovalToTenant(tenant, pre, dataId) {
+  if (isPerpetual(tenant?.plan)) return tenant;
   const billingStatus = mp.mapMpStatusToBilling(pre.status);
   if (!tenant || !billingStatus) return null;
 
@@ -40,7 +42,7 @@ async function applyPreapprovalToTenant(tenant, pre, dataId) {
     patch.suspendedAt = null;
     patch.suspendedReason = null;
     patch.cancelAtPeriodEnd = false;
-    if (PLANS.includes(plan)) patch.plan = plan;
+    if (PUBLIC_PLANS.includes(plan)) patch.plan = plan;
   }
   if (billingStatus === 'suspended') {
     const stillCovered =
@@ -139,8 +141,12 @@ async function getStatus(req, res) {
     if (!tenant) return res.status(404).send('Tenant no encontrado');
     const plan = tenant.plan || 'basic';
     const usage = await limits.usageFor(req.tenantId, plan);
+    const aiOn = hasAiFeatures(plan);
     return res.status(200).json({
       plan,
+      planName: limits.planName(plan),
+      isPerpetual: isPerpetual(plan),
+      aiEnabled: aiOn,
       billingInterval: tenant.billingInterval || 'month',
       billingStatus: tenant.billingStatus || 'trialing',
       trialEndsAt: tenant.trialEndsAt || null,
@@ -152,8 +158,8 @@ async function getStatus(req, res) {
       mpSandbox: mp.hasMpConfig() ? mp.isMpSandbox() : false,
       mpPreapprovalId: tenant.mpPreapprovalId || null,
       mpPayerEmail: tenant.mpPayerEmail || null,
-      aiQuota: mp.planAiQuota(plan),
-      aiQuotaLabel: mp.formatAiQuota(mp.planAiQuota(plan)),
+      aiQuota: aiOn ? planAiQuota(plan) : 0,
+      aiQuotaLabel: aiOn ? formatAiQuota(planAiQuota(plan)) : 'No incluido',
       limits: usage,
     });
   } catch (err) {
@@ -166,12 +172,15 @@ async function checkout(req, res) {
   try {
     const plan = String(req.body?.plan || 'basic');
     const interval = String(req.body?.interval || 'month') === 'year' ? 'year' : 'month';
-    if (!PLANS.includes(plan)) {
+    if (!PUBLIC_PLANS.includes(plan)) {
       return res.status(400).send('plan debe ser basic, growth o pro');
     }
 
     const tenant = await db.GetTenantById(req.tenantId);
     if (!tenant) return res.status(404).send('Tenant no encontrado');
+    if (isPerpetual(tenant.plan)) {
+      return res.status(400).send('Esta tienda tiene licencia perpetua. Para un plan con magia, pídelo en soporte.');
+    }
 
     const payerEmail =
       String(req.body?.email || '').trim() ||
@@ -263,8 +272,13 @@ async function devActivate(req, res) {
     }
     const plan = String(req.body?.plan || 'basic');
     const interval = String(req.body?.interval || 'month') === 'year' ? 'year' : 'month';
-    if (!PLANS.includes(plan)) {
+    if (!PUBLIC_PLANS.includes(plan)) {
       return res.status(400).send('plan debe ser basic, growth o pro');
+    }
+    const tenant = await db.GetTenantById(req.tenantId);
+    if (!tenant) return res.status(404).send('Tenant no encontrado');
+    if (isPerpetual(tenant.plan)) {
+      return res.status(400).send('Esta tienda tiene licencia perpetua. Para un plan con magia, pídelo en soporte.');
     }
 
     const updated = await db.UpdateTenant(req.tenantId, {
@@ -393,6 +407,9 @@ async function cancel(req, res) {
   try {
     const tenant = await db.GetTenantById(req.tenantId);
     if (!tenant) return res.status(404).send('Tenant no encontrado');
+    if (isPerpetual(tenant.plan)) {
+      return res.status(400).send('La licencia perpetua no se cancela aquí. Escríbenos a soporte.');
+    }
     if (tenant.billingStatus !== 'active') {
       return res.status(400).send('No hay una suscripción activa para cancelar.');
     }

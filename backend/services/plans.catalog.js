@@ -3,6 +3,7 @@
  * Inventario Mágico + Precio Mágico = IA para catálogo y precios (cuota compartida).
  */
 const PLANS = ['basic', 'growth', 'pro'];
+const ALL_PLANS = [...PLANS, 'perpetual'];
 
 /** Usos de Inventario Mágico y Precio Mágico (Gemini) por mes calendario. */
 const AI_QUOTAS = {
@@ -16,6 +17,7 @@ const PLAN_LIMITS = {
   basic: { users: 2, products: 250 },
   growth: { users: 6, products: 1500 },
   pro: { users: 20, products: null },
+  perpetual: { users: 20, products: null },
 };
 
 const PLAN_CATALOG = {
@@ -80,6 +82,26 @@ const PLAN_CATALOG = {
       `${AI_QUOTAS.pro} usos de magia al mes`,
     ],
   },
+  perpetual: {
+    id: 'perpetual',
+    name: 'Perpetua',
+    tagline: 'Pago único, sin magia de IA',
+    pitch: 'Caja, catálogo y tickets para siempre. No incluye Inventario Mágico ni Precio Mágico.',
+    priceMonth: 0,
+    priceYear: 0,
+    aiQuota: 0,
+    limits: PLAN_LIMITS.perpetual,
+    highlight: false,
+    public: false,
+    features: [
+      'Celular, tablet o PC en el navegador',
+      'Sin instalar nada · 1 sucursal',
+      'Hasta 20 usuarios',
+      'Productos ilimitados',
+      'Tickets 80 mm',
+      'Sin Inventario Mágico ni Precio Mágico',
+    ],
+  },
 };
 
 function getPlan(planId) {
@@ -87,9 +109,18 @@ function getPlan(planId) {
 }
 
 function planAiQuota(planId) {
+  if (isPerpetual(planId)) return 0;
   const p = getPlan(planId);
   if (!p) return 0;
   return p.aiQuota;
+}
+
+function isPerpetual(planId) {
+  return String(planId || '') === 'perpetual';
+}
+
+function hasAiFeatures(planId) {
+  return planAiQuota(planId) > 0;
 }
 
 function planPrice(planId, interval = 'month') {
@@ -107,6 +138,7 @@ function planLabel(planId, interval = 'month') {
 
 function formatAiQuota(quota) {
   if (quota == null) return 'Ilimitado';
+  if (!Number(quota)) return 'No incluido';
   return `${quota} al mes`;
 }
 
@@ -150,11 +182,14 @@ function listPlans(currency = process.env.MP_CURRENCY || 'MXN') {
 
 module.exports = {
   PLANS,
+  ALL_PLANS,
   PLAN_CATALOG,
   AI_QUOTAS,
   PLAN_LIMITS,
   getPlan,
   planAiQuota,
+  isPerpetual,
+  hasAiFeatures,
   planLimits,
   planPrice,
   planLabel,

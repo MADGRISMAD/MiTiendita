@@ -99,6 +99,7 @@ import BrandName from "./BrandName.vue";
 import { themeStore, toggleUiTheme } from "../themeStore";
 import { clearSession, canAccessRoute, hasRole, isPlatformAdmin } from "../authStore";
 import { apiService } from "../apiService";
+import { applyBillingStatus } from "../billingStore";
 
 const route = useRoute();
 const router = useRouter();
@@ -127,6 +128,7 @@ const clock = computed(() => {
 const billingBanner = computed(() => {
   const s = billingStatus.value;
   if (!s || !hasRole("admin", "cashier")) return null;
+  if (s.plan === "perpetual" || s.isPerpetual) return null;
   if (s.billingStatus === "past_due") {
     return { tone: "danger", text: "Pago pendiente — regulariza tu suscripción." };
   }
@@ -192,9 +194,10 @@ function logout() {
 }
 
 async function loadBilling() {
-  if (!hasRole("admin", "cashier")) return;
+  if (ownerMode.value) return;
   try {
     billingStatus.value = await apiService.getBillingStatus();
+    applyBillingStatus(billingStatus.value);
   } catch {
     billingStatus.value = null;
   }

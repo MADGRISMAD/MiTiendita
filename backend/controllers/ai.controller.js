@@ -1,10 +1,10 @@
 const db = require('../database/mongodb');
-const { planAiQuota } = require('../services/plans.catalog');
+const { planAiQuota, hasAiFeatures } = require('../services/plans.catalog');
 const gemini = require('../services/gemini.service');
 const magic = require('../services/magic-inventory.service');
 const limits = require('../services/plan-limits.service');
 
-const PLAN_NAMES = { basic: 'Básico', growth: 'Crecimiento', pro: 'Pro' };
+const PLAN_NAMES = { basic: 'Básico', growth: 'Crecimiento', pro: 'Pro', perpetual: 'Perpetua' };
 const IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
 
 function quotaPayload(plan, used, limit) {
@@ -57,7 +57,9 @@ function validMoney(value) {
 
 async function quota(req, res) {
   try {
-    return res.status(200).json(await readQuota(req.tenant));
+    const plan = req.tenant?.plan || 'basic';
+    const data = await readQuota(req.tenant);
+    return res.status(200).json({ ...data, aiEnabled: hasAiFeatures(plan) });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ message: 'No pude revisar tus usos de este mes.' });
@@ -74,6 +76,14 @@ async function preview(req, res) {
     if (!gemini.hasGeminiConfig()) {
       return res.status(503).json({
         message: 'Inventario Mágico y Precio Mágico no están disponibles por ahora. Intenta más tarde.',
+      });
+    }
+
+    if (!hasAiFeatures(plan) || !limit) {
+      return res.status(403).json({
+        message: 'Tu licencia no incluye Inventario Mágico ni Precio Mágico.',
+        aiEnabled: false,
+        quota: await readQuota(req.tenant),
       });
     }
 
@@ -145,6 +155,9 @@ async function preview(req, res) {
 
 async function apply(req, res) {
   try {
+    if (!hasAiFeatures(req.tenant?.plan)) {
+      return res.status(403).json({ message: 'Tu licencia no incluye Inventario Mágico ni Precio Mágico.' });
+    }
     const updates = Array.isArray(req.body?.updates) ? req.body.updates.slice(0, 200) : [];
     const creates = Array.isArray(req.body?.creates) ? req.body.creates.slice(0, 80) : [];
     if (!updates.length && !creates.length) {
