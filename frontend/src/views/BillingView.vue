@@ -1,39 +1,23 @@
 <template>
   <AppShell>
-    <div class="billing">
+    <div class="billing t-page">
       <header class="head">
-        <p class="kicker">100% en la nube</p>
-        <h1>Tu caja en celular, tablet o PC</h1>
-        <p class="lede">
-          Sin instalar. ¿Se daña la PC? Abres Mi Tiendita en la tablet o el celular y sigues cobrando.
-          <InventarioMagicoTerm /> actualiza precios desde la nube — en segundos.
-        </p>
-      </header>
-
-      <div v-if="loading" class="state">Cargando…</div>
-      <div v-else-if="err" class="state err">{{ err }}</div>
-      <template v-else>
-        <div class="toolbar">
-          <div class="account" :class="{ warn: !status.active }">
-            <span class="dot" />
-            <div>
-              <strong>{{ statusLabel }}</strong>
-              <span v-if="status.billingStatus === 'trialing'">
-                · {{ status.trialDaysLeft }} días de prueba
-              </span>
-              <span v-else-if="status.currentPeriodEnd">
-                · hasta {{ formatDate(status.currentPeriodEnd) }}
-              </span>
-              <span> · {{ planName(status.plan) }}</span>
-            </div>
-          </div>
-
+        <div class="head-copy">
+          <p class="kicker">Facturación</p>
+          <h1>Planes de Mi Tiendita</h1>
+          <p class="lede">
+            Celular, tablet o PC. Sin instalar.
+            <InventarioMagicoTerm /> va incluido en los tres planes.
+          </p>
+        </div>
+        <div v-if="!loading && !err" class="head-tools">
           <div class="switch" role="group" aria-label="Periodo">
             <button type="button" :class="{ on: interval === 'month' }" @click="interval = 'month'">
               Mensual
             </button>
             <button type="button" :class="{ on: interval === 'year' }" @click="interval = 'year'">
               Anual
+              <em>−2 meses</em>
             </button>
           </div>
           <button
@@ -46,6 +30,44 @@
             Sincronizar pago
           </button>
         </div>
+      </header>
+
+      <div v-if="loading" class="state">Cargando…</div>
+      <div v-else-if="err" class="state err">{{ err }}</div>
+      <template v-else>
+        <p v-if="flash" class="flash" :class="{ ok: flashOk }">{{ flash }}</p>
+
+        <section class="status-bar">
+          <div class="account" :class="{ warn: !status.active }">
+            <span class="dot" />
+            <div>
+              <strong>{{ statusLabel }}</strong>
+              <span>
+                <template v-if="status.billingStatus === 'trialing'">
+                  {{ status.trialDaysLeft }} días de prueba
+                </template>
+                <template v-else-if="status.currentPeriodEnd">
+                  hasta {{ formatDate(status.currentPeriodEnd) }}
+                </template>
+                · {{ planName(status.plan) }}
+              </span>
+            </div>
+          </div>
+          <div v-if="status.limits" class="usage">
+            <p>
+              <strong>Usuarios</strong>
+              {{ status.limits.users?.used || 0 }} / {{ capLabel(status.limits.users?.max) }}
+            </p>
+            <p>
+              <strong>Productos</strong>
+              {{ status.limits.products?.used || 0 }} / {{ capLabel(status.limits.products?.max) }}
+            </p>
+            <p>
+              <strong>Inventario Mágico</strong>
+              {{ status.aiQuotaLabel }}
+            </p>
+          </div>
+        </section>
 
         <p v-if="status.cancelAtPeriodEnd" class="cancel-note">
           Esta suscripción no se renovará.
@@ -55,25 +77,9 @@
           Elige un plan de nuevo si cambias de opinión.
         </p>
 
-        <div v-if="status.limits" class="usage">
-          <p>
-            <strong>Usuarios</strong>
-            {{ status.limits.users?.used || 0 }}
-            / {{ capLabel(status.limits.users?.max) }}
-          </p>
-          <p>
-            <strong>Productos</strong>
-            {{ status.limits.products?.used || 0 }}
-            / {{ capLabel(status.limits.products?.max) }}
-          </p>
-          <p>
-            <strong>Inventario Mágico</strong>
-            {{ status.aiQuotaLabel }}
-          </p>
-        </div>
-
         <p v-if="interval === 'year'" class="year-tip">
-          Anual Básico <strong>$3,490</strong> — pagas una vez al año y te olvidas del cargo mensual.
+          Anual: pagas una vez y te olvidas. Básico <strong>$3,490</strong> · Crecimiento
+          <strong>$5,990</strong> · Pro <strong>$8,990</strong>.
         </p>
 
         <label v-if="status.mpConfigured && status.mpSandbox" class="payer-box">
@@ -137,27 +143,29 @@
           </article>
         </div>
 
-        <section class="extras">
-          <p>
-            <strong>Hardware:</strong> si lo necesitas, te vendemos tablet, impresora o escáner.
-          </p>
-        </section>
-        <section class="extras">
-          <p>
-            <strong>Licencia perpetua:</strong> $7,490 MXN pago único — sin cuota mensual.
-            Escríbenos desde Configuración → Soporte para activarla.
-          </p>
-        </section>
-
-        <section v-if="canCancel" class="extras cancel-box">
-          <p>
-            <strong>Cancelar renovación.</strong>
-            Sigues usando el sistema hasta el fin del periodo pagado. No hay más cargos automáticos.
-          </p>
-          <button type="button" class="cancel-btn" :disabled="busy" @click="cancelPlan">
-            Cancelar suscripción
-          </button>
-        </section>
+        <div class="bottom">
+          <section class="extras">
+            <p>
+              <strong>Hardware</strong>
+              Si lo necesitas, te vendemos tablet, impresora o escáner.
+            </p>
+          </section>
+          <section class="extras">
+            <p>
+              <strong>Licencia perpetua · $7,490</strong>
+              Pago único, sin cuota mensual. Actívala desde Configuración → Soporte.
+            </p>
+          </section>
+          <section v-if="canCancel" class="extras cancel-box">
+            <p>
+              <strong>Cancelar renovación</strong>
+              Sigues usando el sistema hasta el fin del periodo pagado.
+            </p>
+            <button type="button" class="cancel-btn" :disabled="busy" @click="cancelPlan">
+              Cancelar suscripción
+            </button>
+          </section>
+        </div>
 
         <section v-if="history.length" class="history">
           <h3>Historial</h3>
@@ -171,8 +179,6 @@
             </li>
           </ul>
         </section>
-
-        <p v-if="flash" class="flash" :class="{ ok: flashOk }">{{ flash }}</p>
 
         <p v-if="status.mpConfigured && status.mpSandbox" class="dev sandbox">
           Mercado Pago en <strong>modo prueba (sandbox)</strong>. Usa tarjetas de test de MP.
@@ -447,18 +453,30 @@ onMounted(async () => {
 
 <style scoped>
 .billing {
-  --bill-gap: 1.1rem;
-  max-width: 56rem;
-  margin: 0 auto;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  min-height: 100%;
   display: grid;
-  gap: var(--bill-gap);
+  align-content: start;
+  gap: 1rem;
   overflow: auto;
-  max-height: 100%;
-  padding: 0.25rem 0 1.5rem;
+  padding: 0.15rem 0 1.25rem;
 }
 
 .head {
-  padding: 0.35rem 0 0.15rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem 1.5rem;
+}
+.head-copy { min-width: min(100%, 22rem); flex: 1 1 18rem; }
+.head-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem;
 }
 .kicker {
   margin: 0;
@@ -471,16 +489,16 @@ onMounted(async () => {
 .head h1 {
   margin: 0.2rem 0 0;
   font-family: var(--font-display);
-  font-size: clamp(1.55rem, 2.4vw, 2rem);
+  font-size: clamp(1.55rem, 2.6vw, 2.15rem);
   font-weight: 800;
   letter-spacing: -0.03em;
-  line-height: 1.15;
+  line-height: 1.12;
   color: var(--timber-ink);
 }
 .lede {
-  margin: 0.55rem 0 0;
-  max-width: 28rem;
-  font-size: 1.02rem;
+  margin: 0.45rem 0 0;
+  max-width: 40rem;
+  font-size: 1rem;
   line-height: 1.45;
   color: var(--timber-muted);
 }
@@ -493,33 +511,48 @@ onMounted(async () => {
 }
 .state.err { color: var(--timber-danger); }
 
-.toolbar {
+.status-bar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 0.75rem;
+  gap: 0.75rem 1.25rem;
+  padding: 0.85rem 1.05rem;
+  border-radius: 1rem;
+  background: var(--timber-panel);
+  border: 1px solid var(--timber-line);
 }
 .account {
   display: flex;
   align-items: center;
   gap: 0.55rem;
-  font-size: 0.88rem;
+  font-size: 0.9rem;
   color: var(--timber-muted);
 }
-.account strong { color: var(--timber-ink); font-weight: 700; }
+.account strong { display: block; color: var(--timber-ink); font-weight: 800; }
+.account span { font-size: 0.82rem; }
 .dot {
-  width: 0.55rem;
-  height: 0.55rem;
+  width: 0.6rem;
+  height: 0.6rem;
   border-radius: 50%;
   background: var(--timber-success);
   flex-shrink: 0;
 }
 .account.warn .dot { background: var(--timber-warning); }
 
+.usage {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem 1.4rem;
+  font-size: 0.86rem;
+  color: var(--timber-muted);
+}
+.usage p { margin: 0; }
+.usage strong { color: var(--timber-ink); margin-right: 0.25rem; }
+
 .switch {
   display: inline-flex;
-  padding: 0.18rem;
+  padding: 0.2rem;
   border-radius: 999px;
   background: var(--timber-panel);
   border: 1px solid var(--timber-line);
@@ -527,13 +560,22 @@ onMounted(async () => {
 .switch button {
   border: none;
   background: transparent;
-  min-height: 2.35rem;
-  padding: 0 1rem;
+  min-height: 2.55rem;
+  padding: 0 1.15rem;
   border-radius: 999px;
-  font-weight: 700;
-  font-size: 0.88rem;
+  font-weight: 800;
+  font-size: 0.9rem;
   cursor: pointer;
   color: var(--timber-muted);
+}
+.switch button em {
+  margin-left: 0.35rem;
+  font-style: normal;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.75;
 }
 .switch button.on {
   background: var(--timber-ink);
@@ -542,7 +584,7 @@ onMounted(async () => {
 
 .year-tip {
   margin: 0;
-  font-size: 0.88rem;
+  font-size: 0.9rem;
   color: var(--timber-muted);
 }
 .year-tip strong { color: var(--timber-ink); }
@@ -577,17 +619,18 @@ onMounted(async () => {
   display: grid;
   gap: 0.85rem;
   grid-template-columns: 1fr;
+  width: 100%;
 }
-@media (min-width: 900px) {
-  .plans { grid-template-columns: repeat(3, 1fr); align-items: stretch; }
+@media (min-width: 760px) {
+  .plans { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
 .plan {
   display: flex;
   flex-direction: column;
-  gap: 0.65rem;
-  height: 100%;
-  padding: 1.2rem 1.15rem 1.15rem;
+  gap: 0.7rem;
+  min-height: 100%;
+  padding: 1.35rem 1.25rem 1.2rem;
   border-radius: 1.15rem;
   background: var(--timber-panel);
   border: 1px solid var(--timber-line);
@@ -615,7 +658,13 @@ onMounted(async () => {
 
 .plan-top {
   display: grid;
-  gap: 0.65rem;
+  gap: 0.75rem;
+}
+@media (min-width: 1100px) {
+  .plan-top {
+    grid-template-columns: 1fr auto;
+    align-items: start;
+  }
 }
 .badge {
   margin: 0 0 0.35rem;
@@ -632,38 +681,37 @@ onMounted(async () => {
 .plan h2 {
   margin: 0;
   font-family: var(--font-display);
-  font-size: 1.35rem;
+  font-size: clamp(1.3rem, 1.6vw, 1.55rem);
   font-weight: 800;
   letter-spacing: -0.02em;
 }
 .tag {
-  margin: 0.2rem 0 0;
-  font-size: 0.88rem;
+  margin: 0.25rem 0 0;
+  font-size: 0.9rem;
   color: var(--timber-muted);
   line-height: 1.35;
 }
-.price-block { margin-top: 0.15rem; }
 .price {
   margin: 0;
-  font-size: 2.15rem;
+  font-size: clamp(2.1rem, 2.8vw, 2.55rem);
   font-weight: 800;
   letter-spacing: -0.04em;
   font-variant-numeric: tabular-nums;
   line-height: 1;
 }
 .per {
-  margin: 0.25rem 0 0;
-  font-size: 0.78rem;
+  margin: 0.3rem 0 0;
+  font-size: 0.8rem;
   font-weight: 600;
   color: var(--timber-muted);
 }
 
 .magic {
   margin: 0;
-  font-size: 0.82rem;
+  font-size: 0.86rem;
   font-weight: 700;
   color: var(--timber-primary);
-  padding: 0.45rem 0.6rem;
+  padding: 0.5rem 0.7rem;
   border-radius: 0.55rem;
   background: var(--timber-primary-soft);
 }
@@ -671,8 +719,8 @@ onMounted(async () => {
 
 .pitch {
   margin: 0;
-  font-size: 0.92rem;
-  line-height: 1.4;
+  font-size: 0.95rem;
+  line-height: 1.45;
   color: var(--timber-ink);
   font-weight: 600;
 }
@@ -682,22 +730,22 @@ onMounted(async () => {
   padding: 0;
   list-style: none;
   display: grid;
-  gap: 0.4rem;
+  gap: 0.45rem;
   flex: 1 1 auto;
   align-content: start;
 }
 .plan li {
   position: relative;
   padding-left: 1.05rem;
-  font-size: 0.86rem;
-  line-height: 1.35;
+  font-size: 0.9rem;
+  line-height: 1.4;
   color: var(--timber-muted);
 }
 .plan li::before {
   content: "";
   position: absolute;
   left: 0;
-  top: 0.45em;
+  top: 0.5em;
   width: 0.4rem;
   height: 0.4rem;
   border-radius: 50%;
@@ -706,13 +754,13 @@ onMounted(async () => {
 
 .cta {
   margin-top: auto;
-  min-height: 2.85rem;
+  min-height: 3rem;
   border: none;
   border-radius: 0.75rem;
   background: var(--timber-primary);
   color: var(--timber-on-primary);
   font-weight: 800;
-  font-size: 0.92rem;
+  font-size: 0.95rem;
   cursor: pointer;
   width: 100%;
 }
@@ -722,11 +770,19 @@ onMounted(async () => {
 }
 .cta:disabled { opacity: 0.55; cursor: wait; }
 
+.bottom {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: 1fr;
+}
+@media (min-width: 860px) {
+  .bottom { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
 .dev {
   margin: 0;
   font-size: 0.78rem;
   color: var(--timber-muted);
-  text-align: center;
 }
 .dev.sandbox {
   padding: 0.55rem 0.75rem;
@@ -740,9 +796,7 @@ onMounted(async () => {
   background: var(--timber-success-soft);
   color: var(--timber-success);
 }
-.dev code {
-  font-size: 0.85em;
-}
+.dev code { font-size: 0.85em; }
 .flash {
   margin: 0;
   padding: 0.7rem 0.85rem;
@@ -761,7 +815,7 @@ onMounted(async () => {
   background: var(--timber-panel);
   color: var(--timber-ink);
   border-radius: 999px;
-  min-height: 2.35rem;
+  min-height: 2.55rem;
   padding: 0 1rem;
   font-weight: 700;
   font-size: 0.88rem;
@@ -771,8 +825,8 @@ onMounted(async () => {
 
 .extras {
   display: grid;
-  gap: 0.45rem;
-  padding: 0.9rem 1rem;
+  gap: 0.35rem;
+  padding: 1rem 1.05rem;
   border-radius: 0.9rem;
   background: var(--timber-panel);
   border: 1px solid var(--timber-line);
@@ -781,21 +835,7 @@ onMounted(async () => {
   color: var(--timber-muted);
 }
 .extras p { margin: 0; }
-.extras strong { color: var(--timber-ink); }
-
-.usage {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.65rem 1.25rem;
-  padding: 0.75rem 1rem;
-  border-radius: 0.9rem;
-  background: var(--timber-panel);
-  border: 1px solid var(--timber-line);
-  font-size: 0.86rem;
-  color: var(--timber-muted);
-}
-.usage p { margin: 0; }
-.usage strong { color: var(--timber-ink); margin-right: 0.25rem; }
+.extras strong { display: block; margin-bottom: 0.2rem; color: var(--timber-ink); }
 
 .cancel-note {
   margin: 0;
@@ -807,13 +847,10 @@ onMounted(async () => {
   font-size: 0.88rem;
 }
 .cancel-box {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  align-items: center;
-  gap: 0.75rem;
+  align-content: start;
 }
 .cancel-btn {
+  justify-self: start;
   border: 1px solid color-mix(in srgb, var(--timber-danger) 40%, var(--timber-line));
   background: var(--timber-danger-soft);
   color: var(--timber-danger);
@@ -833,7 +870,7 @@ onMounted(async () => {
   display: flex;
   justify-content: space-between;
   gap: 1rem;
-  padding: 0.55rem 0;
+  padding: 0.65rem 0;
   border-bottom: 1px solid var(--timber-line);
   font-size: 0.88rem;
 }
