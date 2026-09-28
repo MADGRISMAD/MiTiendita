@@ -59,6 +59,14 @@ export function isPlatformAdmin() {
   return authStore.role === "platform_admin";
 }
 
+export function isPlatformSupport() {
+  return authStore.role === "platform_support";
+}
+
+export function isPlatformStaff() {
+  return isPlatformAdmin() || isPlatformSupport();
+}
+
 /** Home y permisos orientados a POS de abarrotes */
 export const roleHome = {
   admin: "pos",
@@ -67,6 +75,7 @@ export const roleHome = {
   kitchen: "pos",
   cashier: "pos",
   platform_admin: "platform",
+  platform_support: "platformClients",
 };
 
 export const routeRoles = {
@@ -83,7 +92,8 @@ export const routeRoles = {
   setup: ["admin"],
   billing: ["admin", "cashier"],
   platform: ["platform_admin"],
-  platformClients: ["platform_admin"],
+  platformClients: ["platform_admin", "platform_support"],
+  platformTeam: ["platform_admin"],
   platformRevenue: ["platform_admin"],
   platformAi: ["platform_admin"],
   platformExpenses: ["platform_admin"],

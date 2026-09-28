@@ -84,6 +84,12 @@ const routes: RouteRecordRaw[] = [
     path: "/platform/clientes",
     name: "platformClients",
     component: PlatformAdminView,
+    meta: { requiresAuth: true, roles: ["platform_admin", "platform_support"], owner: true },
+  },
+  {
+    path: "/platform/equipo",
+    name: "platformTeam",
+    component: PlatformAdminView,
     meta: { requiresAuth: true, roles: ["platform_admin"], owner: true },
   },
   {

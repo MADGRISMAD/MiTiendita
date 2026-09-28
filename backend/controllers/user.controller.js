@@ -4,7 +4,7 @@ const hasher = require('../utils/bcrypt.utils');
 const waitlist = require('../models/waitlist.model');
 const jwtCreator = require('../utils/jwt.utils');
 const db = require('../database/mongodb');
-const { createTenantDoc, newResetToken, ROLES, TRIAL_DAYS } = require('../models/tenant.model');
+const { createTenantDoc, newResetToken, ROLES, TRIAL_DAYS, isPlatformStaff } = require('../models/tenant.model');
 const {
   sendPasswordResetEmail,
   sendWelcomeEmail,
@@ -105,7 +105,7 @@ const LoginUsuario = async (req, res, next) => {
     if (search) {
       const compare = await hasher.checkPassword(req.body.password, search.password);
       if (compare) {
-        const isPlatform = search.role === 'platform_admin';
+        const isPlatform = isPlatformStaff(search.role);
         if (!isPlatform && !search.tenantId) {
           return res.status(403).send('Usuario sin tenant asignado');
         }

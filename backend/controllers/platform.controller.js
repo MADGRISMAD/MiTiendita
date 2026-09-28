@@ -4,6 +4,7 @@ const { planAiQuota, planPrice, PLAN_CATALOG, isPerpetual, hasAiFeatures } = req
 const mp = require('../services/mercadopago.service');
 const supportMail = require('../services/support-mail.service');
 const { ownerMonthlyReport } = require('../utils/mail-templates');
+const hasher = require('../utils/bcrypt.utils');
 
 const SHORT_MONTHS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 
@@ -555,6 +556,105 @@ async function deleteExpense(req, res) {
   }
 }
 
+const STAFF_ROLES = ['platform_admin', 'platform_support'];
+const STAFF_ROLE_NAMES = { platform_admin: 'Admin', platform_support: 'Soporte' };
+
+function publicStaff(user) {
+  if (!user) return null;
+  const role = STAFF_ROLES.includes(user.role) ? user.role : 'platform_admin';
+  return {
+    id: user.id || String(user._id || ''),
+    name: user.name || '',
+    lastName: user.lastName || '',
+    username: user.username || '',
+    email: user.email || '',
+    role,
+    roleName: STAFF_ROLE_NAMES[role] || 'Admin',
+    createdAt: user.createdAt || null,
+  };
+}
+
+async function listStaff(req, res) {
+  try {
+    const users = await db.ListPlatformUsers();
+    return res.status(200).json(users.map(publicStaff));
+  } catch (err) {
+    console.error(err);
+    return res.status(500).send(err.message || 'No pude cargar el equipo.');
+  }
+}
+
+async function createStaff(req, res) {
+  try {
+    const body = req.body || {};
+    const name = String(body.name || '').trim();
+    const lastName = String(body.lastName || '').trim();
+    const email = String(body.email || '').trim().toLowerCase();
+    const username = String(body.username || '').trim().toLowerCase();
+    const password = String(body.password || '');
+    const role = body.role === 'platform_support' ? 'platform_support' : 'platform_admin';
+    if (name.length < 2) return res.status(400).send('Escribe el nombre.');
+    if (!lastName) return res.status(400).send('Escribe el apellido.');
+    if (!email.includes('@')) return res.status(400).send('Escribe un correo válido.');
+    if (!/^[a-z0-9._-]{3,30}$/.test(username)) {
+      return res.status(400).send('El usuario debe tener 3 a 30 letras, números, punto o guion.');
+    }
+    if (password.length < 8) return res.status(400).send('La contraseña debe tener al menos 8 caracteres.');
+    if (await db.FindUserByUsername(username)) return res.status(400).send('Ese usuario ya existe.');
+    if (await db.FindUserByEmail(email)) return res.status(400).send('Ese correo ya está registrado.');
+
+    const now = new Date();
+    const result = await db.CreateUser({
+      name,
+      lastName,
+      email,
+      username,
+      password: await hasher.hashPassword(password),
+      cellphone: String(body.cellphone || '0000000000').replace(/\D/g, '').slice(0, 10) || '0000000000',
+      role,
+      tenantId: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const created = await db.ListPlatformUsers();
+    const fresh = created.find((user) => user.username === username) || {
+      id: String(result.insertedId),
+      name,
+      lastName,
+      username,
+      email,
+      role,
+      createdAt: now,
+    };
+    return res.status(201).json(publicStaff(fresh));
+  } catch (err) {
+    console.error(err);
+    return res.status(500).send(err.message || 'No pude crear a esa persona.');
+  }
+}
+
+async function deleteStaff(req, res) {
+  try {
+    const id = String(req.params.id || '');
+    const users = await db.ListPlatformUsers();
+    const target = users.find((user) => user.id === id);
+    if (!target) return res.status(404).send('No encontré a esa persona.');
+    if (target.username === req.user.username) {
+      return res.status(400).send('No puedes quitarte a ti mismo.');
+    }
+    if (target.role === 'platform_admin') {
+      const admins = await db.CountPlatformAdmins();
+      if (admins <= 1) return res.status(400).send('Debe quedar al menos un admin.');
+    }
+    const removed = await db.DeleteUserById(id);
+    if (!removed) return res.status(404).send('No encontré a esa persona.');
+    return res.status(200).json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).send(err.message || 'No pude quitar a esa persona.');
+  }
+}
+
 module.exports = {
   listTenants,
   getTenant,
@@ -569,4 +669,7 @@ module.exports = {
   report,
   createExpense,
   deleteExpense,
+  listStaff,
+  createStaff,
+  deleteStaff,
 };

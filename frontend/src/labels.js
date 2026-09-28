@@ -26,7 +26,8 @@ export const roleLabel = {
   waiter: "Vendedor",
   kitchen: "Almacén",
   cashier: "Cajero",
-  platform_admin: "Platform",
+  platform_admin: "Admin",
+  platform_support: "Soporte",
 };
 
 export const inviteStatusLabel = {

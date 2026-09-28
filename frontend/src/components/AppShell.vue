@@ -34,7 +34,7 @@
         >
           {{ isDark ? '☀' : '☾' }}
         </button>
-        <button v-if="moreItems.length" type="button" class="icon-btn" @click="moreOpen = !moreOpen" aria-label="Más opciones">
+        <button v-if="moreItems.length || ownerMode" type="button" class="icon-btn" @click="moreOpen = !moreOpen" aria-label="Más opciones">
           Más
         </button>
         <button type="button" class="icon-btn ghost only-pc" @click="logout">Salir</button>
@@ -97,7 +97,7 @@ import { useRoute, useRouter } from "vue-router";
 import { venueStore } from "../venueStore";
 import BrandName from "./BrandName.vue";
 import { themeStore, toggleUiTheme } from "../themeStore";
-import { clearSession, canAccessRoute, hasRole, isPlatformAdmin } from "../authStore";
+import { clearSession, canAccessRoute, hasRole, isPlatformAdmin, isPlatformStaff } from "../authStore";
 import { apiService } from "../apiService";
 import { applyBillingStatus } from "../billingStore";
 
@@ -112,8 +112,11 @@ const isDesk = computed(() =>
   ["pos", "products", "orders"].includes(String(route.name || ""))
 );
 
-const ownerMode = computed(() => isPlatformAdmin());
-const businessName = computed(() => (ownerMode.value ? "Soporte" : venueStore.businessName || "Mi negocio"));
+const ownerMode = computed(() => isPlatformStaff());
+const businessName = computed(() => {
+  if (!ownerMode.value) return venueStore.businessName || "Mi negocio";
+  return isPlatformAdmin() ? "Admin" : "Soporte";
+});
 const logoSrc = computed(() => venueStore.logoUrl || "/logo.svg");
 const isDark = computed(() => themeStore.mode === "dark");
 const clock = computed(() => {
@@ -160,14 +163,20 @@ const ico = {
   cash: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/></svg>`,
   spark: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l1.6 5.2L19 10l-5.4 1.8L12 17l-1.6-5.2L5 10l5.4-1.8L12 3z"/></svg>`,
   receipt: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 3h12v18l-2.2-1.4L12 21l-3.8-1.4L6 21V3z"/><path d="M9 8h6M9 12h6"/></svg>`,
+  people: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="3.2"/><path d="M22 21v-2a3.6 3.6 0 00-3-3.5"/><path d="M16 3.2a3.2 3.2 0 010 6.2"/></svg>`,
 };
 
-const ownerDock = [
+const adminDock = [
   { to: "/platform", name: "platform", label: "Resumen", icon: ico.cash },
   { to: "/platform/clientes", name: "platformClients", label: "Clientes", icon: ico.products },
+  { to: "/platform/equipo", name: "platformTeam", label: "Equipo", icon: ico.people },
   { to: "/platform/ganancias", name: "platformRevenue", label: "Ganancias", icon: ico.sell },
   { to: "/platform/ia", name: "platformAi", label: "Gastos IA", icon: ico.spark },
   { to: "/platform/gastos", name: "platformExpenses", label: "Gastos", icon: ico.receipt },
+];
+
+const supportDock = [
+  { to: "/platform/clientes", name: "platformClients", label: "Clientes", icon: ico.products },
 ];
 
 const allDock = [
@@ -184,7 +193,10 @@ const allMore = [
   { to: "/settings", name: "settings", label: "Configuración" },
 ];
 
-const dock = computed(() => (ownerMode.value ? ownerDock : allDock.filter((i) => canAccessRoute(i.name))));
+const dock = computed(() => {
+  if (!ownerMode.value) return allDock.filter((i) => canAccessRoute(i.name));
+  return isPlatformAdmin() ? adminDock : supportDock;
+});
 const moreItems = computed(() => allMore.filter((i) => canAccessRoute(i.name)));
 
 function logout() {

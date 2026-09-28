@@ -373,6 +373,15 @@ export const apiService = {
   platformSetPlan(id: string, plan: string) {
     return axios.patch(`/platform/tenants/${id}/plan`, { plan }).then((r) => r.data);
   },
+  platformListStaff() {
+    return axios.get('/platform/staff').then((r) => r.data);
+  },
+  platformCreateStaff(payload: Record<string, unknown>) {
+    return axios.post('/platform/staff', payload).then((r) => r.data);
+  },
+  platformDeleteStaff(id: string) {
+    return axios.delete(`/platform/staff/${id}`).then((r) => r.data);
+  },
 
   // ── Clientes ──
   getCustomers(q?: string) {

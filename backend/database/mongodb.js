@@ -203,6 +203,32 @@ async function FindUserByResetToken(token) {
     resetExpires: { $gt: new Date() },
   });
 }
+async function ListPlatformUsers() {
+  const users = await dbConnection
+    .collection('users')
+    .find({ role: { $in: ['platform_admin', 'platform_support'] } })
+    .project({ password: 0, resetToken: 0, resetExpires: 0 })
+    .sort({ createdAt: 1 })
+    .toArray();
+  return users.map((user) => ({
+    id: String(user._id),
+    name: user.name || '',
+    lastName: user.lastName || '',
+    username: user.username || '',
+    email: user.email || '',
+    cellphone: user.cellphone || '',
+    role: user.role || 'platform_admin',
+    createdAt: user.createdAt || null,
+  }));
+}
+async function CountPlatformAdmins() {
+  return dbConnection.collection('users').countDocuments({ role: 'platform_admin' });
+}
+async function DeleteUserById(id) {
+  if (!ObjectId.isValid(id)) return false;
+  const result = await dbConnection.collection('users').deleteOne({ _id: new ObjectId(id) });
+  return result.deletedCount === 1;
+}
 async function ListTenantAdminEmails(tenantId) {
   if (!tenantId) return [];
   const users = await dbConnection
@@ -920,6 +946,7 @@ module.exports = {
   ensureConnection,
   CreateTenant, GetTenantById, UpdateTenant, ListTenants, CountUsersByTenant, CountPendingInvites, ListUsersByTenant, GetTenantByMpPreapprovalId,
   CreateUser, FindUserByEmail, LoginUsuario, FindUserByUsername, UpdateUserById, FindUserByResetToken,
+  ListPlatformUsers, CountPlatformAdmins, DeleteUserById,
   ListTenantAdminEmails,
   AddMesa, UpdateStatusMesa, Getmesas, GetMesaFreeWaiter, GetMesaById, DeleteMesa, CloseMesas, GetNextMesaNumero,
   AddWaiter, GetWaiters, GetWaiterByCellphone, GetWaiterByDisponibility, DeleteWaiter, UpdateWaiter,

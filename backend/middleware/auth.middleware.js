@@ -2,6 +2,7 @@ const { verifyToken } = require('../utils/jwt.utils');
 const {
   ROLES,
   TENANT_ROLES,
+  isPlatformStaff,
   isSubscriptionActive,
 } = require('../models/tenant.model');
 const db = require('../database/mongodb');
@@ -13,7 +14,7 @@ function requireAuth(req, res, next) {
   }
 
   const role = payload.userRole;
-  const isPlatform = role === 'platform_admin';
+  const isPlatform = isPlatformStaff(role);
 
   if (!isPlatform && !payload.tenantId) {
     return res.status(401).send('No autorizado');
@@ -40,7 +41,7 @@ function requireRoles(...allowed) {
 
 async function requireActiveSubscription(req, res, next) {
   try {
-    if (req.user?.role === 'platform_admin') return next();
+    if (isPlatformStaff(req.user?.role)) return next();
     if (!req.tenantId) {
       return res.status(403).json({
         code: 'SUBSCRIPTION_REQUIRED',

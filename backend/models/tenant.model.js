@@ -3,8 +3,13 @@ const crypto = require('crypto');
 
 const { ALL_PLANS } = require('../services/plans.catalog');
 
-const ROLES = ['admin', 'hosstess', 'waiter', 'kitchen', 'cashier', 'platform_admin'];
+const PLATFORM_ROLES = ['platform_admin', 'platform_support'];
+const ROLES = ['admin', 'hosstess', 'waiter', 'kitchen', 'cashier', ...PLATFORM_ROLES];
 const TENANT_ROLES = ['admin', 'hosstess', 'waiter', 'kitchen', 'cashier'];
+
+function isPlatformStaff(role) {
+  return PLATFORM_ROLES.includes(String(role || ''));
+}
 const PLANS = ALL_PLANS;
 const PUBLIC_PLANS = ['basic', 'growth', 'pro'];
 const BILLING_STATUSES = ['trialing', 'active', 'past_due', 'suspended'];
@@ -58,6 +63,8 @@ function newResetToken() {
 module.exports = {
   ROLES,
   TENANT_ROLES,
+  PLATFORM_ROLES,
+  isPlatformStaff,
   PLANS,
   PUBLIC_PLANS,
   BILLING_STATUSES,

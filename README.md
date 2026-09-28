@@ -31,11 +31,15 @@ SaaS **100% nube** (sin instalar). Prueba **14 días**. **Básico** $349 · **Cr
 
 Límites: Básico 2 usuarios / 250 productos · Crecimiento 6 / 1,500 · Pro 20 / ilimitados.
 
-## Platform admin
+## Panel interno
+Hay dos perfiles. El seed crea el **admin**:
+
 ```bash
 cd backend && npm run seed:platform-admin
 ```
-Login `platform` / `Platform123!` → `/platform`
+
+- **Admin** — `platform` / `Platform123!` → `/platform`. Números, licencias (incluida **Perpetua**), gastos y **Equipo**.
+- **Soporte** — lo crea un admin en `/platform/equipo`. Solo ve clientes y responde correo.
 
 ## Docker
 ```bash

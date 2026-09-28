@@ -208,11 +208,75 @@
         </template>
       </template>
 
+      <template v-else-if="isTeam">
+        <header class="hero-strip">
+          <div>
+            <h2>Equipo interno</h2>
+            <p>Admin ve números, licencias y gente. Soporte solo atiende clientes y correo.</p>
+          </div>
+          <button type="button" class="t-btn t-btn-primary" @click="showStaffForm = true">Agregar persona</button>
+        </header>
+        <p v-if="staffErr" class="err">{{ staffErr }}</p>
+        <p v-if="staffOk" class="ok">{{ staffOk }}</p>
+        <p v-if="staffLoading" class="muted">Cargando equipo…</p>
+        <ul v-else class="people team-list">
+          <li v-for="person in staff" :key="person.id">
+            <div>
+              <strong>{{ person.name }} {{ person.lastName }}</strong>
+              <span>{{ person.roleName }} · {{ person.username }}</span>
+            </div>
+            <div class="contact">
+              <span>{{ person.email }}</span>
+              <button
+                v-if="person.username !== myUsername"
+                type="button"
+                class="quiet"
+                @click="removeStaff(person)"
+              >
+                Quitar
+              </button>
+            </div>
+          </li>
+          <li v-if="!staff.length" class="muted">Todavía no hay gente en el equipo.</li>
+        </ul>
+
+        <Teleport to="body">
+          <div v-if="showStaffForm" class="modal-bg" @click.self="showStaffForm = false">
+            <form class="modal" @submit.prevent="createStaff">
+              <h3>Nueva persona</h3>
+              <div class="form">
+                <label>Nombre<input v-model="staffForm.name" required minlength="2" /></label>
+                <label>Apellido<input v-model="staffForm.lastName" required /></label>
+                <label>Correo<input v-model="staffForm.email" type="email" required /></label>
+                <label>Usuario<input v-model="staffForm.username" required minlength="3" autocomplete="off" /></label>
+                <label>Contraseña<input v-model="staffForm.password" type="password" required minlength="8" autocomplete="new-password" /></label>
+                <label>
+                  Perfil
+                  <select v-model="staffForm.role">
+                    <option value="platform_support">Soporte</option>
+                    <option value="platform_admin">Admin</option>
+                  </select>
+                </label>
+              </div>
+              <p class="hint">Soporte ve clientes y responde correo. Admin puede cambiar planes, activar Perpetua y agregar gente.</p>
+              <p v-if="staffFormErr" class="err">{{ staffFormErr }}</p>
+              <div class="modal-actions">
+                <button type="button" class="t-btn t-btn-ghost" @click="showStaffForm = false">Cancelar</button>
+                <button type="submit" class="t-btn t-btn-primary" :disabled="staffSaving">
+                  {{ staffSaving ? "Guardando…" : "Crear" }}
+                </button>
+              </div>
+            </form>
+          </div>
+        </Teleport>
+      </template>
+
       <template v-else>
         <header class="hero-strip">
           <div>
             <h2>Clientes</h2>
-            <p>Datos de cada tienda, su gente y el correo.</p>
+            <p v-if="isOpsAdmin">Datos, licencia (incluida Perpetua) y correo de cada tienda.</p>
+            <p v-else>Atiende tickets y correo. El plan lo cambia un admin.</p>
           </div>
           <input v-model="query" class="t-input search" type="search" placeholder="Buscar cliente" />
         </header>
@@ -252,23 +316,43 @@
             </div>
 
             <form v-show="tab === 'datos'" class="form" @submit.prevent="save">
-              <label>Nombre del negocio<input v-model="draft.businessName" required minlength="2" /></label>
-              <label>Teléfono<input v-model="draft.phone" inputmode="tel" /></label>
-              <label class="wide">Dirección<input v-model="draft.address" /></label>
-              <label>
-                Plan
-                <select v-model="draft.plan">
-                  <option value="basic">Básico</option>
-                  <option value="growth">Crecimiento</option>
-                  <option value="pro">Pro</option>
-                  <option value="perpetual">Perpetua (sin magia)</option>
-                </select>
-              </label>
-              <p v-if="draft.plan === 'perpetual'" class="hint wide">
-                Activa la licencia perpetua: la tienda sigue cobrando normal y desaparecen
-                Inventario Mágico y Precio Mágico. Si tenía cobro en Mercado Pago, se cancela.
+              <label>Nombre del negocio<input v-model="draft.businessName" required minlength="2" :disabled="!isOpsAdmin" /></label>
+              <label>Teléfono<input v-model="draft.phone" inputmode="tel" :disabled="!isOpsAdmin" /></label>
+              <label class="wide">Dirección<input v-model="draft.address" :disabled="!isOpsAdmin" /></label>
+
+              <div v-if="isOpsAdmin" class="license-panel wide">
+                <div class="license-head">
+                  <strong>Licencia</strong>
+                  <span>{{ planLabel(draft.plan) }} · {{ statusText(draft.billingStatus) }}</span>
+                </div>
+                <div class="license-picks" role="group" aria-label="Plan de la tienda">
+                  <button type="button" :class="{ on: draft.plan === 'basic' }" @click="setDraftPlan('basic')">Básico</button>
+                  <button type="button" :class="{ on: draft.plan === 'growth' }" @click="setDraftPlan('growth')">Crecimiento</button>
+                  <button type="button" :class="{ on: draft.plan === 'pro' }" @click="setDraftPlan('pro')">Pro</button>
+                  <button type="button" class="perp" :class="{ on: draft.plan === 'perpetual' }" @click="setDraftPlan('perpetual')">
+                    Perpetua
+                  </button>
+                </div>
+                <p v-if="draft.plan === 'perpetual'" class="hint">
+                  Pago único, sin cuota. La tienda cobra normal y se ocultan Inventario Mágico y Precio Mágico.
+                  Si tenía Mercado Pago, se cancela.
+                </p>
+                <button
+                  v-if="detail.plan !== 'perpetual'"
+                  type="button"
+                  class="t-btn t-btn-primary"
+                  :disabled="saving"
+                  @click="activatePerpetual"
+                >
+                  {{ saving ? "Activando…" : "Activar licencia perpetua" }}
+                </button>
+                <p v-else class="ok">Esta tienda ya tiene licencia perpetua.</p>
+              </div>
+              <p v-else class="license-readonly wide">
+                Plan {{ detail.planName }} · {{ detail.billingStatusName }}. Si hay que cambiarlo, un admin lo hace.
               </p>
-              <label>
+
+              <label v-if="isOpsAdmin">
                 Estado
                 <select v-model="draft.billingStatus">
                   <option v-if="draft.plan !== 'perpetual'" value="trialing">Prueba</option>
@@ -277,9 +361,9 @@
                   <option value="suspended">Suspendido</option>
                 </select>
               </label>
-              <label v-if="draft.plan !== 'perpetual'">Fin de la prueba<input v-model="draft.trialEndsOn" type="date" /></label>
-              <label v-if="draft.billingStatus === 'suspended'">Motivo<input v-model="draft.suspendedReason" /></label>
-              <label class="check"><input v-model="draft.inventoryEnabled" type="checkbox" /> Lleva inventario</label>
+              <label v-if="isOpsAdmin && draft.plan !== 'perpetual'">Fin de la prueba<input v-model="draft.trialEndsOn" type="date" /></label>
+              <label v-if="isOpsAdmin && draft.billingStatus === 'suspended'">Motivo<input v-model="draft.suspendedReason" /></label>
+              <label v-if="isOpsAdmin" class="check"><input v-model="draft.inventoryEnabled" type="checkbox" /> Lleva inventario</label>
               <div class="mini-facts">
                 <div><span>Alta</span><strong>{{ formatDate(detail.createdAt) }}</strong></div>
                 <div>
@@ -291,7 +375,7 @@
               </div>
               <p v-if="saveErr" class="err">{{ saveErr }}</p>
               <p v-if="saveOk" class="ok">{{ saveOk }}</p>
-              <div class="wide">
+              <div v-if="isOpsAdmin" class="wide">
                 <button type="submit" class="t-btn t-btn-primary" :disabled="saving">
                   {{ saving ? 'Guardando…' : 'Guardar cambios' }}
                 </button>
@@ -389,6 +473,7 @@ import { useRoute, useRouter } from "vue-router";
 import AppShell from "../components/AppShell.vue";
 import { apiService } from "../apiService";
 import { labelOf, roleLabel } from "../labels";
+import { authStore, hasRole } from "../authStore";
 
 const route = useRoute();
 const router = useRouter();
@@ -426,6 +511,21 @@ const tickets = ref([]);
 const activeTicketId = ref("");
 const newTicket = ref(false);
 const sendingMail = ref(false);
+const staff = ref([]);
+const staffLoading = ref(false);
+const staffErr = ref("");
+const staffOk = ref("");
+const showStaffForm = ref(false);
+const staffSaving = ref(false);
+const staffFormErr = ref("");
+const staffForm = reactive({
+  name: "",
+  lastName: "",
+  email: "",
+  username: "",
+  password: "",
+  role: "platform_support",
+});
 const draft = reactive({
   businessName: "",
   phone: "",
@@ -437,7 +537,12 @@ const draft = reactive({
   suspendedReason: "",
 });
 
-const isMoney = computed(() => route.name !== "platformClients");
+const isOpsAdmin = computed(() => hasRole("platform_admin"));
+const isTeam = computed(() => route.name === "platformTeam");
+const isMoney = computed(
+  () => isOpsAdmin.value && route.name !== "platformClients" && route.name !== "platformTeam"
+);
+const myUsername = computed(() => authStore.username || "");
 const pageTitle = computed(() => {
   if (route.name === "platformRevenue") return "Ganancias";
   if (route.name === "platformAi") return "Gastos de IA";
@@ -622,6 +727,19 @@ function roleText(role) {
   return labelOf(roleLabel, role, "Usuario");
 }
 
+function planLabel(id) {
+  return { basic: "Básico", growth: "Crecimiento", pro: "Pro", perpetual: "Perpetua" }[id] || id;
+}
+
+function statusText(id) {
+  return { trialing: "Prueba", active: "Activo", past_due: "Pago atrasado", suspended: "Suspendido" }[id] || id;
+}
+
+function setDraftPlan(plan) {
+  draft.plan = plan;
+  if (plan === "perpetual" && draft.billingStatus !== "suspended") draft.billingStatus = "active";
+}
+
 function fillDraft(client) {
   draft.businessName = client.businessName || "";
   draft.phone = client.phone || "";
@@ -691,7 +809,7 @@ async function removeExpense(id) {
 async function openClient(id, { mail = false, ticketId = "" } = {}) {
   if (selectedId.value !== id || !detail.value) {
     selectedId.value = id;
-    tab.value = mail ? "correo" : "datos";
+    tab.value = mail || !isOpsAdmin.value ? "correo" : "datos";
     saveErr.value = "";
     saveOk.value = "";
     mailError.value = "";
@@ -761,7 +879,7 @@ async function openMail(force = false) {
 }
 
 async function save() {
-  if (!selectedId.value || saving.value) return;
+  if (!isOpsAdmin.value || !selectedId.value || saving.value) return false;
   saving.value = true;
   saveErr.value = "";
   saveOk.value = "";
@@ -775,12 +893,20 @@ async function save() {
       updated.plan === "perpetual"
         ? "Licencia perpetua activa. Inventario Mágico y Precio Mágico ya no aparecen en esa tienda."
         : "Cambios guardados.";
-    loadBooks();
+    if (isOpsAdmin.value) loadBooks();
+    return true;
   } catch (e) {
     saveErr.value = e.response?.data || "No pude guardar.";
+    return false;
   } finally {
     saving.value = false;
   }
+}
+
+async function activatePerpetual() {
+  if (!confirm("¿Activar licencia perpetua? Se apaga la magia y se cancela el cobro mensual.")) return;
+  setDraftPlan("perpetual");
+  await save();
 }
 
 function startTicket() {
@@ -868,6 +994,10 @@ watch(
 watch(
   () => route.name,
   async (name) => {
+    if (name === "platformTeam") {
+      await loadStaff();
+      return;
+    }
     if (name !== "platformClients" || !pendingClient.value) return;
     const id = pendingClient.value;
     const ticketId = pendingTicket.value;
@@ -877,9 +1007,63 @@ watch(
   }
 );
 
+async function loadStaff() {
+  staffLoading.value = true;
+  staffErr.value = "";
+  try {
+    staff.value = await apiService.platformListStaff();
+  } catch (e) {
+    staffErr.value = e.response?.data || "No pude cargar el equipo.";
+  } finally {
+    staffLoading.value = false;
+  }
+}
+
+function resetStaffForm() {
+  staffForm.name = "";
+  staffForm.lastName = "";
+  staffForm.email = "";
+  staffForm.username = "";
+  staffForm.password = "";
+  staffForm.role = "platform_support";
+  staffFormErr.value = "";
+}
+
+async function createStaff() {
+  if (staffSaving.value) return;
+  staffSaving.value = true;
+  staffFormErr.value = "";
+  staffOk.value = "";
+  try {
+    const created = await apiService.platformCreateStaff({ ...staffForm });
+    staff.value = [...staff.value, created];
+    staffOk.value = `${created.roleName} creado: ${created.username}`;
+    showStaffForm.value = false;
+    resetStaffForm();
+  } catch (e) {
+    staffFormErr.value = e.response?.data || "No pude crear a esa persona.";
+  } finally {
+    staffSaving.value = false;
+  }
+}
+
+async function removeStaff(person) {
+  if (!confirm(`¿Quitar a ${person.username}? Ya no podrá entrar al panel.`)) return;
+  staffErr.value = "";
+  staffOk.value = "";
+  try {
+    await apiService.platformDeleteStaff(person.id);
+    staff.value = staff.value.filter((row) => row.id !== person.id);
+    staffOk.value = `${person.username} ya no está en el equipo.`;
+  } catch (e) {
+    staffErr.value = e.response?.data || "No pude quitar a esa persona.";
+  }
+}
+
 onMounted(() => {
-  loadBooks();
-  loadClients();
+  if (isOpsAdmin.value) loadBooks();
+  if (isTeam.value) loadStaff();
+  else loadClients();
 });
 </script>
 
@@ -1124,4 +1308,65 @@ onMounted(() => {
 .reply { margin-top: 0.2rem; }
 .err { color: var(--timber-danger); font-weight: 700; }
 .ok { color: var(--timber-success); font-weight: 700; }
+.license-panel {
+  display: grid;
+  gap: 0.7rem;
+  padding: 0.9rem;
+  border: 1px solid var(--timber-line);
+  border-radius: 0.9rem;
+  background: var(--timber-panel-elevated);
+}
+.license-head { display: flex; justify-content: space-between; gap: 0.75rem; align-items: baseline; }
+.license-head span { color: var(--timber-muted); font-size: 0.82rem; font-weight: 700; }
+.license-picks { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.45rem; }
+.license-picks button {
+  min-height: 2.8rem;
+  border: 1px solid var(--timber-line);
+  border-radius: 0.7rem;
+  background: var(--timber-surface);
+  color: inherit;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+.license-picks button.on {
+  border-color: var(--timber-primary);
+  background: var(--timber-primary);
+  color: var(--timber-on-primary);
+}
+.license-picks button.perp.on {
+  background: var(--timber-ink);
+  border-color: var(--timber-ink);
+}
+.license-readonly {
+  margin: 0;
+  padding: 0.8rem 0.85rem;
+  border-radius: 0.75rem;
+  background: var(--timber-panel-elevated);
+  color: var(--timber-muted);
+  font-weight: 700;
+}
+.team-list { max-width: 46rem; }
+.modal-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: color-mix(in srgb, #020617 45%, transparent);
+}
+.modal {
+  width: min(34rem, 100%);
+  padding: 1.1rem;
+  border-radius: 1rem;
+  background: var(--timber-panel);
+  color: var(--timber-ink);
+  box-shadow: 0 18px 50px color-mix(in srgb, #020617 28%, transparent);
+}
+.modal h3 { margin: 0 0 0.85rem; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.9rem; }
+@media (max-width: 720px) {
+  .license-picks { grid-template-columns: 1fr 1fr; }
+}
 </style>
