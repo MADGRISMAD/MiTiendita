@@ -35,7 +35,6 @@ import BillingView from "./views/BillingView.vue";
 import PlatformAdminView from "./views/PlatformAdminView.vue";
 import LegalView from "./views/LegalView.vue";
 import CustomersView from "./views/CustomersView.vue";
-import ReportsView from "./views/ReportsView.vue";
 
 const authMeta = (roles?: string[]) => ({
   requiresAuth: true,
@@ -54,7 +53,7 @@ const routes: RouteRecordRaw[] = [
   { path: "/privacidad", name: "privacy", component: LegalView, props: { page: "privacy" } },
   { path: "/factura/:token", name: "factura", component: InvoiceRequestView },
   { path: "/setup", name: "setup", component: SetupWizard, meta: { requiresAuth: true } },
-  { path: "/dashboard", name: "dashboard", component: DashboardView, meta: authMeta(["admin"]) },
+  { path: "/dashboard", name: "dashboard", component: DashboardView, meta: authMeta(["admin", "cashier"]) },
   // POS abarrotes
   { path: "/pos", name: "pos", component: MenuView, meta: authMeta(["admin", "cashier", "waiter", "hosstess", "kitchen"]), props: { initialMode: "pos" } },
   { path: "/products", name: "products", component: MenuView, meta: authMeta(["admin"]), props: { initialMode: "manage" } },
@@ -68,7 +67,7 @@ const routes: RouteRecordRaw[] = [
   { path: "/orders", name: "orders", component: OrdersView, meta: authMeta(["admin", "cashier"]) },
   { path: "/settings", name: "settings", component: SettingsView, meta: authMeta(["admin"]) },
   { path: "/customers", name: "customers", component: CustomersView, meta: authMeta(["admin", "cashier"]) },
-  { path: "/reports", name: "reports", component: ReportsView, meta: authMeta(["admin", "cashier"]) },
+  { path: "/reports", redirect: "/dashboard" },
   {
     path: "/billing",
     name: "billing",

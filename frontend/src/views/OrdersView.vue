@@ -461,9 +461,7 @@ async function confirmPay() {
     const id = payOrder.value.id;
     payOrder.value = null;
     await loadCash();
-    if (confirm("¿Imprimir ticket?")) {
-      window.open(`/print/order/${id}?mode=receipt&autoprint=1`, "_blank");
-    }
+    window.open(`/print/order/${id}?mode=receipt&autoprint=1`, "_blank", "noopener");
   } catch (e) {
     cashErr.value = e.response?.data || "No se pudo cobrar";
   }

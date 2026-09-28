@@ -140,6 +140,7 @@ const payLabels = {
   cash: "EFECTIVO",
   card: "TARJETA",
   transfer: "TRANSFERENCIA",
+  split: "MIXTO",
   other: "OTRO",
 };
 

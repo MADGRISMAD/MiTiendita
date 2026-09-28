@@ -160,7 +160,16 @@
                 </p>
               </template>
               <p v-else class="last-idle">Escanea para agregar</p>
-              <p v-if="msg" class="foot-msg">{{ msg }}</p>
+              <p v-if="msg" class="foot-msg">
+                {{ msg }}
+                <a
+                  v-if="lastTicketId"
+                  class="ticket-reprint"
+                  :href="`/print/order/${lastTicketId}?mode=receipt`"
+                  target="_blank"
+                  rel="noopener"
+                >Imprimir ticket</a>
+              </p>
             </div>
             <button
               type="button"
@@ -429,54 +438,76 @@
               </div>
             </div>
 
-            <div class="pay-methods">
-              <label class="pay-method-card" :class="{ on: payMethod === 'cash' }">
-                <input v-model="payMethod" type="radio" value="cash" />
-                <span>💵 Efectivo</span>
-              </label>
-              <label class="pay-method-card" :class="{ on: payMethod === 'card' }">
-                <input v-model="payMethod" type="radio" value="card" />
-                <span>💳 Tarjeta</span>
-              </label>
-              <label class="pay-method-card" :class="{ on: payMethod === 'split' }">
-                <input v-model="payMethod" type="radio" value="split" />
-                <span>🔀 Mixto</span>
-              </label>
-            </div>
-
-            <template v-if="payMethod === 'cash'">
+            <template v-if="!cashOpen">
+              <p class="pay-hint">Abre la caja aquí para cobrar. No te vamos a mandar a otra pantalla.</p>
               <label class="field">
-                <span>Efectivo recibido</span>
-                <input v-model.number="payCashReceived" class="inp pay-inp" type="number" min="0" step="0.01" placeholder="0.00" />
+                <span>Efectivo inicial</span>
+                <input
+                  v-model.number="openingFloat"
+                  class="inp pay-inp"
+                  type="number"
+                  min="0"
+                  step="1"
+                  inputmode="decimal"
+                />
               </label>
-              <div v-if="payChange > 0" class="pay-change">
-                Cambio: <strong>{{ money(payChange) }}</strong>
-              </div>
+              <p v-if="payError" class="scan-msg err">{{ payError }}</p>
+              <button type="button" class="act primary pay-confirm" :disabled="cashBusy" @click="openCashFromPay">
+                {{ cashBusy ? 'Abriendo…' : 'Abrir caja y cobrar' }}
+              </button>
+              <button type="button" class="act" @click="closePayment">Cancelar</button>
             </template>
 
-            <template v-if="payMethod === 'split'">
-              <label class="field">
-                <span>Monto con tarjeta</span>
-                <input v-model.number="payCardAmount" class="inp pay-inp" type="number" min="0" :max="total" step="0.01" placeholder="0.00" />
-              </label>
-              <div class="pay-split-info">
-                Efectivo: <strong>{{ money(payCashPortion) }}</strong>
+            <template v-else>
+              <div class="pay-methods">
+                <label class="pay-method-card" :class="{ on: payMethod === 'cash' }">
+                  <input v-model="payMethod" type="radio" value="cash" />
+                  <span>💵 Efectivo</span>
+                </label>
+                <label class="pay-method-card" :class="{ on: payMethod === 'card' }">
+                  <input v-model="payMethod" type="radio" value="card" />
+                  <span>💳 Tarjeta</span>
+                </label>
+                <label class="pay-method-card" :class="{ on: payMethod === 'split' }">
+                  <input v-model="payMethod" type="radio" value="split" />
+                  <span>🔀 Mixto</span>
+                </label>
               </div>
-              <label class="field">
-                <span>Efectivo recibido</span>
-                <input v-model.number="payCashReceived" class="inp pay-inp" type="number" min="0" step="0.01" placeholder="0.00" />
-              </label>
-              <div v-if="payChange > 0" class="pay-change">
-                Cambio: <strong>{{ money(payChange) }}</strong>
-              </div>
+
+              <template v-if="payMethod === 'cash'">
+                <label class="field">
+                  <span>Efectivo recibido</span>
+                  <input v-model.number="payCashReceived" class="inp pay-inp" type="number" min="0" step="0.01" placeholder="0.00" />
+                </label>
+                <div v-if="payChange > 0" class="pay-change">
+                  Cambio: <strong>{{ money(payChange) }}</strong>
+                </div>
+              </template>
+
+              <template v-if="payMethod === 'split'">
+                <label class="field">
+                  <span>Monto con tarjeta</span>
+                  <input v-model.number="payCardAmount" class="inp pay-inp" type="number" min="0" :max="total" step="0.01" placeholder="0.00" />
+                </label>
+                <div class="pay-split-info">
+                  Efectivo: <strong>{{ money(payCashPortion) }}</strong>
+                </div>
+                <label class="field">
+                  <span>Efectivo recibido</span>
+                  <input v-model.number="payCashReceived" class="inp pay-inp" type="number" min="0" step="0.01" placeholder="0.00" />
+                </label>
+                <div v-if="payChange > 0" class="pay-change">
+                  Cambio: <strong>{{ money(payChange) }}</strong>
+                </div>
+              </template>
+
+              <p v-if="payError" class="scan-msg err">{{ payError }}</p>
+
+              <button type="button" class="act primary pay-confirm" :disabled="sending" @click="confirmPayment">
+                {{ sending ? 'Cobrando…' : 'Confirmar cobro' }}
+              </button>
+              <button type="button" class="act" @click="closePayment">Cancelar</button>
             </template>
-
-            <p v-if="payError" class="scan-msg err">{{ payError }}</p>
-
-            <button type="button" class="act primary pay-confirm" :disabled="sending" @click="confirmPayment">
-              {{ sending ? 'Cobrando…' : 'Confirmar cobro' }}
-            </button>
-            <button type="button" class="act" @click="closePayment">Cancelar</button>
           </div>
         </div>
       </Teleport>
@@ -678,6 +709,10 @@ export default {
     // Aviso de caja abierta mucho tiempo
     const cashSession = ref(null);
     const cashOpenWarning = ref(false);
+    const cashOpen = computed(() => Boolean(cashSession.value));
+    const openingFloat = ref(0);
+    const cashBusy = ref(false);
+    const lastTicketId = ref("");
 
     async function loadCashSession() {
       try {
@@ -695,6 +730,25 @@ export default {
         cashSession.value = null;
         cashOpenWarning.value = false;
       }
+    }
+
+    async function openCashFromPay() {
+      if (cashBusy.value) return;
+      cashBusy.value = true;
+      payError.value = "";
+      try {
+        await apiService.openCashSession(Number(openingFloat.value || 0));
+        await loadCashSession();
+      } catch (e) {
+        payError.value = e.response?.data || "No se pudo abrir la caja.";
+      } finally {
+        cashBusy.value = false;
+      }
+    }
+
+    function printReceipt(orderId) {
+      if (!orderId) return;
+      window.open(`/print/order/${orderId}?mode=receipt&autoprint=1`, "_blank", "noopener");
     }
 
     // Productos filtrados por la barra de búsqueda del catálogo
@@ -1089,12 +1143,13 @@ export default {
 
     function finalizeOrder() {
       if (!lines.value.length || sending.value) return;
-      // Abrir modal de pago
       payMethod.value = "cash";
       payCashReceived.value = 0;
       payCardAmount.value = 0;
       payError.value = "";
+      openingFloat.value = 0;
       showPayment.value = true;
+      loadCashSession();
     }
 
     function closePayment() {
@@ -1107,7 +1162,11 @@ export default {
       if (!lines.value.length || sending.value) return;
       payError.value = "";
 
-      // Validaciones de pago dividido
+      if (!cashSession.value) {
+        payError.value = "Abre la caja para cobrar.";
+        return;
+      }
+
       if (payMethod.value === "split") {
         const card = Number(payCardAmount.value || 0);
         if (card <= 0 || card >= total.value) {
@@ -1116,7 +1175,6 @@ export default {
         }
       }
 
-      // Validar que el efectivo recibido sea suficiente
       if (payMethod.value === "cash" || payMethod.value === "split") {
         const cashNeeded = payCashPortion.value;
         const received = Number(payCashReceived.value || 0);
@@ -1145,19 +1203,19 @@ export default {
           })),
         });
 
-        // Cobrar inmediatamente con la forma de pago seleccionada
         await apiService.payOrder(response.id, payMethod.value, {
           cashReceived: payMethod.value !== "card" ? Number(payCashReceived.value || 0) : undefined,
           cardAmount: payMethod.value === "split" ? Number(payCardAmount.value || 0) : undefined,
         });
 
         const cambio = payChange.value;
+        lastTicketId.value = response.id;
         showPayment.value = false;
         clearCart();
         msg.value = cambio > 0
-          ? `Ticket ${String(response.id || "").slice(-6)} cobrado · Cambio: ${money(cambio)}`
-          : `Ticket ${String(response.id || "").slice(-6)} cobrado`;
-        setTimeout(() => router.push("/orders"), 600);
+          ? `Ticket ${String(response.id || "").slice(-6).toUpperCase()} cobrado · Cambio: ${money(cambio)}`
+          : `Ticket ${String(response.id || "").slice(-6).toUpperCase()} cobrado`;
+        printReceipt(response.id);
       } catch (error) {
         payError.value = error.response?.data || "Error al registrar la venta.";
       } finally {
@@ -1588,8 +1646,13 @@ export default {
       payCashPortion,
       closePayment,
       confirmPayment,
+      cashOpen,
       cashOpenWarning,
       cashSession,
+      openingFloat,
+      cashBusy,
+      openCashFromPay,
+      lastTicketId,
       venueStore,
     };
   },
@@ -2019,6 +2082,11 @@ export default {
   font-size: 0.78rem;
   font-weight: 600;
   color: var(--timber-success);
+}
+.ticket-reprint {
+  margin-left: 0.45rem;
+  color: var(--timber-primary);
+  font-weight: 800;
 }
 
 .price-card {
@@ -2496,6 +2564,13 @@ export default {
 
 /* Modal de pago */
 .pay-sheet { max-width: 26rem; }
+.pay-hint {
+  margin: 0;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--timber-muted);
+  line-height: 1.4;
+}
 .pay-summary {
   display: grid;
   gap: 0.35rem;

@@ -68,7 +68,7 @@ export const roleHome = {
 };
 
 export const routeRoles = {
-  dashboard: ["admin"],
+  dashboard: ["admin", "cashier"],
   pos: ["admin", "cashier", "waiter", "hosstess", "kitchen"],
   products: ["admin"],
   menu: ["admin", "cashier", "waiter"],
@@ -88,7 +88,6 @@ export const routeRoles = {
   printOrder: ["admin", "cashier"],
   printCash: ["admin", "cashier"],
   customers: ["admin", "cashier"],
-  reports: ["admin", "cashier"],
 };
 
 export function canAccessRoute(name) {

@@ -3,7 +3,7 @@
     <div class="dash t-page">
       <div class="hero-strip">
         <div>
-          <h2>Resumen de ventas</h2>
+          <h2>Resumen y reportes</h2>
           <p>{{ todayLabel }} · {{ businessName }}</p>
         </div>
         <div class="hero-actions">
@@ -156,6 +156,76 @@
           </ol>
         </section>
       </div>
+
+      <section class="t-card panel report-range">
+        <div class="panel-head">
+          <h3>Historial por fechas</h3>
+        </div>
+        <div class="date-range">
+          <label>Desde <input v-model="dateFrom" type="date" /></label>
+          <label>Hasta <input v-model="dateTo" type="date" /></label>
+          <button type="button" class="t-btn t-btn-primary" :disabled="loadingReport" @click="loadReport">
+            {{ loadingReport ? 'Cargando…' : 'Consultar' }}
+          </button>
+        </div>
+        <p v-if="reportError" class="t-empty">{{ reportError }}</p>
+        <div v-if="reportSummary" class="report-kpis">
+          <div>
+            <span>Total ventas</span>
+            <strong>{{ formatMoney(reportSummary.totalSales) }}</strong>
+          </div>
+          <div>
+            <span># de tickets</span>
+            <strong>{{ reportSummary.totalOrders }}</strong>
+          </div>
+          <div>
+            <span>Ticket promedio</span>
+            <strong>{{ formatMoney(reportSummary.averageTicket) }}</strong>
+          </div>
+        </div>
+        <div v-if="reportSummary?.topProducts?.length" class="report-top">
+          <h4>Top productos del rango</h4>
+          <ol>
+            <li v-for="(p, i) in reportSummary.topProducts" :key="i">
+              <span class="rank">{{ i + 1 }}</span>
+              <strong>{{ p.name }}</strong>
+              <span class="meta">{{ p.quantity }} uds</span>
+              <span class="amount">{{ formatMoney(p.revenue) }}</span>
+            </li>
+          </ol>
+        </div>
+        <div v-if="reportOrders.length" class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Total</th>
+                <th># Productos</th>
+                <th>Pago</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="o in reportOrders" :key="o.id">
+                <td>{{ formatTime(o.createdAt) }}</td>
+                <td>{{ formatMoney(o.total) }}</td>
+                <td>{{ (o.items || []).length }}</td>
+                <td>
+                  <span class="t-badge" :class="o.paymentStatus">{{ paymentText(o.paymentStatus) }}</span>
+                </td>
+                <td>
+                  <router-link
+                    class="print-link"
+                    :to="`/print/order/${o.id}?mode=receipt`"
+                    target="_blank"
+                  >Ticket</router-link>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p v-else-if="reportQueried && !loadingReport" class="t-empty">No hay ventas en este rango.</p>
+      </section>
     </div>
   </AppShell>
 </template>
@@ -174,6 +244,23 @@ const lowStockItems = ref([]);
 const cashOpen = ref(false);
 const cashSession = ref(null);
 const cashTotals = ref({ cash: 0, card: 0, transfer: 0, other: 0, total: 0 });
+
+function todayISO() {
+  return new Date().toISOString().slice(0, 10);
+}
+function weekAgoISO() {
+  const d = new Date();
+  d.setDate(d.getDate() - 7);
+  return d.toISOString().slice(0, 10);
+}
+
+const dateFrom = ref(weekAgoISO());
+const dateTo = ref(todayISO());
+const loadingReport = ref(false);
+const reportError = ref("");
+const reportQueried = ref(false);
+const reportSummary = ref(null);
+const reportOrders = ref([]);
 
 const businessName = computed(() => venueStore.businessName || "Tu tienda");
 const todayLabel = computed(() => formatTodayLabel(venueStore.timezone));
@@ -356,7 +443,34 @@ onMounted(async () => {
   } catch {
     cashOpen.value = false;
   }
+  await loadReport();
 });
+
+async function loadReport() {
+  if (!dateFrom.value || !dateTo.value) {
+    reportError.value = "Selecciona ambas fechas.";
+    return;
+  }
+  loadingReport.value = true;
+  reportError.value = "";
+  reportQueried.value = true;
+  try {
+    const from = dateFrom.value;
+    const to = dateTo.value + "T23:59:59.999Z";
+    const [ordersRes, summaryRes] = await Promise.all([
+      apiService.getOrdersReport(from, to),
+      apiService.getOrdersReportSummary(from, to),
+    ]);
+    reportOrders.value = ordersRes || [];
+    reportSummary.value = summaryRes || null;
+  } catch (e) {
+    reportError.value = e.response?.data || "No se pudo cargar el reporte.";
+    reportOrders.value = [];
+    reportSummary.value = null;
+  } finally {
+    loadingReport.value = false;
+  }
+}
 </script>
 
 <style scoped>
@@ -647,4 +761,85 @@ onMounted(async () => {
 .lsw-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; }
 .lsw-stock { font-weight: 800; color: var(--timber-warning); font-variant-numeric: tabular-nums; flex-shrink: 0; }
 .lsw-threshold { font-size: 0.72rem; color: var(--timber-muted); flex-shrink: 0; }
+
+.report-range { padding: 1rem; }
+.date-range {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.9rem;
+}
+.date-range label {
+  display: grid;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--timber-muted);
+}
+.date-range input {
+  min-height: 2.75rem;
+  border: 1px solid var(--timber-line);
+  border-radius: 0.7rem;
+  padding: 0.5rem 0.7rem;
+  font: inherit;
+  background: var(--timber-panel-elevated);
+  color: var(--timber-ink);
+}
+.report-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+.report-kpis div {
+  display: grid;
+  gap: 0.2rem;
+}
+.report-kpis span {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--timber-muted);
+}
+.report-kpis strong {
+  font-size: 1.25rem;
+  font-variant-numeric: tabular-nums;
+}
+.report-top h4 {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+}
+.report-top ol {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  display: grid;
+  gap: 0.4rem;
+}
+.report-top li {
+  display: grid;
+  grid-template-columns: 1.6rem 1fr auto auto;
+  gap: 0.55rem;
+  align-items: center;
+}
+.table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--timber-line);
+  border-radius: 0.85rem;
+}
+.table-wrap table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+.table-wrap th, .table-wrap td {
+  padding: 0.65rem 0.8rem;
+  text-align: left;
+  border-bottom: 1px solid var(--timber-line);
+}
+.table-wrap th {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--timber-muted);
+}
+.table-wrap tbody tr:last-child td { border-bottom: none; }
 </style>
