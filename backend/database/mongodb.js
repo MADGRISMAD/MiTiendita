@@ -877,6 +877,45 @@ async function GetSalesReport(tenantId, from, to) {
   };
 }
 
+// ── Historial de costos (Lector de Facturas) ──
+async function SaveCostSnapshot(tenantId, foodId, cost, source = 'invoice_scan') {
+  return dbConnection.collection('cost_history').insertOne({
+    tenantId,
+    foodId: String(foodId),
+    cost: Number(cost),
+    source,
+    createdAt: new Date(),
+  });
+}
+
+async function GetCostHistory(tenantId, foodId, limit = 10) {
+  return dbConnection.collection('cost_history')
+    .find({ tenantId, foodId: String(foodId) })
+    .sort({ createdAt: -1 })
+    .limit(limit)
+    .toArray()
+    .then(docs => docs.map(withId));
+}
+
+async function GetLastCostSnapshot(tenantId, foodId) {
+  return withId(
+    await dbConnection.collection('cost_history')
+      .findOne({ tenantId, foodId: String(foodId) }, { sort: { createdAt: -1 } })
+  );
+}
+
+async function GetBulkLastCosts(tenantId, foodIds) {
+  const pipeline = [
+    { $match: { tenantId, foodId: { $in: foodIds.map(String) } } },
+    { $sort: { createdAt: -1 } },
+    { $group: { _id: '$foodId', cost: { $first: '$cost' }, createdAt: { $first: '$createdAt' } } },
+  ];
+  const docs = await dbConnection.collection('cost_history').aggregate(pipeline).toArray();
+  const map = {};
+  for (const d of docs) map[d._id] = { cost: d.cost, at: d.createdAt };
+  return map;
+}
+
 module.exports = {
   ensureConnection,
   CreateTenant, GetTenantById, UpdateTenant, ListTenants, CountUsersByTenant, CountPendingInvites, ListUsersByTenant, GetTenantByMpPreapprovalId,
@@ -898,4 +937,5 @@ module.exports = {
   ListPlatformExpenses, ListPlatformExpensesAll, CreatePlatformExpense, DeletePlatformExpense,
   SavePlatformSnapshot, ListPlatformSnapshots,
   CreateCustomer, GetCustomers, GetCustomerById, UpdateCustomer, DeleteCustomer, SearchCustomers,
+  SaveCostSnapshot, GetCostHistory, GetLastCostSnapshot, GetBulkLastCosts,
 };

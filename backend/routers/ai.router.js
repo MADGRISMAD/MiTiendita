@@ -7,5 +7,7 @@ const admin = [requireAuth, requireActiveSubscription, requireRoles('admin')];
 router.get('/quota', ...admin, ai.quota);
 router.post('/preview', ...admin, ai.preview);
 router.post('/apply', ...admin, ai.apply);
+router.post('/invoice-scan', ...admin, ai.invoiceScan);
+router.post('/invoice-apply', ...admin, ai.invoiceApply);
 
 module.exports = router;

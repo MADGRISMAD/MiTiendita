@@ -232,6 +232,11 @@
               <span class="magic-sub">Con una foto o una lista</span>
             </button>
 
+            <button type="button" class="magic-open invoice-btn" @click="showInvoice = true">
+              <span class="magic-title">📄 Lector de Facturas</span>
+              <span class="magic-sub">Foto de nota del proveedor</span>
+            </button>
+
             <!-- Vista de cuadrícula (grid) -->
             <div v-if="viewMode === 'grid'" class="products">
               <button
@@ -408,6 +413,12 @@
         @manual="onMagicManual"
       />
 
+      <InvoiceScanSheet
+        v-if="showInvoice"
+        @close="showInvoice = false"
+        @applied="onMagicApplied"
+      />
+
       <!-- Modal de pago / cobro -->
       <Teleport to="body">
         <div v-if="showPayment" class="sheet-bg" @click.self="closePayment">
@@ -579,6 +590,7 @@
 <script>
 import AppShell from "../components/AppShell.vue";
 import MagicPricesSheet from "../components/MagicPricesSheet.vue";
+import InvoiceScanSheet from "../components/InvoiceScanSheet.vue";
 import { ref, reactive, computed, onMounted, onUnmounted, watch, nextTick } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { apiService } from "../apiService";
@@ -588,7 +600,7 @@ import { cartTotals, lineBreakdown } from "../tax";
 import { apiService as apiSvc } from "../apiService";
 
 export default {
-  components: { AppShell, MagicPricesSheet },
+  components: { AppShell, MagicPricesSheet, InvoiceScanSheet },
   props: {
     initialMode: { type: String, default: "pos" },
   },
@@ -633,6 +645,7 @@ export default {
     const showMenuForm = ref(false);
     const showFoodForm = ref(false);
     const showMagic = ref(false);
+    const showInvoice = ref(false);
     const editingFood = ref(null);
     const menuForm = reactive({ name: "", description: "" });
     const foodForm = reactive({
@@ -824,6 +837,7 @@ export default {
           showMenuForm.value ||
           showMagic.value ||
           showPayment.value ||
+          showInvoice.value ||
           missingCode.value;
         if (mode.value === "pos" && !blocked && scanInput.value) {
           scanInput.value.focus();
@@ -1540,6 +1554,7 @@ export default {
       showMenuForm,
       showFoodForm,
       showMagic,
+      showInvoice,
       onMagicApplied,
       onMagicManual,
       openNewFood,
@@ -2146,6 +2161,10 @@ export default {
 }
 .magic-title { font-weight: 800; font-size: 0.98rem; }
 .magic-sub { font-weight: 700; font-size: 0.78rem; opacity: 0.88; }
+.invoice-btn {
+  background: color-mix(in srgb, var(--timber-accent) 85%, var(--timber-primary));
+  color: #1a1208;
+}
 .products {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(7rem, 1fr));

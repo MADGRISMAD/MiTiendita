@@ -398,4 +398,12 @@ export const apiService = {
   getOrdersReportSummary(from: string, to: string) {
     return axios.get('/orders/report/summary', { params: { from, to } }).then((r) => r.data);
   },
+
+  // ── Lector Mágico de Facturas ──
+  invoiceScan(payload: { text?: string; imageBase64?: string; mimeType?: string }) {
+    return axios.post('/ai/invoice-scan', payload, { timeout: 130_000 }).then((r) => r.data);
+  },
+  invoiceApply(updates: { foodId: string; newCost: number; newPrice?: number; stockIn?: number }[]) {
+    return axios.post('/ai/invoice-apply', { updates }).then((r) => r.data);
+  },
 };
