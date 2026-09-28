@@ -27,7 +27,7 @@ Rutas antiguas de restaurante (`/main`, `/kitchen`, `/waitlist`) redirigen al PO
 Tras registrarte, el wizard pide nombre de tienda, tipo (abarrotes / conveniencia / farmacia) y logo. Puedes cargar 8 productos de ejemplo para cobrar el mismo día. Términos: `/terminos` · Privacidad: `/privacidad`.
 
 ## Billing (suscripción Mi Tiendita)
-SaaS **100% nube** (sin instalar). Prueba **14 días**. **Básico** $349 · **Crecimiento** $599 · **Pro** $899 /mes. Incluyen **Inventario Mágico** (50 / 150 / 500 usos al mes). En `/billing` se paga, se ve el historial y se cancela la renovación (sigues activo hasta el fin del periodo).
+SaaS **100% nube** (sin instalar). Prueba **14 días**. **Básico** $349 · **Crecimiento** $599 · **Pro** $899 /mes. Incluyen **Inventario Mágico** y **Precio Mágico** (50 / 150 / 500 usos al mes). En `/billing` se paga, se ve el historial y se cancela la renovación (sigues activo hasta el fin del periodo).
 
 Límites: Básico 2 usuarios / 250 productos · Crecimiento 6 / 1,500 · Pro 20 / ilimitados.
 

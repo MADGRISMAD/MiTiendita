@@ -7,7 +7,7 @@
           <h1>Planes de Mi Tiendita</h1>
           <p class="lede">
             Celular, tablet o PC. Sin instalar.
-            <InventarioMagicoTerm /> va incluido en los tres planes.
+            <InventarioMagicoTerm /> y <InventarioMagicoTerm kind="precio" /> van incluidos en los tres planes.
           </p>
         </div>
         <div v-if="!loading && !err" class="head-tools">
@@ -63,7 +63,7 @@
               {{ status.limits.products?.used || 0 }} / {{ capLabel(status.limits.products?.max) }}
             </p>
             <p>
-              <strong>Inventario Mágico</strong>
+              <strong>Magia</strong>
               {{ status.aiQuotaLabel }}
             </p>
           </div>
@@ -123,7 +123,7 @@
             </header>
 
             <p class="magic">
-              <InventarioMagicoTerm /> · <strong>{{ p.aiQuotaLabel }}</strong>
+              <InventarioMagicoTerm /> · <InventarioMagicoTerm kind="precio" /> · <strong>{{ p.aiQuotaLabel }}</strong>
             </p>
 
             <p class="pitch">{{ p.pitch }}</p>

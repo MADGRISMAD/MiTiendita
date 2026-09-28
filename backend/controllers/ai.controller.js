@@ -73,7 +73,7 @@ async function preview(req, res) {
   try {
     if (!gemini.hasGeminiConfig()) {
       return res.status(503).json({
-        message: 'Inventario Mágico no está disponible por ahora. Intenta más tarde.',
+        message: 'Inventario Mágico y Precio Mágico no están disponibles por ahora. Intenta más tarde.',
       });
     }
 
@@ -134,7 +134,7 @@ async function preview(req, res) {
     console.error(err);
     const message =
       err.code === 'GEMINI_NOT_CONFIGURED'
-        ? 'Inventario Mágico no está disponible por ahora. Intenta más tarde.'
+        ? 'Inventario Mágico y Precio Mágico no están disponibles por ahora. Intenta más tarde.'
         : err.message || 'No pude leer la lista. Intenta de nuevo.';
     return res.status(status >= 400 && status < 600 ? status : 502).json({
       message,

@@ -6,10 +6,9 @@
     :class="{ hoverable: showHover }"
     :aria-describedby="showHover ? tipId : undefined"
   >
-    Inventario Mágico
+    {{ copy.name }}
     <span v-if="showHover" :id="tipId" class="im-tip" role="tooltip">
-      Pegas el papelito de precios nuevos (o una foto de la factura) y Mi Tiendita
-      actualiza tu catálogo en segundos — desde la nube, sin buscar producto por producto.
+      {{ copy.tip }}
     </span>
   </component>
 </template>
@@ -18,10 +17,31 @@
 import { computed } from "vue";
 import { authStore, isAuthenticated } from "../authStore";
 
+const props = defineProps({
+  kind: {
+    type: String,
+    default: "inventario",
+    validator: (v) => ["inventario", "precio"].includes(v),
+  },
+});
+
+const COPY = {
+  inventario: {
+    name: "Inventario Mágico",
+    tip: "Pegas el papelito o una foto y Mi Tiendita mete productos, packs y existencias al catálogo — en segundos, desde la nube.",
+    hash: "#inventario-magico",
+  },
+  precio: {
+    name: "Precio Mágico",
+    tip: "Foto a la nota del proveedor: si el costo subió, te avisa el margen y te sugiere el precio al público.",
+    hash: "#precio-magico",
+  },
+};
+
+const copy = computed(() => COPY[props.kind] || COPY.inventario);
 const tipId = `im-tip-${Math.random().toString(36).slice(2, 8)}`;
 
 const showHover = computed(() => {
-  // Depend on token so UI updates after login/logout
   void authStore.token;
   return isAuthenticated();
 });
@@ -30,7 +50,7 @@ const tag = computed(() => (showHover.value ? "span" : "router-link"));
 
 const linkAttrs = computed(() => {
   if (showHover.value) return { tabindex: 0 };
-  return { to: { path: "/", hash: "#inventario-magico" } };
+  return { to: { path: "/", hash: copy.value.hash } };
 });
 </script>
 

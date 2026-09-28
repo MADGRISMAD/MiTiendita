@@ -238,7 +238,7 @@
           <section class="grid-pane">
             <button type="button" class="magic-open" @click="showMagic = true">
               <span class="magic-title">Actualizar precios</span>
-              <span class="magic-sub">Foto de lista o de la nota del proveedor</span>
+              <span class="magic-sub">Inventario Mágico · Precio Mágico</span>
             </button>
 
             <!-- Vista de cuadrícula (grid) -->

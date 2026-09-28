@@ -1,5 +1,5 @@
 /**
- * Gemini Flash-Lite — extracción de precios para Inventario Mágico.
+ * Gemini Flash-Lite — Inventario Mágico y Precio Mágico.
  * REST directo para no agregar SDK. Modelo por defecto: gemini-3.5-flash-lite.
  */
 

@@ -4,7 +4,7 @@
       <div class="sheet" role="dialog" aria-modal="true">
         <header class="head">
           <div>
-            <p class="kicker">Inventario Mágico</p>
+            <p class="kicker">Inventario Mágico · Precio Mágico</p>
             <h3>Actualizar precios</h3>
           </div>
           <button type="button" class="x" aria-label="Cerrar" @click="close">×</button>
@@ -53,8 +53,8 @@
           <img v-if="photoUrl && !photoBusy" :src="photoUrl" alt="Foto de la lista" class="thumb" />
 
           <p class="hint">
-            Sirve una lista de venta (“Coca 600 a 22”) o la foto de la nota de remisión / factura del proveedor.
-            Si el costo de compra subió, te avisamos y te sugerimos el precio al público. Cada revisión usa 1 intento; si no encuentra nada, no se descuenta.
+            Inventario Mágico mete productos y existencias. Precio Mágico avisa si el costo subió y te sugiere el precio al público.
+            Cada revisión usa 1 intento; si no encuentra nada, no se descuenta.
           </p>
 
           <p v-if="blocked" class="msg err">

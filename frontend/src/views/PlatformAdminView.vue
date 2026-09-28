@@ -151,7 +151,7 @@
               <div class="kpi">
                 <p class="kpi-label">Usos del mes</p>
                 <p class="kpi-value">{{ books.ai.uses }}</p>
-                <p class="kpi-sub">Inventario Mágico</p>
+                <p class="kpi-sub">Inventario y Precio Mágico</p>
               </div>
             </div>
             <section class="t-card panel">
@@ -277,7 +277,7 @@
               <label class="check"><input v-model="draft.inventoryEnabled" type="checkbox" /> Lleva inventario</label>
               <div class="mini-facts">
                 <div><span>Alta</span><strong>{{ formatDate(detail.createdAt) }}</strong></div>
-                <div><span>Inventario Mágico</span><strong>{{ detail.aiUsed }} de {{ detail.aiLimit ?? '—' }}</strong></div>
+                <div><span>Inventario y Precio Mágico</span><strong>{{ detail.aiUsed }} de {{ detail.aiLimit ?? '—' }}</strong></div>
                 <div><span>Correo del dueño</span><strong>{{ detail.ownerEmail || 'Sin correo' }}</strong></div>
               </div>
               <p v-if="saveErr" class="err">{{ saveErr }}</p>

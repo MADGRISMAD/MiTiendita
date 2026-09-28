@@ -1,10 +1,10 @@
 /**
  * Catálogo comercial Mi Tiendita (MXN) — SaaS 100% nube.
- * Inventario Mágico = actualización de precios/catálogo con IA (cuotas por plan).
+ * Inventario Mágico + Precio Mágico = IA para catálogo y precios (cuota compartida).
  */
 const PLANS = ['basic', 'growth', 'pro'];
 
-/** Usos de Inventario Mágico (Gemini) por mes calendario. */
+/** Usos de Inventario Mágico y Precio Mágico (Gemini) por mes calendario. */
 const AI_QUOTAS = {
   basic: 50,
   growth: 150,
@@ -34,7 +34,9 @@ const PLAN_CATALOG = {
       'Sin instalar nada · 1 sucursal',
       '2 usuarios (dueño + 1 cajero)',
       'Hasta 250 productos',
-      `${AI_QUOTAS.basic} actualizaciones con Inventario Mágico al mes`,
+      'Inventario Mágico: lista o foto al catálogo',
+      'Precio Mágico: la IA ajusta costos y el precio al público',
+      `${AI_QUOTAS.basic} usos de magia al mes`,
       'Tickets 80 mm',
     ],
   },
@@ -53,15 +55,17 @@ const PLAN_CATALOG = {
       'Todo lo del Básico',
       '6 usuarios (dueño + equipo)',
       'Hasta 1,500 productos',
-      `${AI_QUOTAS.growth} actualizaciones con Inventario Mágico al mes`,
+      'Inventario Mágico: lista o foto al catálogo',
+      'Precio Mágico: la IA ajusta costos y el precio al público',
+      `${AI_QUOTAS.growth} usos de magia al mes`,
       'Cobra desde el celular en el pasillo',
     ],
   },
   pro: {
     id: 'pro',
     name: 'Pro',
-    tagline: 'Catálogo grande y más Inventario Mágico',
-    pitch: 'Foto a la factura del camión: la IA en la nube actualiza costos y precios. Imposible en una PC vieja local.',
+    tagline: 'Catálogo grande, Inventario Mágico y Precio Mágico',
+    pitch: 'Foto a la factura del camión: Precio Mágico actualiza costos y te sugiere el precio al público. Inventario Mágico mete las piezas al anaquel.',
     priceMonth: Number(process.env.MP_PLAN_PRO_PRICE || 899),
     priceYear: Number(process.env.MP_PLAN_PRO_YEAR_PRICE || 8990),
     aiQuota: AI_QUOTAS.pro,
@@ -71,8 +75,9 @@ const PLAN_CATALOG = {
       'Todo lo de Crecimiento',
       '20 usuarios',
       'Productos ilimitados',
-      `${AI_QUOTAS.pro} actualizaciones con Inventario Mágico al mes`,
-      'Lee listas y fotos de proveedores con IA',
+      'Inventario Mágico: lista o foto al catálogo',
+      'Precio Mágico: la IA ajusta costos y el precio al público',
+      `${AI_QUOTAS.pro} usos de magia al mes`,
     ],
   },
 };
@@ -138,7 +143,7 @@ function listPlans(currency = process.env.MP_CURRENCY || 'MXN') {
       productsLimit: p.limits.products,
       usersLimitLabel: formatCap(p.limits.users),
       productsLimitLabel: formatCap(p.limits.products),
-      productName: 'Inventario Mágico',
+      productName: 'Inventario Mágico y Precio Mágico',
     };
   });
 }

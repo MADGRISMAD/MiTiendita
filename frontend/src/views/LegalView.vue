@@ -29,13 +29,13 @@
           Los cobros se hacen con Mercado Pago. Puedes cambiar de plan o cancelar
           el cargo recurrente desde Facturación. Si cancelas, sigues usando el sistema
           hasta el fin del periodo ya pagado. Los límites de usuarios, productos e
-          Inventario Mágico dependen del plan contratado.
+          Inventario Mágico / Precio Mágico dependen del plan contratado.
         </p>
         <h2>3. Tus datos</h2>
         <p>
           El catálogo, las ventas y la configuración pertenecen a tu negocio.
           Los usamos solo para operar el servicio (caja, tickets, facturación,
-          soporte e Inventario Mágico). No vendemos tu lista de clientes.
+          soporte, Inventario Mágico y Precio Mágico). No vendemos tu lista de clientes.
         </p>
         <h2>4. Uso aceptable</h2>
         <p>
@@ -73,13 +73,13 @@
         <p>
           Operar la caja, enviar correos (alta, invitaciones, recuperación de
           contraseña, tickets de factura y avisos de pago), cobrar la suscripción
-          y responder soporte. Inventario Mágico envía el texto o la foto que
-          tú pegas a un proveedor de IA solo para actualizar tu catálogo.
+          y responder soporte. Inventario Mágico y Precio Mágico envían el texto o la foto que
+          tú pegas a un proveedor de IA solo para actualizar tu catálogo y tus precios.
         </p>
         <h2>Con quién se comparten</h2>
         <p>
           Mercado Pago (cobros), el proveedor de correo (Resend o SMTP) y,
-          si activas Inventario Mágico, el proveedor de IA. No vendemos bases de datos.
+          si usas Inventario Mágico o Precio Mágico, el proveedor de IA. No vendemos bases de datos.
         </p>
         <h2>Tus derechos</h2>
         <p>

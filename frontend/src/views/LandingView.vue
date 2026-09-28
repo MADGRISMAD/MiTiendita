@@ -13,7 +13,7 @@
       </a>
       <nav class="nav-links" aria-label="Secciones">
         <a href="#como-funciona">Cómo funciona</a>
-        <a href="#inventario-magico">Inventario Mágico</a>
+        <a href="#inventario-magico">La Magia</a>
         <a href="#por-que-nube">¿Por qué nube?</a>
         <a href="#planes">Planes</a>
       </nav>
@@ -49,7 +49,7 @@
               <router-link v-else class="btn amber lg" :to="{ name: homeRoute }">
                 Abrir caja
               </router-link>
-              <a class="btn line lg" href="#inventario-magico">¿Qué es Inventario Mágico?</a>
+              <a class="btn line lg" href="#inventario-magico">Ver la Magia</a>
             </div>
             <p class="hero-note">Sin tarjeta. Cancela cuando quieras.</p>
           </div>
@@ -210,30 +210,48 @@
             <span class="magic-spark" aria-hidden="true">✦</span>
             <p class="section-kicker">Lo que nos hace diferentes</p>
           </div>
-          <h2>Inventario Mágico</h2>
+          <h2>Inventario Mágico y Precio Mágico</h2>
           <p class="section-lede magic-lede">
-            Actualizas precios como apuntas en un papelito.
-            Pegas el texto — o una foto de la factura del proveedor —
-            y el catálogo se actualiza solo en segundos.
+            Dos magias, un botón. Pegas un papelito o le tomas foto a la nota del camión:
+            el catálogo y los precios se actualizan solos.
           </p>
+
+          <div class="magic-pair">
+            <article>
+              <p class="pair-kicker">✦ Inventario Mágico</p>
+              <h3>Del papelito al anaquel</h3>
+              <p>
+                Escribes “15 cocas de 600” o subes la foto. Entran piezas, packs y
+                productos nuevos — sin buscar renglón por renglón.
+              </p>
+            </article>
+            <article id="precio-magico">
+              <p class="pair-kicker">✦ Precio Mágico</p>
+              <h3>Si el costo sube, no pierdes margen</h3>
+              <p>
+                Foto a la factura del proveedor. Si la Coca te costaba $14 y ahora $15.50,
+                te avisa y te sugiere el precio al público.
+              </p>
+            </article>
+          </div>
 
           <div class="magic-flow">
             <article>
               <span class="step">1</span>
-              <h3>Escribes como siempre</h3>
-              <p>"Coca 600ml a 22, Sabritas a 18" — tal cual lo anotas.</p>
+              <h3>Escribes o tomas foto</h3>
+              <p>"Coca 600ml a 22" o la nota de remisión — como la tengas.</p>
             </article>
             <span class="flow-arrow" aria-hidden="true">→</span>
             <article>
               <span class="step">2</span>
               <h3>La nube lo interpreta</h3>
-              <p>La IA reconoce productos, cantidades y precios sin que tú busques nada.</p>
+              <p>Reconoce productos, costos, precios y cantidades.</p>
             </article>
             <span class="flow-arrow" aria-hidden="true">→</span>
             <article>
               <span class="step">3</span>
-              <h3>Catálogo actualizado</h3>
-              <p>Precios nuevos aplicados al instante. Sin editar producto por producto.</p>
+              <h3>Catálogo y precios listos</h3>
+              <p>Inventario Mágico llena el anaquel. Precio Mágico cuida tu ganancia.</p>
             </article>
           </div>
 
@@ -249,7 +267,7 @@ Aceite 1L  48 pesos</pre>
             </div>
             <span class="magic-demo-arrow" aria-hidden="true">
               <span class="arrow-line"></span>
-              <span class="arrow-text">Inventario Mágico</span>
+              <span class="arrow-text">La Magia</span>
               <span class="arrow-line"></span>
             </span>
             <div class="magic-demo-output">
@@ -275,7 +293,7 @@ Aceite 1L  48 pesos</pre>
           </div>
 
           <p class="magic-note">
-            También acepta fotos de facturas. Cada revisión cuenta como un uso del mes:
+            Cada revisión cuenta como un uso del mes, da igual si es inventario o precio:
             <strong>Básico 50</strong>, <strong>Crecimiento 150</strong> y <strong>Pro 500</strong>.
           </p>
         </div>
@@ -364,7 +382,7 @@ Aceite 1L  48 pesos</pre>
                 </p>
               </template>
               <p class="im-line">
-                <InventarioMagicoTerm /> · {{ p.aiQuotaLabel }}
+                <InventarioMagicoTerm /> · <InventarioMagicoTerm kind="precio" /> · {{ p.aiQuotaLabel }}
               </p>
               <ul>
                 <li v-for="(f, i) in p.features" :key="i">{{ f }}</li>
@@ -545,7 +563,9 @@ const fallbackPlans = [
     features: [
       "1 sucursal · 2 usuarios",
       "Hasta 250 productos",
-      "Inventario Mágico: 50 usos/mes",
+      "Inventario Mágico: lista o foto al catálogo",
+      "Precio Mágico: IA ajusta costos y precio al público",
+      "50 usos de magia al mes",
       "Tickets 80 mm",
     ],
   },
@@ -562,7 +582,9 @@ const fallbackPlans = [
     features: [
       "Todo lo del Básico",
       "6 usuarios · 1,500 productos",
-      "Inventario Mágico: 150 usos/mes",
+      "Inventario Mágico: lista o foto al catálogo",
+      "Precio Mágico: IA ajusta costos y precio al público",
+      "150 usos de magia al mes",
       "Cobro en pasillo con el celular",
     ],
   },
@@ -579,7 +601,9 @@ const fallbackPlans = [
     features: [
       "Todo lo de Crecimiento",
       "20 usuarios · productos ilimitados",
-      "Inventario Mágico: 500 usos/mes",
+      "Inventario Mágico: lista o foto al catálogo",
+      "Precio Mágico: IA ajusta costos y precio al público",
+      "500 usos de magia al mes",
       "Lee fotos de facturas de proveedores",
     ],
   },
@@ -1255,6 +1279,41 @@ main,
 }
 .magic-lede {
   max-width: 40rem;
+}
+
+.magic-pair {
+  margin-top: 1.35rem;
+  display: grid;
+  gap: 0.75rem;
+}
+@media (min-width: 720px) {
+  .magic-pair { grid-template-columns: 1fr 1fr; }
+}
+.magic-pair article {
+  background: var(--timber-panel-elevated);
+  border: 1px solid var(--timber-line);
+  border-radius: var(--timber-radius);
+  padding: 1.15rem 1.2rem 1.25rem;
+}
+.pair-kicker {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--timber-primary);
+}
+.magic-pair h3 {
+  margin: 0.4rem 0 0;
+  font-size: 1.15rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+.magic-pair p {
+  margin: 0.4rem 0 0;
+  color: var(--timber-muted);
+  font-size: 0.92rem;
+  line-height: 1.45;
 }
 
 .magic-flow {
