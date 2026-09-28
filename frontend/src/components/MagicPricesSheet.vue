@@ -20,7 +20,7 @@
 
         <template v-if="!result">
           <label class="field">
-            <span>Pega la lista, como la tengas</span>
+            <span>Pega la lista o la nota, como la tengas</span>
             <textarea
               v-model="text"
               rows="5"
@@ -35,6 +35,7 @@
               <input
                 type="file"
                 accept="image/jpeg,image/png,image/webp,image/*"
+                capture="environment"
                 :disabled="busy || photoBusy"
                 @change="onPhoto"
               />
@@ -52,8 +53,8 @@
           <img v-if="photoUrl && !photoBusy" :src="photoUrl" alt="Foto de la lista" class="thumb" />
 
           <p class="hint">
-            Puede ser una nota suelta: “15 cocas de 600” son 15 piezas de Coca de 600 ml, no un precio.
-            Si falta el precio, tú lo pones al guardar. Cada revisión usa 1 intento; si no encuentra nada, no se descuenta.
+            Sirve una lista de venta (“Coca 600 a 22”) o la foto de la nota de remisión / factura del proveedor.
+            Si el costo de compra subió, te avisamos y te sugerimos el precio al público. Cada revisión usa 1 intento; si no encuentra nada, no se descuenta.
           </p>
 
           <p v-if="blocked" class="msg err">
@@ -67,7 +68,7 @@
             :disabled="busy || photoBusy || !canReview"
             @click="review"
           >
-            {{ busy ? 'Leyendo…' : 'Revisar lista' }}
+            {{ busy ? 'Leyendo…' : 'Revisar' }}
           </button>
           <button type="button" class="act" @click="emit('manual')">
             Agregar a mano, sin foto
@@ -77,6 +78,11 @@
 
         <template v-else>
           <img v-if="photoUrl" :src="photoUrl" alt="" class="thumb mini" />
+
+          <p v-if="costAlerts.length" class="cost-banner">
+            ⚠️ {{ costAlerts.length === 1 ? 'Un producto subió de costo' : `${costAlerts.length} productos subieron de costo` }}.
+            Revisa el margen y el precio sugerido antes de guardar.
+          </p>
 
           <p v-if="!picks.length && !news.length" class="hint">
             Esos precios ya estaban igual en tu catálogo.
@@ -116,6 +122,14 @@
                       <template v-if="row.oldCost"> · costo {{ money(row.oldCost) }}</template>
                       <template v-if="row.oldStock != null"> · stock {{ row.oldStock }}</template>
                     </small>
+                    <p v-if="row.costUp" class="cost-alert">
+                      El costo subió{{ row.costChangePct ? ` ${row.costChangePct}%` : '' }}.
+                      <template v-if="row.newMargin != null"> Tu margen bajó a {{ row.newMargin }}%.</template>
+                      <template v-if="row.suggestedPrice">
+                        ¿Actualizar el precio al público a {{ money(row.suggestedPrice) }}?
+                        <button type="button" class="link" @click.stop="row.price = row.suggestedPrice">Usar</button>
+                      </template>
+                    </p>
                   </span>
                 </label>
                 <p v-if="row.options" class="from">
@@ -250,6 +264,8 @@ const saveCount = computed(() => {
   const c = news.value.filter(readyNew).length;
   return u + c;
 });
+
+const costAlerts = computed(() => picks.value.filter((row) => row.costUp));
 
 const saveLabel = computed(() => {
   const u = picks.value.filter((row) => row.checked && row.id).length;
@@ -436,6 +452,10 @@ function fillPicks(data) {
       from: row.from,
       checked: true,
       options: null,
+      costUp: Boolean(row.costChanged && row.costDelta > 0),
+      costChangePct: Number(row.costChangePct) || 0,
+      newMargin: row.newMargin,
+      suggestedPrice: Number(row.suggestedPrice) || 0,
     });
   }
   for (const row of data.choose || []) {
@@ -457,6 +477,10 @@ function fillPicks(data) {
       from: row.from,
       checked: false,
       options: row.options,
+      costUp: Boolean(row.costChanged && row.costDelta > 0),
+      costChangePct: Number(row.costChangePct) || 0,
+      newMargin: row.newMargin,
+      suggestedPrice: Number(row.suggestedPrice) || 0,
     });
   }
   picks.value = rows;
@@ -871,6 +895,23 @@ select.inp { min-height: 2.65rem; }
   font-size: 0.82rem;
   font-weight: 700;
   color: var(--timber-success);
+}
+.cost-banner {
+  margin: 0;
+  padding: 0.65rem 0.75rem;
+  border-radius: 0.75rem;
+  background: color-mix(in srgb, var(--timber-warning) 14%, var(--timber-panel));
+  border: 1px solid color-mix(in srgb, var(--timber-warning) 40%, var(--timber-line));
+  font-size: 0.88rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+.cost-alert {
+  margin: 0.15rem 0 0;
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--timber-warning);
 }
 .act {
   min-height: 3.1rem;

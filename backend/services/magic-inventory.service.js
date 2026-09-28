@@ -225,6 +225,37 @@ function matchItems(items, foods) {
   return { matches, choose, unknown };
 }
 
+const TARGET_MARGIN = 0.3;
+
+function costInsight(oldCost, oldPrice, newCost) {
+  const prev = Number(oldCost) || 0;
+  const sell = Number(oldPrice) || 0;
+  const next = Number(newCost) || 0;
+  const costChanged = next > 0 && Math.abs(next - prev) >= 0.01;
+  const costDelta = costChanged ? roundPrice(next - prev) : 0;
+  const costChangePct = costChanged && prev > 0 ? Math.round((costDelta / prev) * 100) : 0;
+  const currentMargin = sell > 0 && prev > 0 ? Math.round(((sell - prev) / sell) * 100) : null;
+  const newMargin = sell > 0 && next > 0 ? Math.round(((sell - next) / sell) * 100) : null;
+  const suggestedPrice = next > 0 ? Math.max(1, Math.ceil(next / (1 - TARGET_MARGIN))) : 0;
+  return { costChanged, costDelta, costChangePct, currentMargin, newMargin, suggestedPrice };
+}
+
+function enrichCostAlerts(matched, lastCosts = {}) {
+  for (const row of matched.matches || []) {
+    const snap = lastCosts[row.id];
+    Object.assign(row, costInsight(row.oldCost, row.oldPrice, row.cost), {
+      previousCost: snap ? snap.cost : row.oldCost,
+      lastCostDate: snap?.at || null,
+    });
+  }
+  for (const row of matched.choose || []) {
+    const first = row.options?.[0];
+    if (!first) continue;
+    Object.assign(row, costInsight(first.oldCost, first.oldPrice, row.cost));
+  }
+  return matched;
+}
+
 module.exports = {
   tokens,
   scoreName,
@@ -236,4 +267,6 @@ module.exports = {
   unitCost,
   enrichItem,
   looksLikePack,
+  costInsight,
+  enrichCostAlerts,
 };
