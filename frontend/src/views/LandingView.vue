@@ -276,7 +276,7 @@ Aceite 1L  48 pesos</pre>
 
           <p class="magic-note">
             También acepta fotos de facturas. Cada revisión cuenta como un uso del mes:
-            <strong>Básico 2</strong>, <strong>Crecimiento 10</strong> y <strong>Pro 30</strong>.
+            <strong>Básico 50</strong>, <strong>Crecimiento 150</strong> y <strong>Pro 500</strong>.
           </p>
         </div>
       </section>
@@ -539,13 +539,13 @@ const fallbackPlans = [
     price: 349,
     priceYear: 3490,
     monthlyFromYear: 291,
-    aiQuotaLabel: "2 al mes",
+    aiQuotaLabel: "50 al mes",
     highlight: false,
     badge: null,
     features: [
       "1 sucursal · 2 usuarios",
       "Hasta 250 productos",
-      "Inventario Mágico: 2 usos/mes",
+      "Inventario Mágico: 50 usos/mes",
       "Tickets 80 mm",
     ],
   },
@@ -556,13 +556,13 @@ const fallbackPlans = [
     price: 599,
     priceYear: 5990,
     monthlyFromYear: 499,
-    aiQuotaLabel: "10 al mes",
+    aiQuotaLabel: "150 al mes",
     highlight: true,
     badge: "Más popular",
     features: [
       "Todo lo del Básico",
       "6 usuarios · 1,500 productos",
-      "Inventario Mágico: 10 usos/mes",
+      "Inventario Mágico: 150 usos/mes",
       "Cobro en pasillo con el celular",
     ],
   },
@@ -573,13 +573,13 @@ const fallbackPlans = [
     price: 899,
     priceYear: 8990,
     monthlyFromYear: 749,
-    aiQuotaLabel: "30 al mes",
+    aiQuotaLabel: "500 al mes",
     highlight: false,
     badge: null,
     features: [
       "Todo lo de Crecimiento",
       "20 usuarios · productos ilimitados",
-      "Inventario Mágico: 30 usos/mes",
+      "Inventario Mágico: 500 usos/mes",
       "Lee fotos de facturas de proveedores",
     ],
   },

@@ -6,9 +6,9 @@ const PLANS = ['basic', 'growth', 'pro'];
 
 /** Usos de Inventario Mágico (Gemini) por mes calendario. */
 const AI_QUOTAS = {
-  basic: 2,
-  growth: 10,
-  pro: 30,
+  basic: 50,
+  growth: 150,
+  pro: 500,
 };
 
 /** null = ilimitado */
@@ -34,7 +34,7 @@ const PLAN_CATALOG = {
       'Sin instalar nada · 1 sucursal',
       '2 usuarios (dueño + 1 cajero)',
       'Hasta 250 productos',
-      '2 actualizaciones con Inventario Mágico al mes',
+      `${AI_QUOTAS.basic} actualizaciones con Inventario Mágico al mes`,
       'Tickets 80 mm',
     ],
   },
@@ -53,7 +53,7 @@ const PLAN_CATALOG = {
       'Todo lo del Básico',
       '6 usuarios (dueño + equipo)',
       'Hasta 1,500 productos',
-      '10 actualizaciones con Inventario Mágico al mes',
+      `${AI_QUOTAS.growth} actualizaciones con Inventario Mágico al mes`,
       'Cobra desde el celular en el pasillo',
     ],
   },
@@ -71,7 +71,7 @@ const PLAN_CATALOG = {
       'Todo lo de Crecimiento',
       '20 usuarios',
       'Productos ilimitados',
-      '30 actualizaciones con Inventario Mágico al mes',
+      `${AI_QUOTAS.pro} actualizaciones con Inventario Mágico al mes`,
       'Lee listas y fotos de proveedores con IA',
     ],
   },
