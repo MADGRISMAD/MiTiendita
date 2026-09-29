@@ -764,37 +764,67 @@ async function FindSupportMailByMessageIds(ids) {
   return dbConnection.collection('support_mail').find({ messageId: { $in: wanted } }).toArray();
 }
 
-async function ListSupportMail(tenantId) {
+async function ListSupportMail(tenantId, opts = {}) {
   await ensureSupportMailIndex();
   const rows = await dbConnection
     .collection('support_mail')
-    .find({ tenantId: String(tenantId) })
+    .find(mailOwnerFilter({ tenantId: String(tenantId) }, opts))
     .sort({ at: 1 })
     .limit(80)
     .toArray();
   return rows.map(publicMail);
 }
 
-async function ListSupportMailAll() {
+async function ListSupportMailAll(opts = {}) {
   await ensureSupportMailIndex();
   const rows = await dbConnection
     .collection('support_mail')
-    .find({ tenantId: { $nin: [null, ''] } })
+    .find(mailOwnerFilter({ tenantId: { $nin: [null, ''] } }, opts))
     .sort({ at: 1 })
     .limit(400)
     .toArray();
   return rows.map(publicMail);
 }
 
-async function ListUnmatchedSupportMail() {
+async function ListUnmatchedSupportMail(opts = {}) {
   await ensureSupportMailIndex();
   const rows = await dbConnection
     .collection('support_mail')
-    .find({ tenantId: null, direction: 'in' })
+    .find(mailOwnerFilter({ tenantId: null, direction: 'in' }, opts))
     .sort({ at: -1 })
     .limit(30)
     .toArray();
   return rows.map(publicMail);
+}
+
+function mailOwnerFilter(base, opts = {}) {
+  if (!Object.prototype.hasOwnProperty.call(opts, 'assignedTo')) return base;
+  const me = mailAssignee(opts.assignedTo);
+  if (!me) return { ...base, assignedTo: '__nobody__' };
+  const mailbox = mailAssignee(opts.mailboxOwner);
+  if (mailbox && me === mailbox) {
+    return {
+      ...base,
+      $or: [
+        { assignedTo: me },
+        { assignedTo: null },
+        { assignedTo: '' },
+        { assignedTo: { $exists: false } },
+      ],
+    };
+  }
+  return { ...base, assignedTo: me };
+}
+
+async function AssignUnassignedSupportMail(email) {
+  const assignedTo = mailAssignee(email);
+  if (!assignedTo) return 0;
+  await ensureSupportMailIndex();
+  const result = await dbConnection.collection('support_mail').updateMany(
+    { $or: [{ assignedTo: { $exists: false } }, { assignedTo: null }, { assignedTo: '' }] },
+    { $set: { assignedTo } }
+  );
+  return result.modifiedCount || 0;
 }
 
 async function CreateBillingEvent(data) {
@@ -985,7 +1015,7 @@ module.exports = {
   CreateBillingEvent, ListBillingEvents,
   GetOrders, GetOrderById, GetOrderByInvoiceToken, CreateOrder, UpdateOrder, GetOrdersByCashSession,
   GetOrdersByDateRange, GetSalesReport,
-  SaveSupportMail, FindSupportMailByMessageIds, ListSupportMail, ListSupportMailAll, ListSupportMailRaw, ListUnmatchedSupportMail,
+  SaveSupportMail, FindSupportMailByMessageIds, ListSupportMail, ListSupportMailAll, ListSupportMailRaw, ListUnmatchedSupportMail, AssignUnassignedSupportMail,
   GetInvites, GetInviteByToken, CreateInvite, UpdateInvite, DeleteInvite,
   GetOpenCashSession, GetCashSessionById, CreateCashSession, UpdateCashSession,
   aiMonthKey, GetAiUsage, ReserveAiUse, RefundAiUse, ListAiUsage, ListAiUsageAll,

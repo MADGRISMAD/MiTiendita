@@ -11,6 +11,7 @@ router.post('/login', upload.none(), userController.LoginUsuario, (req, res) => 
     role: req.role,
     tenantId: req.tenantId,
     username: req.username,
+    email: req.email || '',
   });
 });
 router.post('/forgot-password', upload.none(), userController.ForgotPassword);

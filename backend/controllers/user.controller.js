@@ -64,6 +64,7 @@ const CreateUser = async (req, res) => {
       userId: value.username,
       userRole: 'admin',
       tenantId,
+      email: String(value.email || '').trim().toLowerCase(),
     });
 
     const appUrl = resolveAppUrl(req);
@@ -83,6 +84,7 @@ const CreateUser = async (req, res) => {
       role: 'admin',
       tenantId,
       username: value.username,
+      email: String(value.email || '').trim().toLowerCase(),
     });
   } catch (error) {
     return res.status(500).send(error.message);
@@ -113,11 +115,13 @@ const LoginUsuario = async (req, res, next) => {
           userId: search.username,
           userRole: search.role,
           tenantId: search.tenantId || null,
+          email: String(search.email || '').trim().toLowerCase(),
         });
         req.token = token;
         req.role = search.role;
         req.tenantId = search.tenantId || null;
         req.username = search.username;
+        req.email = String(search.email || '').trim().toLowerCase();
         return next();
       }
     }
@@ -243,12 +247,18 @@ const ResetPassword = async (req, res) => {
 };
 
 const Me = async (req, res) => {
-  return res.status(200).json({
-    username: req.user.username,
-    role: req.user.role,
-    tenantId: req.tenantId,
-    roles: ROLES,
-  });
+  try {
+    const user = await service.FindUserByUsername(req.user.username);
+    return res.status(200).json({
+      username: req.user.username,
+      role: req.user.role,
+      tenantId: req.tenantId,
+      email: String(user?.email || req.user.email || '').trim().toLowerCase(),
+      roles: ROLES,
+    });
+  } catch (err) {
+    return res.status(500).send(err.message || 'No pude leer tu sesión');
+  }
 };
 
 const ChangePassword = async (req, res) => {

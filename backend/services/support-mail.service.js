@@ -82,13 +82,9 @@ async function staffContext() {
   const mailbox = mailboxAddress();
   const staff = await db.ListPlatformUsers();
   const staffEmails = new Set(staff.map(staffEmailOf).filter((email) => email.includes('@')));
-  const owner = staff.find((user) => staffEmailOf(user) === mailbox)
-    || staff.find((user) => user.role === 'platform_admin')
-    || staff[0]
-    || null;
   return {
     mailbox,
-    mailboxOwner: staffEmailOf(owner) || mailbox,
+    mailboxOwner: mailbox,
     staffEmails,
   };
 }
@@ -102,9 +98,19 @@ function pickAssignee({ to, parentAssignee, mailbox, mailboxOwner, staffEmails }
   return mailboxOwner || mailbox;
 }
 
+function messageOwner(row, mailboxOwner) {
+  return String(row?.assignedTo || mailboxOwner || '').trim().toLowerCase();
+}
+
+function mineMessages(messages, staffEmail, mailboxOwner) {
+  const me = String(staffEmail || '').trim().toLowerCase();
+  if (!me.includes('@')) return [];
+  return messages.filter((row) => messageOwner(row, mailboxOwner) === me);
+}
+
 function ticketAssignee(ticket, mailboxOwner) {
   const owned = [...(ticket.messages || [])].reverse().find((row) => row.assignedTo) || ticket.messages?.[0];
-  return String(owned?.assignedTo || mailboxOwner || '').trim().toLowerCase();
+  return messageOwner(owned, mailboxOwner);
 }
 
 function mineOnly(tickets, staffEmail, mailboxOwner) {
@@ -125,6 +131,7 @@ function forbidForeignTicket(ticket, staffEmail, mailboxOwner) {
 
 async function backfillAssignees() {
   const { mailbox, mailboxOwner, staffEmails } = await staffContext();
+  await db.AssignUnassignedSupportMail(mailboxOwner);
   const rows = await db.ListSupportMailRaw();
   const byMessage = new Map();
   const byTicket = new Map();
@@ -141,7 +148,7 @@ async function backfillAssignees() {
       mailboxOwner,
       staffEmails,
     });
-    if (!row.assignedTo && assignedTo) {
+    if (assignedTo && assignedTo !== String(row.assignedTo || '').trim().toLowerCase()) {
       await db.SaveSupportMail({ messageId: row.messageId, assignedTo });
     }
     if (row.messageId) byMessage.set(bareId(row.messageId), assignedTo);
@@ -293,7 +300,10 @@ function buildTickets(messages) {
     }
     if (!ticket) {
       const key = subjectKey(message.subject);
-      const bySubject = key ? tickets.find((item) => subjectKey(item.subject) === key) || null : null;
+      const owner = messageOwner(message, '');
+      const bySubject = key
+        ? tickets.find((item) => subjectKey(item.subject) === key && ticketAssignee(item, '') === owner) || null
+        : null;
       if (bySubject && (!message.ticketId || message.ticketId === bySubject.id)) ticket = bySubject;
     }
     if (!ticket) {
@@ -328,31 +338,40 @@ function buildTickets(messages) {
 }
 
 function scopedThread(messages, { staffEmail, clientEmail, mailboxOwner } = {}) {
-  const tickets = buildTickets(messages);
-  let visible = tickets;
   if (clientEmail) {
     const mine = String(clientEmail).trim().toLowerCase();
-    visible = tickets.filter((ticket) => ticket.to === mine);
-  } else if (staffEmail) {
-    visible = mineOnly(tickets, staffEmail, mailboxOwner);
+    const tickets = buildTickets(messages).filter((ticket) => ticket.to === mine);
+    const allowed = new Set(tickets.flatMap((ticket) => ticket.messages.map((row) => row.messageId || row.id)));
+    return {
+      messages: messages.filter((row) => allowed.has(row.messageId) || allowed.has(row.id)),
+      tickets,
+    };
   }
-  const allowed = new Set(visible.flatMap((ticket) => ticket.messages.map((row) => row.messageId || row.id)));
+  const mine = mineMessages(messages, staffEmail, mailboxOwner);
+  const tickets = mineOnly(buildTickets(mine), staffEmail, mailboxOwner);
+  const allowed = new Set(tickets.flatMap((ticket) => ticket.messages.map((row) => row.messageId || row.id)));
   return {
-    messages: messages.filter((row) => allowed.has(row.messageId) || allowed.has(row.id)),
-    tickets: visible,
+    messages: mine.filter((row) => allowed.has(row.messageId) || allowed.has(row.id)),
+    tickets,
   };
 }
 
 async function threadForLocal(tenantId, opts = {}) {
-  const { mailboxOwner } = opts.staffEmail ? await staffContext() : { mailboxOwner: '' };
-  const messages = await db.ListSupportMail(tenantId);
+  const { mailboxOwner } = await staffContext();
+  const messages = await db.ListSupportMail(
+    tenantId,
+    opts.staffEmail ? { assignedTo: opts.staffEmail, mailboxOwner } : {}
+  );
   return scopedThread(messages, { ...opts, mailboxOwner });
 }
 
 async function threadFor(tenantId, opts = {}) {
   const sync = await syncInbox();
   const { mailboxOwner } = await staffContext();
-  const messages = await db.ListSupportMail(tenantId);
+  const messages = await db.ListSupportMail(tenantId, {
+    assignedTo: opts.staffEmail,
+    mailboxOwner,
+  });
   return {
     ...scopedThread(messages, { ...opts, mailboxOwner }),
     inboxError: sync.ok ? '' : sync.reason || '',
@@ -479,13 +498,8 @@ async function sendToClient({ tenantId, to, subject, message, storeName, ticketI
 async function unmatchedInbox(staffEmail) {
   const sync = await syncInbox();
   const { mailboxOwner } = await staffContext();
-  const me = String(staffEmail || '').trim().toLowerCase();
-  const messages = (await db.ListUnmatchedSupportMail()).filter((row) => {
-    const owner = String(row.assignedTo || mailboxOwner).trim().toLowerCase();
-    return owner === me;
-  });
   return {
-    messages,
+    messages: await db.ListUnmatchedSupportMail({ assignedTo: staffEmail, mailboxOwner }),
     inboxError: sync.ok ? '' : sync.reason || '',
   };
 }
@@ -493,7 +507,7 @@ async function unmatchedInbox(staffEmail) {
 async function waitingInbox(staffEmail) {
   const sync = await syncInbox();
   const { mailboxOwner } = await staffContext();
-  const messages = await db.ListSupportMailAll();
+  const messages = await db.ListSupportMailAll({ assignedTo: staffEmail, mailboxOwner });
   const byTenant = new Map();
   for (const message of messages) {
     const tenantId = String(message.tenantId || '');

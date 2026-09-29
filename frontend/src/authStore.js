@@ -6,10 +6,17 @@ const STORAGE_KEY = "timber_auth";
 function load() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { token: null, role: null, tenantId: null, username: null };
-    return JSON.parse(raw);
+    if (!raw) return { token: null, role: null, tenantId: null, username: null, email: null };
+    const parsed = JSON.parse(raw);
+    return {
+      token: parsed.token || null,
+      role: parsed.role || null,
+      tenantId: parsed.tenantId || null,
+      username: parsed.username || null,
+      email: parsed.email || null,
+    };
   } catch {
-    return { token: null, role: null, tenantId: null, username: null };
+    return { token: null, role: null, tenantId: null, username: null, email: null };
   }
 }
 
@@ -25,15 +32,17 @@ function persist() {
       role: authStore.role,
       tenantId: authStore.tenantId,
       username: authStore.username,
+      email: authStore.email,
     })
   );
 }
 
-export function setSession({ token, role, tenantId, username }) {
+export function setSession({ token, role, tenantId, username, email }) {
   authStore.token = token || null;
   authStore.role = role || null;
   authStore.tenantId = tenantId || null;
   authStore.username = username || null;
+  authStore.email = email || null;
   persist();
 }
 
@@ -42,6 +51,7 @@ export function clearSession() {
   authStore.role = null;
   authStore.tenantId = null;
   authStore.username = null;
+  authStore.email = null;
   localStorage.removeItem(STORAGE_KEY);
   clearBillingStatus();
 }

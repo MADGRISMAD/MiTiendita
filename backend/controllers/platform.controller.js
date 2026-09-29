@@ -567,7 +567,7 @@ const STAFF_ROLE_NAMES = { platform_admin: 'Admin', platform_support: 'Soporte' 
 
 async function currentStaffEmail(req) {
   const user = await db.FindUserByUsername(req.user.username);
-  const email = String(user?.email || '').trim().toLowerCase();
+  const email = String(user?.email || req.user.email || '').trim().toLowerCase();
   if (!email.includes('@')) {
     const err = new Error('Tu usuario no tiene un correo asignado.');
     err.status = 400;

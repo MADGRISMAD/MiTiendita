@@ -182,6 +182,7 @@ export default {
           role: request.role,
           tenantId: request.tenantId,
           username: request.username,
+          email: request.email || this.email,
         });
         this.confirmRequest = true;
         this.$router.push("/setup");

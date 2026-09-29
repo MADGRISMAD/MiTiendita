@@ -59,6 +59,7 @@ export default {
           role: res.role,
           tenantId: res.tenantId,
           username: res.username,
+          email: res.email,
         });
         await fetchVenueSettings();
         if (res.role === "admin" && !isSetupComplete()) {

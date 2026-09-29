@@ -24,6 +24,7 @@ function requireAuth(req, res, next) {
     username: payload.userId,
     role,
     tenantId: payload.tenantId || null,
+    email: String(payload.email || '').trim().toLowerCase() || null,
   };
   req.tenantId = payload.tenantId || null;
   return next();
