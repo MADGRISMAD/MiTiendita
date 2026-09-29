@@ -3,7 +3,8 @@
     <div class="pos" :class="{ manage: mode === 'manage' }">
       <!-- Aviso de caja abierta mucho tiempo -->
       <div v-if="cashOpenWarning" class="cash-warning-banner">
-        ⚠️ ¡Cuidado! La caja lleva abierta más de 12 horas. ¿Olvidaste hacer corte?
+        ⚠️ La caja lleva abierta más de 12 horas. Las ventas y el escaneo están bloqueados hasta que hagas el corte de caja.
+        <router-link to="/orders">Ir al corte de caja</router-link>
       </div>
 
       <!-- ═══════════ MODO VENTA ═══════════ -->
@@ -26,7 +27,7 @@
               type="button"
               class="fkey accent hide-mobile"
               @click="finalizeOrder"
-              :disabled="!lines.length || sending"
+              :disabled="!lines.length || sending || cashBlocked"
             >
               <span class="fk only-pc">F12</span>
               <span class="fl">Cobrar</span>
@@ -40,8 +41,11 @@
             <span>{{ businessName }}</span>
             <span>{{ itemCount }} artículos</span>
             <span v-if="ticketDiscount">Dcto {{ ticketDiscount }}%</span>
-            <span class="status-hint only-pc">{{ offlineStore.online ? 'Escáner listo · Enter agrega' : 'Sin internet · catálogo local' }}</span>
-            <span class="status-hint only-tablet">{{ offlineStore.online ? 'Listo para escanear' : 'Sin internet' }}</span>
+            <span v-if="cashBlocked" class="status-hint">Bloqueado · haz el corte de caja</span>
+            <template v-else>
+              <span class="status-hint only-pc">Escáner listo · Enter agrega</span>
+              <span class="status-hint only-tablet">Listo para escanear</span>
+            </template>
           </div>
 
           <div class="desk-top">
@@ -56,7 +60,14 @@
                   inputmode="search"
                   enterkeyhint="search"
                   class="scan-input"
-                  :placeholder="compactPos ? 'Buscar o escanear' : 'Busca o escanea un producto'"
+                  :disabled="cashBlocked"
+                  :placeholder="
+                    cashBlocked
+                      ? 'Bloqueado: haz el corte de caja'
+                      : compactPos
+                        ? 'Buscar o escanear'
+                        : 'Busca o escanea un producto'
+                  "
                   autocomplete="off"
                   autocorrect="off"
                   autocapitalize="off"
@@ -80,6 +91,7 @@
                   :key="p.id"
                   type="button"
                   class="hit"
+                  :disabled="cashBlocked"
                   @click="addProduct(p)"
                 >
                   <span>{{ p.name }}</span>
@@ -126,6 +138,7 @@
                 type="button"
                 class="m-prod"
                 :class="{ in: qtyInCart(p.id) > 0 }"
+                :disabled="cashBlocked"
                 @click="addProduct(p)"
               >
                 <span class="m-prod-inner">
@@ -211,7 +224,9 @@
                   = {{ money(lastLineTotal) }}
                 </p>
               </template>
-              <p v-else class="last-idle">Escanea para agregar</p>
+              <p v-else class="last-idle">
+                {{ cashBlocked ? 'Haz el corte de caja para vender' : 'Escanea para agregar' }}
+              </p>
               <p v-if="msg" class="foot-msg">
                 {{ msg }}
                 <a
@@ -226,7 +241,7 @@
             <button
               type="button"
               class="btn-cobrar"
-              :disabled="!lines.length || sending"
+              :disabled="!lines.length || sending || cashBlocked"
               @click="finalizeOrder"
             >
               {{ sending ? '…' : 'COBRAR' }}
@@ -245,11 +260,13 @@
                 <strong>{{ money(total) }}</strong>
                 <small>
                   {{
-                    !lines.length
-                      ? 'Toca para agregar'
-                      : lastAdded
-                        ? lastAdded.name
-                        : 'Ver ticket'
+                    cashBlocked
+                      ? 'Haz el corte de caja'
+                      : !lines.length
+                        ? 'Toca para agregar'
+                        : lastAdded
+                          ? lastAdded.name
+                          : 'Ver ticket'
                   }}
                 </small>
               </span>
@@ -257,7 +274,7 @@
             <button
               type="button"
               class="m-pay-go"
-              :disabled="!lines.length || sending"
+              :disabled="!lines.length || sending || cashBlocked"
               @click="finalizeOrder"
             >
               {{ sending ? '…' : 'Cobrar' }}
@@ -319,9 +336,17 @@
           </aside>
 
           <section class="grid-pane">
-            <button v-if="aiEnabled" type="button" class="magic-open" @click="showMagic = true">
+            <button
+              v-if="aiEnabled"
+              type="button"
+              class="magic-open"
+              :disabled="cashBlocked"
+              @click="openMagic"
+            >
               <span class="magic-title">Actualizar precios</span>
-              <span class="magic-sub">Inventario Mágico · Precio Mágico</span>
+              <span class="magic-sub">
+                {{ cashBlocked ? 'Bloqueado hasta el corte de caja' : 'Inventario Mágico · Precio Mágico' }}
+              </span>
             </button>
 
             <!-- Vista de cuadrícula (grid) -->
@@ -361,7 +386,7 @@
                   v-if="!menus.length"
                   type="button"
                   class="add-food"
-                  :disabled="seeding"
+                  :disabled="seeding || cashBlocked"
                   @click="seedStarter"
                 >{{ seeding ? "Cargando…" : "Cargar 8 productos de ejemplo" }}</button>
                 <p v-if="seedErr" class="empty">{{ seedErr }}</p>
@@ -456,7 +481,7 @@
               <button
                 type="button"
                 class="act primary"
-                :disabled="!lines.length || sending"
+                :disabled="!lines.length || sending || cashBlocked"
                 @click="payFromMobileCart"
               >
                 Cobrar
@@ -634,7 +659,12 @@
 
               <p v-if="payError" class="scan-msg err">{{ payError }}</p>
 
-              <button type="button" class="act primary pay-confirm" :disabled="sending" @click="confirmPayment">
+              <button
+                type="button"
+                class="act primary pay-confirm"
+                :disabled="sending || cashBlocked"
+                @click="confirmPayment"
+              >
                 {{ sending ? 'Cobrando…' : 'Confirmar cobro' }}
               </button>
               <button type="button" class="act" @click="closePayment">Cancelar</button>
@@ -680,8 +710,15 @@
                 <input v-model.number="foodForm.cost" class="inp" type="number" min="0" step="0.01" placeholder="0.00" />
               </label>
               <label v-if="inventoryOn" class="field">
-                <span>Existencias</span>
-                <input v-model.number="foodForm.stock" class="inp" type="number" min="0" step="1" />
+                <span>Existencias{{ cashBlocked ? ' (bloqueado: haz el corte)' : '' }}</span>
+                <input
+                  v-model.number="foodForm.stock"
+                  class="inp"
+                  type="number"
+                  min="0"
+                  step="1"
+                  :disabled="cashBlocked"
+                />
               </label>
               <label v-if="inventoryOn" class="field">
                 <span>Stock mínimo</span>
@@ -727,7 +764,13 @@
                 <button type="button" class="act" @click="closeFoodForm">Cancelar</button>
                 <button type="submit" class="act primary">Guardar producto</button>
               </div>
-              <button v-if="editingFood" type="button" class="delete-link" @click="deleteFood">
+              <button
+                v-if="editingFood"
+                type="button"
+                class="delete-link"
+                :disabled="cashBlocked"
+                @click="deleteFood"
+              >
                 Eliminar este producto
               </button>
             </footer>
@@ -866,7 +909,8 @@ export default {
     const openingFloat = ref(0);
     const cashBusy = ref(false);
     const lastTicketId = ref("");
-    const lastTicketOffline = ref(false);
+    const cashBlocked = computed(() => cashOpenWarning.value);
+    const BLOCK_MSG = "Caja abierta más de 12 horas. Realiza el corte de caja para continuar.";
 
     async function loadCashSession() {
       try {
@@ -1082,7 +1126,7 @@ export default {
     }
 
     function focusScan() {
-      if (isCompactPos()) return;
+      if (isCompactPos() || cashBlocked.value) return;
       nextTick(() => {
         const blocked =
           showPriceCheck.value ||
@@ -1165,6 +1209,11 @@ export default {
     }
 
     function addProduct(producto) {
+      if (cashBlocked.value) {
+        scanError.value = BLOCK_MSG;
+        nameHits.value = [];
+        return;
+      }
       const idx = store.platillosSeleccionados.findIndex((p) => p.id === producto.id);
       if (idx >= 0) {
         store.platillosSeleccionados[idx].quantity += 1;
@@ -1199,6 +1248,11 @@ export default {
     async function applyScannedCode(raw) {
       const code = String(raw || "").trim();
       if (!code || mode.value !== "pos") return;
+      if (cashBlocked.value) {
+        scanError.value = BLOCK_MSG;
+        clearScanField();
+        return;
+      }
       if (showFoodForm.value || showMenuForm.value || showDiscount.value || showMagic.value) return;
       if (code === lastSaleCode && Date.now() - lastSaleAt < 450) return;
       if (scanning.value) {
@@ -1260,6 +1314,7 @@ export default {
         if (!q) nameHits.value = [];
         return;
       }
+      if (cashBlocked.value) return;
       if (isCodeQuery(q)) {
         searchTimer = setTimeout(() => {
           if (String(scanCode.value || "").trim() !== q) return;
@@ -1280,6 +1335,18 @@ export default {
           nameHits.value = [];
         }
       }, 220);
+    });
+      watch(cashBlocked, (blocked) => {
+      if (!blocked) {
+        if (scanError.value === BLOCK_MSG) scanError.value = "";
+        if (payError.value === BLOCK_MSG) payError.value = "";
+        if (foodError.value === BLOCK_MSG) foodError.value = "";
+        focusScan();
+      } else {
+        resetWedge();
+        nameHits.value = [];
+        scanInput.value?.blur();
+      }
     });
 
     function bumpQty(i, delta) {
@@ -1367,6 +1434,11 @@ export default {
     });
 
     function finalizeOrder() {
+      if (cashBlocked.value) {
+        scanError.value = BLOCK_MSG;
+        showMobileCart.value = false;
+        return;
+      }
       if (!lines.value.length || sending.value) return;
       payMethod.value = "cash";
       payCashReceived.value = 0;
@@ -1389,6 +1461,10 @@ export default {
     }
 
     async function confirmPayment() {
+      if (cashBlocked.value) {
+        payError.value = BLOCK_MSG;
+        return;
+      }
       if (!lines.value.length || sending.value) return;
       payError.value = "";
 
@@ -1525,6 +1601,7 @@ export default {
 
     function captureWedge(e) {
       if (mode.value !== "pos") return;
+      if (cashBlocked.value && !showPriceCheck.value) return;
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       if (e.key === "Escape") {
         resetWedge();
@@ -1618,6 +1695,10 @@ export default {
     }
 
     async function seedStarter() {
+      if (cashBlocked.value) {
+        seedErr.value = BLOCK_MSG;
+        return;
+      }
       seeding.value = true;
       seedErr.value = "";
       try {
@@ -1729,6 +1810,11 @@ export default {
       showFoodForm.value = true;
     }
 
+    function openMagic() {
+      if (cashBlocked.value) return;
+      showMagic.value = true;
+    }
+
     function onMagicManual() {
       showMagic.value = false;
       openNewFood();
@@ -1759,6 +1845,14 @@ export default {
 
     async function createFood() {
       foodError.value = "";
+      if (cashBlocked.value && inventoryOn.value) {
+        const prevStock = editingFood.value ? Number(editingFood.value.stock) || 0 : 0;
+        if ((Number(foodForm.stock) || 0) !== prevStock) {
+          foodError.value = "No puedes modificar el stock hasta hacer el corte de caja.";
+          return;
+        }
+      }
+
       const shouldAdd = addAfterSave.value;
       const intent = pendingIntent.value;
       const payload = {
@@ -1814,6 +1908,10 @@ export default {
 
     async function deleteFood() {
       if (!editingFood.value) return;
+      if (cashBlocked.value) {
+        foodError.value = BLOCK_MSG;
+        return;
+      }
       const name = editingFood.value.name || "este producto";
       if (!window.confirm(`¿Seguro que quieres quitar “${name}” del catálogo?`)) return;
       await apiService.deleteFood(editingFood.value.id);
@@ -1826,6 +1924,7 @@ export default {
       () => route.name,
       (name) => {
         mode.value = name === "products" ? "manage" : "pos";
+        loadCashSession();
         if (mode.value === "pos") focusScan();
         else if (menus.value[0] && !selectedMenuId.value) loadMenuProducts(menus.value[0].id);
       }
@@ -1834,6 +1933,10 @@ export default {
     watch(showPriceCheck, (v) => {
       if (v) nextTick(() => priceInput.value?.focus());
     });
+      function onWindowFocus() {
+      loadCashSession();
+      focusScan();
+    }
 
     onMounted(async () => {
       await fetchMenus();
@@ -1845,13 +1948,12 @@ export default {
       if (compactPos.value) scanInput.value?.blur();
       else focusScan();
       window.addEventListener("keydown", onHotkey);
-      window.addEventListener("focus", focusScan);
-      flushOfflineSales();
+      window.addEventListener("focus", onWindowFocus);
     });
 
     onUnmounted(() => {
       window.removeEventListener("keydown", onHotkey);
-      window.removeEventListener("focus", focusScan);
+      window.removeEventListener("focus", onWindowFocus);
       if (compactMq) {
         if (compactMq.removeEventListener) compactMq.removeEventListener("change", onCompactChange);
         else compactMq.removeListener(onCompactChange);
@@ -1909,6 +2011,7 @@ export default {
       showMenuForm,
       showFoodForm,
       showMagic,
+      openMagic,
       aiEnabled,
       onMagicApplied,
       onMagicManual,
@@ -1918,6 +2021,7 @@ export default {
       foodPricePreview,
       editingFood,
       inventoryOn,
+      TAX_RATE,
       catalogSearch,
       viewMode,
       lowStockItems,
@@ -1960,6 +2064,7 @@ export default {
       confirmPayment,
       cashOpen,
       cashOpenWarning,
+      cashBlocked,
       cashSession,
       openingFloat,
       cashBusy,
@@ -2876,6 +2981,27 @@ export default {
   text-align: center;
   flex-shrink: 0;
 }
+.cash-warning-banner a {
+  color: inherit;
+  text-decoration: underline;
+  margin-left: 0.4rem;
+  white-space: nowrap;
+}
+
+.m-prod:disabled,
+.hit:disabled,
+.magic-open:disabled,
+.scan-input:disabled,
+.inp:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.delete-link:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  text-decoration: none;
+}
+.act:disabled { opacity: 0.45; cursor: not-allowed; }
 
 .offline-banner {
   background: color-mix(in srgb, var(--timber-warning, #e08a1e) 22%, var(--timber-panel));

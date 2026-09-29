@@ -7,10 +7,22 @@ function summarizeOrders(orders) {
     if (o.paymentStatus !== 'paid') continue;
     const method = o.paymentMethod || 'other';
     const amount = Number(o.total || 0);
-    if (totals[method] != null) totals[method] += amount;
-    else totals.other += amount;
+
+    if (method === 'split') {
+      // Mixto: la parte de tarjeta va a card, el resto se queda en efectivo
+      const cardPart = Math.min(amount, Math.max(0, Number(o.cardAmount || 0)));
+      totals.card += cardPart;
+      totals.cash += Number((amount - cardPart).toFixed(2));
+    } else if (totals[method] != null) {
+      totals[method] += amount;
+    } else {
+      totals.other += amount;
+    }
     totals.total += amount;
   }
+  totals.cash = Number(totals.cash.toFixed(2));
+  totals.card = Number(totals.card.toFixed(2));
+  totals.total = Number(totals.total.toFixed(2));
   return totals;
 }
 
