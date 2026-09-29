@@ -909,6 +909,7 @@ export default {
     const openingFloat = ref(0);
     const cashBusy = ref(false);
     const lastTicketId = ref("");
+    const lastTicketOffline = ref(false);
     const cashBlocked = computed(() => cashOpenWarning.value);
     const BLOCK_MSG = "Caja abierta más de 12 horas. Realiza el corte de caja para continuar.";
 
