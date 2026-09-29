@@ -17,6 +17,7 @@ node_modules
 
 # Build
 dist
+tmp-mail-preview
 .DS_Store
 
 # Local Netlify folder

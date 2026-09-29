@@ -48,7 +48,13 @@ docker compose up --build -d
 
 ## Notificación del deploy a producción
 
-Cada push a `main` ejecuta `.github/workflows/deploy.yml` y despliega a Vercel. Cuando el job de deploy termina (éxito, fallo o cancelación) un segundo job envía un correo con el resultado. Si armar o enviar el correo falla, el estado del workflow sigue siendo el del deploy. Hasta que existan `MAIL_USERNAME` y `MAIL_PASSWORD`, el envío se omite y el log deja una advertencia; el deploy no cambia de resultado.
+Cada push a `main` ejecuta `.github/workflows/deploy.yml` y despliega a Vercel. Cuando el job de deploy termina (éxito, fallo o cancelación) un segundo job envía un correo HTML del sistema interno **minegocio** (verde bosque) con el resultado. Si armar o enviar el correo falla, el estado del workflow sigue siendo el del deploy. Hasta que existan `MAIL_USERNAME` y `MAIL_PASSWORD`, el envío se omite y el log deja una advertencia; el deploy no cambia de resultado.
+
+Vista previa local:
+
+```bash
+node backend/scripts/render-deploy-mail.js --preview
+```
 
 Esos secretos tienen que estar en **GitHub** (no en Vercel): entorno **production** o secretos del repositorio en Actions. El job de correo usa `environment: production`, así que lee los secretos de ese entorno.
 
