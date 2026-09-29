@@ -41,6 +41,8 @@
             <span>{{ businessName }}</span>
             <span>{{ itemCount }} artículos</span>
             <span v-if="ticketDiscount">Dcto {{ ticketDiscount }}%</span>
+            <span class="status-hint only-pc">{{ offlineStore.online ? 'Escáner listo · Enter agrega' : 'Sin internet · catálogo local' }}</span>
+            <span class="status-hint only-tablet">{{ offlineStore.online ? 'Listo para escanear' : 'Sin internet' }}</span>
             <span v-if="cashBlocked" class="status-hint">Bloqueado · haz el corte de caja</span>
             <template v-else>
               <span class="status-hint only-pc">Escáner listo · Enter agrega</span>
