@@ -40,6 +40,7 @@ jobs:
     needs: deploy
     if: always()
     runs-on: ubuntu-latest
+    environment: production
     continue-on-error: true
     env:
       DEFAULT_MAIL_TO: mayra.bamaca09@gmail.com,madgrismad@gmail.com,luispantoja1102@gmail.com
@@ -125,9 +126,9 @@ jobs:
           print(body)
           if not ready:
               print(
-                  "::warning::No se envió el correo: faltan los secretos "
-                  "MAIL_USERNAME y/o MAIL_PASSWORD "
-                  "(Settings > Secrets and variables > Actions)."
+                  "::warning::No se envió el correo: faltan MAIL_USERNAME y/o "
+                  "MAIL_PASSWORD en el entorno production "
+                  "(Settings > Environments > production)."
               )
           PY
 

@@ -50,6 +50,8 @@ docker compose up --build -d
 
 Cada push a `main` ejecuta `.github/workflows/deploy.yml` y despliega a Vercel. Cuando el job de deploy termina (éxito, fallo o cancelación) un segundo job envía un correo con el resultado. Si armar o enviar el correo falla, el estado del workflow sigue siendo el del deploy. Hasta que existan `MAIL_USERNAME` y `MAIL_PASSWORD`, el envío se omite y el log deja una advertencia; el deploy no cambia de resultado.
 
+Esos secretos tienen que estar en **GitHub** (no en Vercel): entorno **production** o secretos del repositorio en Actions. El job de correo usa `environment: production`, así que lee los secretos de ese entorno.
+
 El mensaje incluye resultado, mensaje del commit, SHA corto, autor, quién hizo push, rama, fecha y hora en `America/Tijuana`, enlace al commit, enlace a la ejecución de Actions y la URL de producción https://www.mitiendita.software/.
 
 Destinatarios por defecto:
@@ -58,7 +60,7 @@ Destinatarios por defecto:
 - madgrismad@gmail.com
 - luispantoja1102@gmail.com
 
-Secretos del repositorio, en **Settings → Secrets and variables → Actions**:
+Secretos en **Settings → Environments → production → Environment secrets** (o en **Settings → Secrets and variables → Actions** si los quieres a nivel de repositorio):
 
 - `MAIL_USERNAME` (obligatorio) — dirección de Gmail que envía, por ejemplo `mitiendita@gmail.com`.
 - `MAIL_PASSWORD` (obligatorio) — contraseña de aplicación de esa cuenta. No uses la contraseña normal ni la subas al repositorio.
