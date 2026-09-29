@@ -102,7 +102,8 @@ async function clientCard(tenant, { withUsers = false } = {}) {
 
 async function listTenants(req, res) {
   try {
-    const [tenants, inbox] = await Promise.all([db.ListTenants(), supportMail.waitingInbox()]);
+    const staffEmail = await currentStaffEmail(req);
+    const [tenants, inbox] = await Promise.all([db.ListTenants(), supportMail.waitingInbox(staffEmail)]);
     const waiting = new Map();
     for (const item of inbox.items || []) {
       const current = waiting.get(item.tenantId) || { count: 0, at: null };
@@ -118,7 +119,7 @@ async function listTenants(req, res) {
     return res.status(200).json(enriched);
   } catch (err) {
     console.error(err);
-    return res.status(500).send(err.message || 'No pude cargar los clientes.');
+    return res.status(err.status || 500).send(err.message || 'No pude cargar los clientes.');
   }
 }
 
@@ -209,10 +210,11 @@ async function clientMail(req, res) {
   try {
     const tenant = await db.GetTenantById(req.params.id);
     if (!tenant) return res.status(404).send('No encontré ese cliente.');
-    return res.status(200).json(await supportMail.threadFor(tenant.id));
+    const staffEmail = await currentStaffEmail(req);
+    return res.status(200).json(await supportMail.threadFor(tenant.id, { staffEmail }));
   } catch (err) {
     console.error(err);
-    return res.status(500).send(err.message || 'No pude cargar los correos.');
+    return res.status(err.status || 500).send(err.message || 'No pude cargar los correos.');
   }
 }
 
@@ -220,6 +222,7 @@ async function sendClientMail(req, res) {
   try {
     const tenant = await db.GetTenantById(req.params.id);
     if (!tenant) return res.status(404).send('No encontré ese cliente.');
+    const staffEmail = await currentStaffEmail(req);
     const card = await clientCard(tenant, { withUsers: true });
     const allowed = new Set(
       (card.users || [])
@@ -238,6 +241,7 @@ async function sendClientMail(req, res) {
       message: req.body?.message,
       storeName: card.businessName,
       ticketId,
+      staffEmail,
     });
     return res.status(200).json(thread);
   } catch (err) {
@@ -249,10 +253,11 @@ async function sendClientMail(req, res) {
 
 async function inbox(req, res) {
   try {
-    return res.status(200).json(await supportMail.unmatchedInbox());
+    const staffEmail = await currentStaffEmail(req);
+    return res.status(200).json(await supportMail.unmatchedInbox(staffEmail));
   } catch (err) {
     console.error(err);
-    return res.status(500).send(err.message || 'No pude leer la bandeja.');
+    return res.status(err.status || 500).send(err.message || 'No pude leer la bandeja.');
   }
 }
 
@@ -495,7 +500,8 @@ async function buildBooks() {
 
 async function overview(req, res) {
   try {
-    const [books, inbox] = await Promise.all([buildBooks(), supportMail.waitingInbox()]);
+    const staffEmail = await currentStaffEmail(req);
+    const [books, inbox] = await Promise.all([buildBooks(), supportMail.waitingInbox(staffEmail)]);
     return res.status(200).json({
       ...books,
       waiting: inbox.items || [],
@@ -503,7 +509,7 @@ async function overview(req, res) {
     });
   } catch (err) {
     console.error(err);
-    return res.status(500).send(err.message || 'No pude armar el resumen.');
+    return res.status(err.status || 500).send(err.message || 'No pude armar el resumen.');
   }
 }
 
@@ -558,6 +564,17 @@ async function deleteExpense(req, res) {
 
 const STAFF_ROLES = ['platform_admin', 'platform_support'];
 const STAFF_ROLE_NAMES = { platform_admin: 'Admin', platform_support: 'Soporte' };
+
+async function currentStaffEmail(req) {
+  const user = await db.FindUserByUsername(req.user.username);
+  const email = String(user?.email || '').trim().toLowerCase();
+  if (!email.includes('@')) {
+    const err = new Error('Tu usuario no tiene un correo asignado.');
+    err.status = 400;
+    throw err;
+  }
+  return email;
+}
 
 function publicStaff(user) {
   if (!user) return null;

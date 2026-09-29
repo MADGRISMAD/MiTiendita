@@ -60,9 +60,10 @@ async function notifyInvoiceEmails({ order, settings, invoice, publicView }) {
   }
 
   try {
-    const admins = await db.ListTenantAdminEmails(order.tenantId);
-    for (const adminEmail of admins) {
-      if (adminEmail === invoice.email) continue;
+    const users = await db.ListUsersByTenant(order.tenantId);
+    const owner = users.find((user) => user.role === 'admin') || users[0] || null;
+    const adminEmail = String(owner?.email || '').trim().toLowerCase();
+    if (adminEmail && adminEmail !== invoice.email) {
       try {
         const r = await sendInvoiceRequestStoreEmail({
           to: adminEmail,
@@ -78,7 +79,7 @@ async function notifyInvoiceEmails({ order, settings, invoice, publicView }) {
       }
     }
   } catch (err) {
-    console.error('[mail] admins factura:', err.message);
+    console.error('[mail] owner factura:', err.message);
   }
 
   return mail;

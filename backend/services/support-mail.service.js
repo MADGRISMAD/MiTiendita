@@ -64,10 +64,90 @@ function makeMessageId() {
 
 function addressList(value) {
   if (!value) return [];
-  const list = Array.isArray(value) ? value : [value];
+  const list = Array.isArray(value) ? value : String(value).split(/[,;]+/);
   return list
-    .map((item) => String(item.address || item || '').trim().toLowerCase())
+    .map((item) => {
+      const raw = String(item && typeof item === 'object' ? item.address || '' : item || '');
+      const angled = raw.match(/<([^>]+)>/);
+      return (angled ? angled[1] : raw).trim().toLowerCase();
+    })
     .filter((email) => email.includes('@'));
+}
+
+function staffEmailOf(user) {
+  return String(user?.email || '').trim().toLowerCase();
+}
+
+async function staffContext() {
+  const mailbox = mailboxAddress();
+  const staff = await db.ListPlatformUsers();
+  const staffEmails = new Set(staff.map(staffEmailOf).filter((email) => email.includes('@')));
+  const owner = staff.find((user) => staffEmailOf(user) === mailbox)
+    || staff.find((user) => user.role === 'platform_admin')
+    || staff[0]
+    || null;
+  return {
+    mailbox,
+    mailboxOwner: staffEmailOf(owner) || mailbox,
+    staffEmails,
+  };
+}
+
+function pickAssignee({ to, parentAssignee, mailbox, mailboxOwner, staffEmails }) {
+  const inherited = String(parentAssignee || '').trim().toLowerCase();
+  if (inherited.includes('@')) return inherited;
+  const recipients = addressList(to);
+  const addressedStaff = recipients.find((email) => staffEmails.has(email) && email !== mailbox);
+  if (addressedStaff) return addressedStaff;
+  return mailboxOwner || mailbox;
+}
+
+function ticketAssignee(ticket, mailboxOwner) {
+  const owned = [...(ticket.messages || [])].reverse().find((row) => row.assignedTo) || ticket.messages?.[0];
+  return String(owned?.assignedTo || mailboxOwner || '').trim().toLowerCase();
+}
+
+function mineOnly(tickets, staffEmail, mailboxOwner) {
+  const me = String(staffEmail || '').trim().toLowerCase();
+  if (!me.includes('@')) return [];
+  return tickets.filter((ticket) => ticketAssignee(ticket, mailboxOwner) === me);
+}
+
+function forbidForeignTicket(ticket, staffEmail, mailboxOwner) {
+  const me = String(staffEmail || '').trim().toLowerCase();
+  const owner = ticketAssignee(ticket, mailboxOwner);
+  if (owner && me && owner !== me) {
+    const err = new Error('Ese correo está asignado a otra persona.');
+    err.status = 403;
+    throw err;
+  }
+}
+
+async function backfillAssignees() {
+  const { mailbox, mailboxOwner, staffEmails } = await staffContext();
+  const rows = await db.ListSupportMailRaw();
+  const byMessage = new Map();
+  const byTicket = new Map();
+  for (const row of rows) {
+    const refs = [row.inReplyTo, ...(row.references || [])].map(bareId).filter(Boolean);
+    const inherited = String(row.assignedTo || '').trim().toLowerCase()
+      || refs.map((id) => byMessage.get(id)).find(Boolean)
+      || (row.ticketId ? byTicket.get(row.ticketId) : '')
+      || '';
+    const assignedTo = pickAssignee({
+      to: row.to,
+      parentAssignee: inherited,
+      mailbox,
+      mailboxOwner,
+      staffEmails,
+    });
+    if (!row.assignedTo && assignedTo) {
+      await db.SaveSupportMail({ messageId: row.messageId, assignedTo });
+    }
+    if (row.messageId) byMessage.set(bareId(row.messageId), assignedTo);
+    if (row.ticketId) byTicket.set(row.ticketId, assignedTo);
+  }
+  return { mailbox, mailboxOwner, staffEmails };
 }
 
 async function clientDirectory() {
@@ -90,8 +170,12 @@ async function rememberMessage(doc) {
 }
 
 async function pullInbox() {
-  if (!canReadInbox()) return { ok: false, reason: 'sin buzón' };
+  if (!canReadInbox()) {
+    await backfillAssignees().catch(() => {});
+    return { ok: false, reason: 'sin buzón' };
+  }
   const ours = mailboxAddress();
+  const { mailboxOwner, staffEmails } = await backfillAssignees();
   const directory = await clientDirectory();
   const client = new ImapFlow({
     host: process.env.IMAP_HOST || 'imap.gmail.com',
@@ -118,7 +202,7 @@ async function pullInbox() {
       const parsed = await simpleParser(msg.source);
       const messageId = String(parsed.messageId || msg.envelope?.messageId || `uid-${msg.uid}`).trim();
       const from = addressList(parsed.from?.value)[0] || '';
-      const to = addressList(parsed.to?.value).join(', ');
+      const to = [...addressList(parsed.to?.value), ...addressList(parsed.cc?.value)].join(', ');
       const participants = [from, ...addressList(parsed.to?.value)].filter((email) => email && email !== ours);
       const replyIds = referenceIds(parsed);
       const linked = await db.FindSupportMailByMessageIds(replyIdVariants(replyIds));
@@ -126,6 +210,13 @@ async function pullInbox() {
       const tenantId = parent?.tenantId || participants.map((email) => directory.get(email)).find(Boolean) || null;
       const ticketId = parent?.ticketId || (parent ? bareId(parent.messageId) : bareId(messageId));
       const direction = from === ours ? 'out' : 'in';
+      const assignedTo = pickAssignee({
+        to,
+        parentAssignee: parent?.assignedTo,
+        mailbox: ours,
+        mailboxOwner,
+        staffEmails,
+      });
       if (parent && tenantId && (!parent.tenantId || !parent.ticketId)) {
         await rememberMessage({
           messageId: parent.messageId,
@@ -136,6 +227,7 @@ async function pullInbox() {
           to: parent.to,
           subject: parent.subject,
           text: parent.text,
+          assignedTo,
           at: parent.at,
         });
       }
@@ -150,6 +242,7 @@ async function pullInbox() {
         text: clip(parsed.text || ''),
         inReplyTo: replyIds[0] ? wrapId(replyIds[0]) : '',
         references: replyIds.map(wrapId),
+        assignedTo,
         at: parsed.date || msg.envelope?.date || new Date(),
       });
       added += 1;
@@ -224,6 +317,7 @@ function buildTickets(messages) {
         status: last?.direction === 'in' ? 'open' : 'answered',
         updatedAt: last?.at || null,
         to: counterparty(ticket.messages),
+        assignedTo: ticketAssignee({ messages: ticket.messages }, ''),
         messages: ticket.messages,
       };
     })
@@ -233,15 +327,36 @@ function buildTickets(messages) {
     });
 }
 
-async function threadForLocal(tenantId) {
-  const messages = await db.ListSupportMail(tenantId);
-  return { messages, tickets: buildTickets(messages) };
+function scopedThread(messages, { staffEmail, clientEmail, mailboxOwner } = {}) {
+  const tickets = buildTickets(messages);
+  let visible = tickets;
+  if (clientEmail) {
+    const mine = String(clientEmail).trim().toLowerCase();
+    visible = tickets.filter((ticket) => ticket.to === mine);
+  } else if (staffEmail) {
+    visible = mineOnly(tickets, staffEmail, mailboxOwner);
+  }
+  const allowed = new Set(visible.flatMap((ticket) => ticket.messages.map((row) => row.messageId || row.id)));
+  return {
+    messages: messages.filter((row) => allowed.has(row.messageId) || allowed.has(row.id)),
+    tickets: visible,
+  };
 }
 
-async function threadFor(tenantId) {
-  const sync = await syncInbox();
+async function threadForLocal(tenantId, opts = {}) {
+  const { mailboxOwner } = opts.staffEmail ? await staffContext() : { mailboxOwner: '' };
   const messages = await db.ListSupportMail(tenantId);
-  return { messages, tickets: buildTickets(messages), inboxError: sync.ok ? '' : sync.reason || '' };
+  return scopedThread(messages, { ...opts, mailboxOwner });
+}
+
+async function threadFor(tenantId, opts = {}) {
+  const sync = await syncInbox();
+  const { mailboxOwner } = await staffContext();
+  const messages = await db.ListSupportMail(tenantId);
+  return {
+    ...scopedThread(messages, { ...opts, mailboxOwner }),
+    inboxError: sync.ok ? '' : sync.reason || '',
+  };
 }
 
 async function sendFromClient({ tenantId, from, storeName, subject, message }) {
@@ -257,6 +372,7 @@ async function sendFromClient({ tenantId, from, storeName, subject, message }) {
     err.status = 400;
     throw err;
   }
+  const { mailboxOwner } = await staffContext();
   const messageId = makeMessageId();
   const ticketId = bareId(messageId);
   await rememberMessage({
@@ -268,6 +384,7 @@ async function sendFromClient({ tenantId, from, storeName, subject, message }) {
     to: mailboxAddress(),
     subject: title,
     text: body,
+    assignedTo: mailboxOwner,
     at: new Date(),
   });
   if (hasSmtpConfig() && from) {
@@ -280,10 +397,10 @@ async function sendFromClient({ tenantId, from, storeName, subject, message }) {
       })
     );
   }
-  return threadForLocal(tenantId);
+  return threadForLocal(tenantId, { clientEmail: String(from || '').toLowerCase() });
 }
 
-async function sendToClient({ tenantId, to, subject, message, storeName, ticketId }) {
+async function sendToClient({ tenantId, to, subject, message, storeName, ticketId, staffEmail }) {
   const body = String(message || '').trim();
   if (body.length < 2) {
     const err = new Error('Escribe el mensaje.');
@@ -291,6 +408,8 @@ async function sendToClient({ tenantId, to, subject, message, storeName, ticketI
     throw err;
   }
 
+  const { mailboxOwner } = await staffContext();
+  const assignee = String(staffEmail || mailboxOwner).trim().toLowerCase();
   const existing = await db.ListSupportMail(tenantId);
   const tickets = buildTickets(existing);
   const ticket = ticketId ? tickets.find((item) => item.id === String(ticketId)) : null;
@@ -299,6 +418,7 @@ async function sendToClient({ tenantId, to, subject, message, storeName, ticketI
     err.status = 404;
     throw err;
   }
+  if (ticket) forbidForeignTicket(ticket, assignee, mailboxOwner);
 
   const recipient = String(ticket?.to || to || '').trim().toLowerCase();
   const title = ticket ? replySubject(ticket.subject) : String(subject || '').trim();
@@ -319,6 +439,7 @@ async function sendToClient({ tenantId, to, subject, message, storeName, ticketI
     : [];
   const messageId = makeMessageId();
   const resolvedTicket = ticket?.id || bareId(messageId);
+  const assignedTo = ticket ? ticketAssignee(ticket, mailboxOwner) : assignee;
   const built = templates.supportReplyEmail({ storeName, message: body });
   const sent = await sendMail({
     to: recipient,
@@ -339,31 +460,39 @@ async function sendToClient({ tenantId, to, subject, message, storeName, ticketI
     text: body,
     inReplyTo: parent?.messageId ? wrapId(parent.messageId) : '',
     references: priorIds,
+    assignedTo,
     at: new Date(),
   });
   if (ticket) {
     for (const row of ticket.messages) {
-      if (row.ticketId === resolvedTicket) continue;
       await rememberMessage({
         messageId: row.messageId,
         tenantId: String(tenantId),
         ticketId: resolvedTicket,
+        assignedTo,
       });
     }
   }
-  return threadFor(tenantId);
+  return threadFor(tenantId, { staffEmail: assignee });
 }
 
-async function unmatchedInbox() {
+async function unmatchedInbox(staffEmail) {
   const sync = await syncInbox();
+  const { mailboxOwner } = await staffContext();
+  const me = String(staffEmail || '').trim().toLowerCase();
+  const messages = (await db.ListUnmatchedSupportMail()).filter((row) => {
+    const owner = String(row.assignedTo || mailboxOwner).trim().toLowerCase();
+    return owner === me;
+  });
   return {
-    messages: await db.ListUnmatchedSupportMail(),
+    messages,
     inboxError: sync.ok ? '' : sync.reason || '',
   };
 }
 
-async function waitingInbox() {
+async function waitingInbox(staffEmail) {
   const sync = await syncInbox();
+  const { mailboxOwner } = await staffContext();
   const messages = await db.ListSupportMailAll();
   const byTenant = new Map();
   for (const message of messages) {
@@ -381,7 +510,11 @@ async function waitingInbox() {
 
   const items = [];
   tenantIds.forEach((tenantId, index) => {
-    const open = buildTickets(byTenant.get(tenantId)).filter((ticket) => ticket.status === 'open');
+    const open = mineOnly(
+      buildTickets(byTenant.get(tenantId)).filter((ticket) => ticket.status === 'open'),
+      staffEmail,
+      mailboxOwner
+    );
     const storeName = settings[index]?.businessName || tenants[index]?.name || 'Cliente';
     for (const ticket of open) {
       const lastIn = [...ticket.messages].reverse().find((row) => row.direction === 'in') || ticket.messages.at(-1);

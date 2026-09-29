@@ -133,7 +133,13 @@ async function DismissOnboarding(req, res) {
 
 async function GetSupport(req, res) {
   try {
-    return res.status(200).json(await supportMail.threadForLocal(req.tenantId));
+    const users = await db.ListUsersByTenant(req.tenantId);
+    const me = users.find((user) => user.username === req.user?.username);
+    const clientEmail = String(me?.email || '').trim().toLowerCase();
+    if (!clientEmail.includes('@')) {
+      return res.status(400).send('Tu usuario no tiene un correo. Agrégalo para ver tus mensajes.');
+    }
+    return res.status(200).json(await supportMail.threadForLocal(req.tenantId, { clientEmail }));
   } catch (err) {
     console.error(err);
     return res.status(500).send(err.message || 'Error al leer soporte');

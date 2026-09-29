@@ -688,11 +688,17 @@ async function UpdateCashSession(id, data, tenantId) {
   return GetCashSessionById(id, tenantId);
 }
 
+function mailAssignee(value) {
+  const email = String(value || '').trim().toLowerCase();
+  return email.includes('@') ? email : '';
+}
+
 let supportMailIndex = false;
 async function ensureSupportMailIndex() {
   if (supportMailIndex) return;
   await dbConnection.collection('support_mail').createIndex({ messageId: 1 }, { unique: true }).catch(() => {});
   await dbConnection.collection('support_mail').createIndex({ tenantId: 1, at: -1 }).catch(() => {});
+  await dbConnection.collection('support_mail').createIndex({ assignedTo: 1, at: -1 }).catch(() => {});
   supportMailIndex = true;
 }
 
@@ -700,6 +706,7 @@ async function SaveSupportMail(doc) {
   await ensureSupportMailIndex();
   const messageId = String(doc.messageId || '').trim();
   if (!messageId) return null;
+  const assignedTo = mailAssignee(doc.assignedTo);
   const insert = {
     messageId,
     tenantId: doc.tenantId ? String(doc.tenantId) : null,
@@ -711,6 +718,7 @@ async function SaveSupportMail(doc) {
     text: doc.text || '',
     inReplyTo: doc.inReplyTo || '',
     references: Array.isArray(doc.references) ? doc.references : [],
+    assignedTo: assignedTo || null,
     at: doc.at || new Date(),
     createdAt: new Date(),
   };
@@ -727,7 +735,26 @@ async function SaveSupportMail(doc) {
   if (Object.keys(set).length) {
     await dbConnection.collection('support_mail').updateOne({ messageId }, { $set: set });
   }
+  if (assignedTo) {
+    await dbConnection.collection('support_mail').updateOne(
+      {
+        messageId,
+        $or: [{ assignedTo: { $exists: false } }, { assignedTo: null }, { assignedTo: '' }],
+      },
+      { $set: { assignedTo } }
+    );
+  }
   return dbConnection.collection('support_mail').findOne({ messageId });
+}
+
+async function ListSupportMailRaw(limit = 800) {
+  await ensureSupportMailIndex();
+  return dbConnection
+    .collection('support_mail')
+    .find({})
+    .sort({ at: 1 })
+    .limit(Math.min(1200, Math.max(1, Number(limit) || 800)))
+    .toArray();
 }
 
 async function FindSupportMailByMessageIds(ids) {
@@ -814,6 +841,7 @@ function publicMail(row) {
     subject: row.subject || '',
     text: row.text || '',
     ticketId: row.ticketId || null,
+    assignedTo: mailAssignee(row.assignedTo) || null,
     inReplyTo: row.inReplyTo || '',
     references: Array.isArray(row.references) ? row.references : [],
     at: row.at || row.createdAt || null,
@@ -957,7 +985,7 @@ module.exports = {
   CreateBillingEvent, ListBillingEvents,
   GetOrders, GetOrderById, GetOrderByInvoiceToken, CreateOrder, UpdateOrder, GetOrdersByCashSession,
   GetOrdersByDateRange, GetSalesReport,
-  SaveSupportMail, FindSupportMailByMessageIds, ListSupportMail, ListSupportMailAll, ListUnmatchedSupportMail,
+  SaveSupportMail, FindSupportMailByMessageIds, ListSupportMail, ListSupportMailAll, ListSupportMailRaw, ListUnmatchedSupportMail,
   GetInvites, GetInviteByToken, CreateInvite, UpdateInvite, DeleteInvite,
   GetOpenCashSession, GetCashSessionById, CreateCashSession, UpdateCashSession,
   aiMonthKey, GetAiUsage, ReserveAiUse, RefundAiUse, ListAiUsage, ListAiUsageAll,

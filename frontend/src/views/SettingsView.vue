@@ -94,7 +94,7 @@
 
       <section v-else-if="tab === 'support'" class="panel">
         <h2>Soporte</h2>
-        <p class="hint">Escríbenos desde aquí. El equipo de Mi Tiendita ve el mensaje en el panel de plataforma.</p>
+        <p class="hint">Escríbenos desde aquí con tu correo. Solo tú ves tus conversaciones; otro admin de la tienda no las ve.</p>
         <form class="support-form" @submit.prevent="sendSupport">
           <label>Asunto<input v-model="support.subject" required maxlength="140" placeholder="No puedo abrir caja" /></label>
           <label>Mensaje

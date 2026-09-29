@@ -397,6 +397,7 @@
             </ul>
 
             <div v-show="tab === 'correo'" class="mail">
+              <p class="hint">Solo ves los correos asignados a tu correo. Un admin no puede abrir los de otro admin.</p>
               <p v-if="mailLoading" class="muted">Buscando correos…</p>
               <p v-if="mailError" class="err">{{ mailError }}</p>
               <div v-if="!mailLoading" class="desk">
