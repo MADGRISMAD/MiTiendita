@@ -15,6 +15,7 @@ import {
   isAuthenticated,
 } from "./authStore";
 import "./apiService";
+import { startOfflineRuntime } from "./offlineSync";
 
 import Login from "./views/LoginComponent.vue";
 import Register from "./views/RegisterComponent.vue";
@@ -117,6 +118,12 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: true, roles: ["admin", "cashier"] },
   },
   {
+    path: "/print/offline/:clientSaleId",
+    name: "printOffline",
+    component: PrintOrderView,
+    meta: { requiresAuth: true, roles: ["admin", "cashier", "waiter", "hosstess", "kitchen"] },
+  },
+  {
     path: "/print/cash/:id",
     name: "printCash",
     component: PrintCashCloseView,
@@ -197,6 +204,16 @@ const app = createApp(App);
 app.use(router);
 app.use(vuetify);
 app.mount("#app");
+
+startOfflineRuntime();
+
+if (import.meta.env.PROD) {
+  import("virtual:pwa-register")
+    .then(({ registerSW }) => {
+      registerSW({ immediate: true });
+    })
+    .catch(() => {});
+}
 
 export { clearSession };
 export { apiClient as default } from "./apiService";

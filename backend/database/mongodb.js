@@ -50,6 +50,14 @@ async function ensureConnection() {
   connection.on('error', () => { connected = false; });
 
   await migrateLegacyTenant();
+  await ensureIndexes();
+}
+
+async function ensureIndexes() {
+  await dbConnection.collection('orders').createIndex(
+    { tenantId: 1, clientSaleId: 1 },
+    { unique: true, sparse: true, name: 'tenant_clientSaleId' }
+  );
 }
 
 async function migrateLegacyTenant() {
@@ -499,6 +507,11 @@ async function GetOrderByInvoiceToken(token) {
   const key = String(token || '').trim();
   if (!key) return null;
   return withId(await dbConnection.collection('orders').findOne({ invoiceToken: key }));
+}
+async function GetOrderByClientSaleId(clientSaleId, tenantId) {
+  const key = String(clientSaleId || '').trim();
+  if (!key || !tenantId) return null;
+  return withId(await dbConnection.collection('orders').findOne({ tenantId, clientSaleId: key }));
 }
 async function CreateOrder(data) {
   const result = await dbConnection.collection('orders').insertOne(data);
@@ -1013,7 +1026,7 @@ module.exports = {
   GetMenus, GetMenuById, CreateMenu, UpdateMenu, DeleteMenu,
   GetFoods, CountFoods, CountPaidOrders, CountCashSessions, GetFoodById, GetFoodByBarcode, CreateFood, UpdateFood, DecrementFoodStock, IncrementFoodStock, DeleteFood, GetLowStockFoods, SearchFoods,
   CreateBillingEvent, ListBillingEvents,
-  GetOrders, GetOrderById, GetOrderByInvoiceToken, CreateOrder, UpdateOrder, GetOrdersByCashSession,
+  GetOrders, GetOrderById, GetOrderByInvoiceToken, GetOrderByClientSaleId, CreateOrder, UpdateOrder, GetOrdersByCashSession,
   GetOrdersByDateRange, GetSalesReport,
   SaveSupportMail, FindSupportMailByMessageIds, ListSupportMail, ListSupportMailAll, ListSupportMailRaw, ListUnmatchedSupportMail, AssignUnassignedSupportMail,
   GetInvites, GetInviteByToken, CreateInvite, UpdateInvite, DeleteInvite,

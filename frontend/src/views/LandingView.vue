@@ -307,6 +307,8 @@ Aceite 1L  48 pesos</pre>
           <p class="section-lede">
             Si la compu se llena de virus, si se va la luz a media venta,
             si el cajero derrama el café en el teclado — no pierdes ni un ticket.
+            Y si se cae el wifi, la caja sigue cobrando con el catálogo ya cargado;
+            al volver internet, las ventas se suben solas.
           </p>
           <ul class="pillars">
             <li>

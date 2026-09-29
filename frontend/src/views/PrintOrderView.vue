@@ -87,7 +87,10 @@
             No hace falta pedirlo en caja. Vigente el mes de la compra.
           </p>
         </div>
-        <p v-else class="center legal">
+        <p v-if="order.offlinePending" class="center legal">
+          Venta en este dispositivo. El QR de factura aparece cuando se sincronice.
+        </p>
+        <p v-else-if="!qrDataUrl" class="center legal">
           Documento informativo. Solicite factura en caja si la requiere.
         </p>
         <p class="center folio-bar">*{{ shortId(order.id) }}*</p>
@@ -105,6 +108,7 @@ import { apiService, appPublicOrigin } from "../apiService";
 import { venueStore, fetchVenueSettings } from "../venueStore";
 import { authStore } from "../authStore";
 import { lineBreakdown } from "../tax";
+import { getSale, saleToPrintOrder } from "../offlineDb";
 
 const route = useRoute();
 const order = ref(null);
@@ -199,13 +203,22 @@ watch(
 onMounted(async () => {
   try {
     await fetchVenueSettings().catch(() => {});
-    order.value = await apiService.getOrdersById(String(route.params.id));
-    await paintQr(order.value?.invoiceToken);
+    if (route.name === "printOffline") {
+      const sale = await getSale(String(route.params.clientSaleId));
+      if (!sale) {
+        err.value = "No se encontró la venta local";
+        return;
+      }
+      order.value = saleToPrintOrder(sale);
+    } else {
+      order.value = await apiService.getOrdersById(String(route.params.id));
+      await paintQr(order.value?.invoiceToken);
+    }
     if (route.query.autoprint === "1") {
       setTimeout(() => window.print(), 400);
     }
   } catch (e) {
-    err.value = e.response?.data || "No se pudo cargar el pedido";
+    err.value = e.response?.data || e.message || "No se pudo cargar el pedido";
   } finally {
     loading.value = false;
   }

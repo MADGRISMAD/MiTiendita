@@ -40,8 +40,8 @@
             <span>{{ businessName }}</span>
             <span>{{ itemCount }} artículos</span>
             <span v-if="ticketDiscount">Dcto {{ ticketDiscount }}%</span>
-            <span class="status-hint only-pc">Escáner listo · Enter agrega</span>
-            <span class="status-hint only-tablet">Listo para escanear</span>
+            <span class="status-hint only-pc">{{ offlineStore.online ? 'Escáner listo · Enter agrega' : 'Sin internet · catálogo local' }}</span>
+            <span class="status-hint only-tablet">{{ offlineStore.online ? 'Listo para escanear' : 'Sin internet' }}</span>
           </div>
 
           <div class="desk-top">
@@ -749,6 +749,18 @@ import { venueStore, fetchVenueSettings } from "../venueStore";
 import { billingStore } from "../billingStore";
 import { cartTotals, lineBreakdown } from "../tax";
 import { apiService as apiSvc } from "../apiService";
+import { authStore } from "../authStore";
+import { isNetworkError, newClientSaleId } from "../net";
+import {
+  applyPendingStock,
+  loadCatalog,
+  loadCashSession as loadCachedCash,
+  lookupInCatalog,
+  saveCatalog,
+  saveCashSession as saveCachedCash,
+  listPending,
+} from "../offlineDb";
+import { flushOfflineSales, offlineStore, queueSale } from "../offlineSync";
 
 export default {
   components: { AppShell, MagicPricesSheet },
@@ -854,20 +866,35 @@ export default {
     const openingFloat = ref(0);
     const cashBusy = ref(false);
     const lastTicketId = ref("");
+    const lastTicketOffline = ref(false);
 
     async function loadCashSession() {
       try {
         const data = await apiSvc.getCashSession();
         if (data.open && data.session) {
           cashSession.value = data.session;
+          await saveCachedCash(authStore.tenantId, data.session);
           const opened = new Date(data.session.createdAt || data.session.openedAt);
           const hoursOpen = (Date.now() - opened.getTime()) / 3600000;
           cashOpenWarning.value = hoursOpen >= 12;
         } else {
           cashSession.value = null;
           cashOpenWarning.value = false;
+          await saveCachedCash(authStore.tenantId, null);
         }
-      } catch {
+      } catch (error) {
+        if (isNetworkError(error)) {
+          const cached = await loadCachedCash(authStore.tenantId);
+          cashSession.value = cached;
+          if (cached) {
+            const opened = new Date(cached.createdAt || cached.openedAt);
+            const hoursOpen = (Date.now() - opened.getTime()) / 3600000;
+            cashOpenWarning.value = hoursOpen >= 12;
+          } else {
+            cashOpenWarning.value = false;
+          }
+          return;
+        }
         cashSession.value = null;
         cashOpenWarning.value = false;
       }
@@ -881,15 +908,29 @@ export default {
         await apiService.openCashSession(Number(openingFloat.value || 0));
         await loadCashSession();
       } catch (e) {
-        payError.value = e.response?.data || "No se pudo abrir la caja.";
+        payError.value = isNetworkError(e)
+          ? "Necesitas internet para abrir la caja la primera vez."
+          : e.response?.data || "No se pudo abrir la caja.";
       } finally {
         cashBusy.value = false;
       }
     }
 
-    function printReceipt(orderId) {
+    function printReceipt(orderId, offline = false) {
       if (!orderId) return;
-      window.open(`/print/order/${orderId}?mode=receipt&autoprint=1`, "_blank", "noopener");
+      const path = offline
+        ? `/print/offline/${orderId}?autoprint=1`
+        : `/print/order/${orderId}?mode=receipt&autoprint=1`;
+      window.open(path, "_blank", "noopener");
+    }
+
+    async function lookupFoodSmart(code) {
+      try {
+        return await apiService.lookupFood(code);
+      } catch (error) {
+        if (!isNetworkError(error)) throw error;
+        return lookupInCatalog(pickFoods.value, code);
+      }
     }
 
     // Productos filtrados por la barra de búsqueda del catálogo
@@ -1173,7 +1214,7 @@ export default {
       const asCode = isCodeQuery(code) || isScannerPayload(code);
       if (asCode) clearScanField();
       try {
-        const res = await apiService.lookupFood(code);
+        const res = await lookupFoodSmart(code);
         if (res && res.id) {
           addProduct(res);
           return;
@@ -1192,7 +1233,9 @@ export default {
         clearScanField();
         askToAdd(code, "sale");
       } catch {
-        scanError.value = "Error al buscar producto";
+        scanError.value = pickFoods.value.length
+          ? "Error al buscar producto"
+          : "Sin internet y no hay catálogo guardado. Entra una vez con red.";
         lastSaleCode = "";
       } finally {
         scanning.value = false;
@@ -1229,7 +1272,7 @@ export default {
       searchTimer = setTimeout(async () => {
         if (String(scanCode.value || "").trim() !== q) return;
         try {
-          const res = await apiService.lookupFood(q);
+          const res = await lookupFoodSmart(q);
           if (String(scanCode.value || "").trim() !== q) return;
           if (res?.id) nameHits.value = [res];
           else nameHits.value = Array.isArray(res?.matches) ? res.matches : [];
@@ -1302,7 +1345,7 @@ export default {
       priceErr.value = "";
       priceResult.value = null;
       try {
-        const res = await apiService.lookupFood(code);
+        const res = await lookupFoodSmart(code);
         if (res?.id) priceResult.value = res;
         else if (res?.matches?.length === 1) priceResult.value = res.matches[0];
         else if (res?.matches?.length > 1) priceErr.value = "Varias coincidencias — sé más específico";
@@ -1373,38 +1416,73 @@ export default {
 
       sending.value = true;
       msg.value = "";
+      const clientSaleId = newClientSaleId();
+      const items = lines.value.map((p) => ({
+        foodId: p.id,
+        name: p.name,
+        price: p.price,
+        quantity: p.quantity,
+        priceIncludesTax: Boolean(p.priceIncludesTax),
+      }));
+      const payload = {
+        clientSaleId,
+        tableId: null,
+        tableName: "Mostrador",
+        modality: "retail",
+        status: "pending",
+        discountPercent: ticketDiscount.value || 0,
+        taxRate: TAX_RATE.value,
+        items,
+        paymentMethod: payMethod.value,
+        cashReceived: payMethod.value !== "card" ? Number(payCashReceived.value || 0) : undefined,
+        cardAmount: payMethod.value === "split" ? Number(payCardAmount.value || 0) : undefined,
+        soldAt: new Date().toISOString(),
+        subtotal: Number(totals.value?.subtotal || 0),
+        subtotalNet: Number(totals.value?.subtotalNet || 0),
+        discountAmount: Number(totals.value?.discountAmount || 0),
+        tax: Number(tax.value || 0),
+        total: Number(total.value || 0),
+        change: Number(payChange.value || 0),
+      };
       try {
-        const response = await apiService.createOrder({
-          tableId: null,
-          tableName: "Mostrador",
-          modality: "retail",
-          status: "pending",
-          discountPercent: ticketDiscount.value || 0,
-          taxRate: TAX_RATE.value,
-          items: lines.value.map((p) => ({
-            foodId: p.id,
-            name: p.name,
-            price: p.price,
-            quantity: p.quantity,
-            priceIncludesTax: Boolean(p.priceIncludesTax),
-          })),
-        });
-
-        await apiService.payOrder(response.id, payMethod.value, {
-          cashReceived: payMethod.value !== "card" ? Number(payCashReceived.value || 0) : undefined,
-          cardAmount: payMethod.value === "split" ? Number(payCardAmount.value || 0) : undefined,
-        });
+        let order;
+        let offline = false;
+        try {
+          order = await apiService.syncSale({ ...payload, offline: false });
+        } catch (error) {
+          if (!isNetworkError(error)) throw error;
+          await queueSale({ ...payload, offline: true });
+          for (const item of items) {
+            const row = pickFoods.value.find((p) => String(p.id) === String(item.foodId));
+            if (row) {
+              row.stock = Math.max(0, (Number(row.stock) || 0) - Number(item.quantity || 0));
+            }
+          }
+          order = { id: clientSaleId };
+          offline = true;
+        }
 
         const cambio = payChange.value;
-        lastTicketId.value = response.id;
+        lastTicketId.value = order.id;
+        lastTicketOffline.value = offline;
         showPayment.value = false;
         clearCart();
-        msg.value = cambio > 0
-          ? `Ticket ${String(response.id || "").slice(-6).toUpperCase()} cobrado · Cambio: ${money(cambio)}`
-          : `Ticket ${String(response.id || "").slice(-6).toUpperCase()} cobrado`;
-        printReceipt(response.id);
+        const folio = String(order.id || "").slice(-6).toUpperCase();
+        msg.value = offline
+          ? (cambio > 0
+            ? `Ticket ${folio} cobrado sin internet · Cambio: ${money(cambio)} · se sincroniza al volver`
+            : `Ticket ${folio} cobrado sin internet · se sincroniza al volver`)
+          : (cambio > 0
+            ? `Ticket ${folio} cobrado · Cambio: ${money(cambio)}`
+            : `Ticket ${folio} cobrado`);
+        printReceipt(order.id, offline);
+        if (!offline) flushOfflineSales();
       } catch (error) {
-        payError.value = error.response?.data || "Error al registrar la venta.";
+        payError.value =
+          (typeof error.response?.data === "string" && error.response.data) ||
+          error.response?.data?.message ||
+          error.message ||
+          "Error al registrar la venta.";
       } finally {
         sending.value = false;
       }
@@ -1557,7 +1635,9 @@ export default {
       try {
         lowStockItems.value = (await apiService.getLowStockFoods()) || [];
       } catch {
-        lowStockItems.value = [];
+        lowStockItems.value = (pickFoods.value || []).filter(
+          (p) => Number(p.stock || 0) <= Number(p.lowStockThreshold || 5)
+        );
       }
     }
 
@@ -1565,13 +1645,26 @@ export default {
       try {
         menus.value = (await apiService.getAllMenus()) || [];
         if (mode.value === "manage" && menus.value[0]) loadMenuProducts(menus.value[0].id);
-      } catch {
-        menus.value = [];
+        pickFoods.value = (await apiService.getAllFoods()) || [];
+        await saveCatalog(authStore.tenantId, {
+          foods: pickFoods.value,
+          menus: menus.value,
+        });
+      } catch (error) {
+        if (isNetworkError(error)) {
+          const cached = await loadCatalog(authStore.tenantId);
+          menus.value = cached.menus || [];
+          pickFoods.value = cached.foods || [];
+        } else {
+          menus.value = [];
+          pickFoods.value = [];
+        }
       }
       try {
-        pickFoods.value = (await apiService.getAllFoods()) || [];
+        const pending = await listPending(authStore.tenantId);
+        pickFoods.value = applyPendingStock(pickFoods.value, pending);
       } catch {
-        pickFoods.value = [];
+        /* ignore */
       }
       fetchLowStock();
     }
@@ -1581,8 +1674,14 @@ export default {
       try {
         const menu = await apiService.getMenuById(menuId);
         productos.value = Array.isArray(menu.foods) ? menu.foods : [];
-      } catch {
-        productos.value = [];
+      } catch (error) {
+        if (isNetworkError(error)) {
+          productos.value = (pickFoods.value || []).filter(
+            (p) => String(p.menuId || "") === String(menuId)
+          );
+        } else {
+          productos.value = [];
+        }
       }
     }
 
@@ -1747,6 +1846,7 @@ export default {
       else focusScan();
       window.addEventListener("keydown", onHotkey);
       window.addEventListener("focus", focusScan);
+      flushOfflineSales();
     });
 
     onUnmounted(() => {
@@ -1866,6 +1966,7 @@ export default {
       openCashFromPay,
       lastTicketId,
       venueStore,
+      offlineStore,
     };
   },
 };
@@ -2774,6 +2875,21 @@ export default {
   font-size: 0.88rem;
   text-align: center;
   flex-shrink: 0;
+}
+
+.offline-banner {
+  background: color-mix(in srgb, var(--timber-warning, #e08a1e) 22%, var(--timber-panel));
+  color: var(--timber-ink);
+  border-radius: 0.65rem;
+  padding: 0.55rem 0.85rem;
+  margin: 0.15rem 0.5rem 0.35rem;
+  font-weight: 700;
+  font-size: 0.86rem;
+  text-align: center;
+  flex-shrink: 0;
+}
+.offline-banner.sync {
+  background: color-mix(in srgb, var(--timber-primary) 16%, var(--timber-panel));
 }
 
 /* Modal de pago */

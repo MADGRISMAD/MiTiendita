@@ -33,6 +33,9 @@ export function appPublicOrigin() {
   return window.location.origin;
 }
 
+import { isNetworkError } from './net';
+import { noteOffline, noteOnline } from './offlineFlags';
+
 axios.interceptors.request.use((config) => {
   const token = authStore.token;
   if (token) {
@@ -43,8 +46,12 @@ axios.interceptors.request.use((config) => {
 });
 
 axios.interceptors.response.use(
-  (r) => r,
+  (r) => {
+    noteOnline();
+    return r;
+  },
   (error) => {
+    if (isNetworkError(error)) noteOffline();
     if (error.response?.status === 401) {
       clearSession();
       if (
@@ -149,6 +156,10 @@ export const apiService = {
   },
   createOrder(orderDTO: Record<string, unknown>) {
     return axios.post('/orders', orderDTO).then((r) => r.data);
+  },
+  /** Crea y cobra en un paso. Idempotente con clientSaleId (cola offline). */
+  syncSale(payload: Record<string, unknown>) {
+    return axios.post('/orders/sale', payload, { timeout: 15000 }).then((r) => r.data);
   },
   updateOrderStatus(orderId: string, status: string) {
     return axios.put(`/orders/${orderId}/status`, { status }).then((r) => r.data);

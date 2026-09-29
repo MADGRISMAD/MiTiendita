@@ -240,6 +240,8 @@ import {
   paymentStatusLabel,
 } from "../labels";
 import { venueStore } from "../venueStore";
+import { offlineStore } from "../offlineFlags";
+import { flushOfflineSales } from "../offlineSync";
 
 const router = useRouter();
 const orders = ref([]);
@@ -380,6 +382,10 @@ async function loadCash() {
 }
 
 function prepClose() {
+  if (offlineStore.pending > 0) {
+    cashErr.value = `Hay ${offlineStore.pending} venta(s) sin sincronizar. Espera a que vuelva internet antes del corte.`;
+    return;
+  }
   countedCash.value = expectedCash.value;
   cashErr.value = "";
   showClose.value = true;
@@ -402,6 +408,10 @@ async function openCash() {
 }
 
 async function closeCash() {
+  if (offlineStore.pending > 0) {
+    cashErr.value = `Hay ${offlineStore.pending} venta(s) sin sincronizar. No cierres caja todavía.`;
+    return;
+  }
   cashBusy.value = true;
   cashErr.value = "";
   cashMsg.value = "";
@@ -431,6 +441,7 @@ async function markIssued(order) {
 }
 
 async function load() {
+  await flushOfflineSales();
   try {
     orders.value = (await apiService.getOrders()) || [];
   } catch {

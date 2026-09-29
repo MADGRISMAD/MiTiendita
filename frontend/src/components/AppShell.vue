@@ -46,6 +46,9 @@
         <span>{{ billingBanner.text }}</span>
         <router-link to="/billing">Facturación</router-link>
       </div>
+      <div v-if="offlineBanner" class="billing-banner" :class="offlineBanner.tone">
+        <span>{{ offlineBanner.text }}</span>
+      </div>
 
       <div v-if="moreOpen" class="more-sheet" @click.self="moreOpen = false">
         <div class="more-panel">
@@ -100,6 +103,8 @@ import { themeStore, toggleUiTheme } from "../themeStore";
 import { clearSession, canAccessRoute, hasRole, isPlatformAdmin, isPlatformStaff } from "../authStore";
 import { apiService } from "../apiService";
 import { applyBillingStatus } from "../billingStore";
+import { offlineStore } from "../offlineFlags";
+import { flushOfflineSales } from "../offlineSync";
 
 const route = useRoute();
 const router = useRouter();
@@ -153,6 +158,26 @@ const billingBanner = computed(() => {
       tone: "warn",
       text: `La suscripción no se renovará. Acceso hasta ${new Date(s.currentPeriodEnd).toLocaleDateString("es-MX")}.`,
     };
+  }
+  return null;
+});
+
+const offlineBanner = computed(() => {
+  if (ownerMode.value) return null;
+  if (!offlineStore.online) {
+    const n = offlineStore.pending;
+    return {
+      tone: "warn",
+      text: n
+        ? `Sin internet — la caja sigue. ${n} venta(s) se subirán al volver.`
+        : "Sin internet — puedes cobrar con el catálogo ya cargado.",
+    };
+  }
+  if (offlineStore.syncing && offlineStore.pending) {
+    return { tone: "warn", text: `Sincronizando ${offlineStore.pending} venta(s)…` };
+  }
+  if (offlineStore.pending) {
+    return { tone: "warn", text: `${offlineStore.pending} venta(s) pendientes de sincronizar.` };
   }
   return null;
 });
@@ -220,6 +245,7 @@ onMounted(() => {
     now.value = new Date();
   }, 30000);
   loadBilling();
+  flushOfflineSales();
 });
 onUnmounted(() => clearInterval(timer));
 </script>

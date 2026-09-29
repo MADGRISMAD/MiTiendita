@@ -108,6 +108,7 @@ export const routeRoles = {
   platformAi: ["platform_admin"],
   platformExpenses: ["platform_admin"],
   printOrder: ["admin", "cashier"],
+  printOffline: ["admin", "cashier", "waiter", "hosstess", "kitchen"],
   printCash: ["admin", "cashier"],
   customers: ["admin", "cashier"],
 };
