@@ -5,14 +5,19 @@ import os from 'node:os'
 
 /** Primera IPv4 de la LAN (Wi‑Fi/Ethernet), para abrir desde el celular. */
 function lanHost() {
-  const nets = os.networkInterfaces()
-  for (const entries of Object.values(nets)) {
-    for (const net of entries || []) {
-      const family = String(net.family)
-      if ((family === 'IPv4' || family === '4') && !net.internal) {
-        return net.address
+  if (process.env.VERCEL || process.env.CI) return ''
+  try {
+    const nets = os.networkInterfaces()
+    for (const entries of Object.values(nets)) {
+      for (const net of entries || []) {
+        const family = String(net.family)
+        if ((family === 'IPv4' || family === '4') && !net.internal) {
+          return net.address
+        }
       }
     }
+  } catch {
+    return ''
   }
   return ''
 }
