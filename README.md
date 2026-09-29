@@ -45,3 +45,29 @@ cd backend && npm run seed:platform-admin
 ```bash
 docker compose up --build -d
 ```
+
+## Notificación del deploy a producción
+
+Cada push a `main` ejecuta `.github/workflows/deploy.yml` y despliega a Vercel. Cuando el job de deploy termina (éxito, fallo o cancelación) un segundo job envía un correo con el resultado. Si armar o enviar el correo falla, el estado del workflow sigue siendo el del deploy. Hasta que existan `MAIL_USERNAME` y `MAIL_PASSWORD`, el envío se omite y el log deja una advertencia; el deploy no cambia de resultado.
+
+El mensaje incluye resultado, mensaje del commit, SHA corto, autor, quién hizo push, rama, fecha y hora en `America/Tijuana`, enlace al commit, enlace a la ejecución de Actions y la URL de producción https://www.mitiendita.software/.
+
+Destinatarios por defecto:
+
+- mayra.bamaca09@gmail.com
+- madgrismad@gmail.com
+- luispantoja1102@gmail.com
+
+Secretos del repositorio, en **Settings → Secrets and variables → Actions**:
+
+- `MAIL_USERNAME` (obligatorio) — dirección de Gmail que envía, por ejemplo `mitiendita@gmail.com`.
+- `MAIL_PASSWORD` (obligatorio) — contraseña de aplicación de esa cuenta. No uses la contraseña normal ni la subas al repositorio.
+- `MAIL_TO` (opcional) — destinatarios separados por comas. Si no existe, se usan los tres correos de arriba.
+
+Para crear la contraseña de aplicación hace falta la verificación en 2 pasos en la cuenta de Google:
+
+1. Activa la verificación en 2 pasos: https://myaccount.google.com/signinoptions/two-step-verification
+2. Abre las contraseñas de aplicación: https://myaccount.google.com/apppasswords (la página solo aparece con la verificación en 2 pasos activa).
+3. Crea una contraseña para la app **Correo** (puedes nombrarla «GitHub Actions»).
+4. Copia los 16 caracteres, sin espacios, y pégalos en el secreto `MAIL_PASSWORD`.
+5. En `MAIL_USERNAME` pon la misma dirección de Gmail.
