@@ -31,3 +31,117 @@ jobs:
 
       - name: Deploy to production
         run: vercel deploy --prod --yes --token="${{ secrets.VERCEL_TOKEN }}"
+
+  # Correo de estado. Corre después del deploy, en éxito y en fallo.
+  # continue-on-error: un fallo al armar o enviar el correo no cambia
+  # el resultado del workflow; ese resultado lo marca el job deploy.
+  notify:
+    name: Notificar resultado del deploy
+    needs: deploy
+    if: always()
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    env:
+      DEFAULT_MAIL_TO: mayra.bamaca09@gmail.com,madgrismad@gmail.com,luispantoja1102@gmail.com
+    steps:
+      - name: Preparar notificación
+        id: mail
+        env:
+          DEPLOY_RESULT: ${{ needs.deploy.result }}
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+          COMMIT_AUTHOR: ${{ github.event.head_commit.author.name }}
+          PUSHER: ${{ github.actor }}
+          BRANCH: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
+          REPOSITORY: ${{ github.repository }}
+          COMMIT_URL: ${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          PROD_URL: https://www.mitiendita.software/
+          MAIL_USER_SET: ${{ secrets.MAIL_USERNAME != '' }}
+          MAIL_PASS_SET: ${{ secrets.MAIL_PASSWORD != '' }}
+        run: |
+          python3 << 'PY'
+          import os
+          import subprocess
+          from datetime import datetime
+
+          try:
+              from zoneinfo import ZoneInfo
+              now = datetime.now(ZoneInfo("America/Tijuana"))
+              when = now.strftime("%Y-%m-%d %H:%M:%S %Z") + " (America/Tijuana)"
+          except Exception:
+              when = subprocess.check_output(
+                  ["date", "+%Y-%m-%d %H:%M:%S %Z"],
+                  env={**os.environ, "TZ": "America/Tijuana"},
+                  text=True,
+              ).strip() + " (America/Tijuana)"
+
+          result = os.environ.get("DEPLOY_RESULT", "")
+          if result == "success":
+              subject = "✅ Deploy exitoso – Mi Tiendita"
+              label = "Exitoso"
+          elif result == "cancelled":
+              subject = "❌ Deploy cancelado – Mi Tiendita"
+              label = "Cancelado"
+          else:
+              subject = "❌ Deploy falló – Mi Tiendita"
+              label = "Fallido"
+
+          sha = os.environ.get("SHA", "")
+          short = sha[:7] if sha else "(sin SHA)"
+          message = (os.environ.get("COMMIT_MESSAGE") or "").strip() or "(sin mensaje)"
+          author = (os.environ.get("COMMIT_AUTHOR") or "").strip() or "(desconocido)"
+          pusher = (os.environ.get("PUSHER") or "").strip() or "(desconocido)"
+
+          body = "\n".join([
+              f"Resultado: {label}",
+              "",
+              f"Repositorio: {os.environ.get('REPOSITORY', '')}",
+              f"Rama: {os.environ.get('BRANCH', '')}",
+              f"SHA: {short}",
+              f"Autor del commit: {author}",
+              f"Quién hizo push: {pusher}",
+              f"Fecha y hora (America/Tijuana): {when}",
+              "",
+              "Mensaje del commit:",
+              message,
+              "",
+              f"Commit: {os.environ.get('COMMIT_URL', '')}",
+              f"Ejecución de Actions: {os.environ.get('RUN_URL', '')}",
+              f"Producción: {os.environ.get('PROD_URL', '')}",
+              "",
+          ])
+          with open("deploy-status.txt", "w", encoding="utf-8") as fh:
+              fh.write(body)
+
+          ready = (
+              os.environ.get("MAIL_USER_SET") == "true"
+              and os.environ.get("MAIL_PASS_SET") == "true"
+          )
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
+              fh.write(f"subject={subject}\n")
+              fh.write(f"ready={'true' if ready else 'false'}\n")
+
+          print(body)
+          if not ready:
+              print(
+                  "::warning::No se envió el correo: faltan los secretos "
+                  "MAIL_USERNAME y/o MAIL_PASSWORD "
+                  "(Settings > Secrets and variables > Actions)."
+              )
+          PY
+
+      - name: Enviar correo de estado
+        if: steps.mail.outputs.ready == 'true'
+        continue-on-error: true
+        uses: dawidd6/action-send-mail@67ce3558d613188179559c61d3565140cf389968 # v22
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          secure: true
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          from: "Mi Tiendita <${{ secrets.MAIL_USERNAME }}>"
+          to: ${{ secrets.MAIL_TO || env.DEFAULT_MAIL_TO }}
+          subject: ${{ steps.mail.outputs.subject }}
+          body: file://deploy-status.txt
