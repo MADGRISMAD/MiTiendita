@@ -3551,7 +3551,7 @@ export default {
   .iva-card { padding: 0.4rem 0.55rem; }
 }
 
-/* —— Alerta de stock bajo —— */
+/* —— Alerta de stock bajo ——  */
 .low-stock-banner {
   display: flex;
   align-items: center;
