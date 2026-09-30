@@ -121,15 +121,26 @@ async function settlePayment(req, existing, body, { requireCash = true, paidAt }
 
   const settings = await db.GetSettings(req.tenantId);
   if (settings?.inventoryEnabled && !existing.inventoryApplied) {
+    const nextItems = [];
     for (const item of existing.items || []) {
       const foodId = item.foodId || item.food;
-      if (!foodId) continue;
+      const qty = Number(item.quantity) || 0;
+      if (!foodId || !qty) {
+        nextItems.push(item);
+        continue;
+      }
       try {
-        await db.DecrementFoodStock(foodId, item.quantity, req.tenantId);
+        const result = await db.ApplySaleDecrement(foodId, qty, req.tenantId);
+        nextItems.push({
+          ...item,
+          lotAllocations: result.allocations || [],
+        });
       } catch (e) {
         console.warn('No se pudo descontar stock:', foodId, e.message);
+        nextItems.push(item);
       }
     }
+    existing = { ...existing, items: nextItems };
   }
 
   const cashReceived = Number(body?.cashReceived ?? 0);
@@ -156,6 +167,7 @@ async function settlePayment(req, existing, body, { requireCash = true, paidAt }
       cardAmount: method === 'split' ? cardAmount : null,
       change: change > 0 ? change : 0,
       inventoryApplied: Boolean(settings?.inventoryEnabled),
+      items: existing.items || [],
     },
     req.tenantId
   );
@@ -313,7 +325,7 @@ async function voidSale(req, res) {
         const foodId = item.foodId || item.food;
         if (!foodId) continue;
         try {
-          await db.IncrementFoodStock(foodId, item.quantity, req.tenantId);
+          await db.RestoreSaleStock(foodId, item.quantity, item.lotAllocations || [], req.tenantId);
         } catch (e) {
           console.warn('No se pudo regresar stock:', foodId, e.message);
         }

@@ -122,6 +122,8 @@ export const apiService = {
     stock?: number | null;
     cost?: number | null;
     lowStockThreshold?: number | null;
+    tracksExpiry?: boolean;
+    supplierIds?: string[];
   }) {
     return axios.post('/foods', foodDTO).then((r) => r.data);
   },
@@ -325,7 +327,14 @@ export const apiService = {
     return axios.post('/ai/preview', payload, { timeout: 130_000 }).then((r) => r.data);
   },
   aiApply(
-    updates: { id: string; price?: number; cost?: number; stockIn?: number }[],
+    updates: {
+      id: string;
+      price?: number;
+      cost?: number;
+      stockIn?: number;
+      lot?: string;
+      expiresAt?: string;
+    }[],
     creates?: {
       name: string;
       price: number;
@@ -334,9 +343,23 @@ export const apiService = {
       menuId: string;
       stock?: number;
       stockIn?: number;
-    }[]
+      lot?: string;
+      expiresAt?: string;
+    }[],
+    purchase?: {
+      supplierId?: string;
+      name?: string;
+      contact?: string;
+      whatsapp?: string;
+      date?: string;
+      expiresAt?: string;
+      lot?: string;
+      notes?: string;
+    }
   ) {
-    return axios.post('/ai/apply', { updates, creates: creates || [] }).then((r) => r.data);
+    return axios
+      .post('/ai/apply', { updates, creates: creates || [], purchase: purchase || undefined })
+      .then((r) => r.data);
   },
 
   changePassword(currentPassword: string, newPassword: string) {
@@ -409,6 +432,60 @@ export const apiService = {
   },
   deleteCustomer(id: string) {
     return axios.delete(`/customers/${id}`).then((r) => r.status === 200);
+  },
+
+  // ── Inventario: proveedores, compras, lotes ──
+  getSuppliers(q?: string) {
+    return axios.get('/inventory/suppliers', { params: q ? { q } : {} }).then((r) => r.data);
+  },
+  getSupplier(id: string) {
+    return axios.get(`/inventory/suppliers/${id}`).then((r) => r.data);
+  },
+  createSupplier(data: {
+    name: string;
+    contact?: string;
+    whatsapp?: string;
+    visitDays?: number[];
+    notes?: string;
+  }) {
+    return axios.post('/inventory/suppliers', data).then((r) => r.data);
+  },
+  updateSupplier(id: string, data: Record<string, unknown>) {
+    return axios.put(`/inventory/suppliers/${id}`, data).then((r) => r.data);
+  },
+  deleteSupplier(id: string) {
+    return axios.delete(`/inventory/suppliers/${id}`).then((r) => r.status === 200);
+  },
+  getPurchases(supplierId?: string) {
+    return axios
+      .get('/inventory/purchases', { params: supplierId ? { supplierId } : {} })
+      .then((r) => r.data);
+  },
+  getPurchase(id: string) {
+    return axios.get(`/inventory/purchases/${id}`).then((r) => r.data);
+  },
+  createPurchase(data: {
+    supplierId: string;
+    date: string;
+    notes?: string;
+    items: {
+      foodId: string;
+      quantity: number;
+      unitCost: number;
+      lot?: string;
+      expiresAt?: string | null;
+    }[];
+  }) {
+    return axios.post('/inventory/purchases', data).then((r) => r.data);
+  },
+  getExpiringLots(days = 30) {
+    return axios.get('/inventory/lots/expiring', { params: { days } }).then((r) => r.data);
+  },
+  getPurchaseSuggestions() {
+    return axios.get('/inventory/suggestions').then((r) => r.data);
+  },
+  getInventoryActivity(limit = 80) {
+    return axios.get('/inventory/activity', { params: { limit } }).then((r) => r.data);
   },
 
   // ── Reportes de ventas ──

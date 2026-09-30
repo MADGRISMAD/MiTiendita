@@ -64,13 +64,35 @@
       <section v-if="lowStockItems.length" class="t-card low-stock-widget">
         <div class="panel-head">
           <h3>⚠️ Stock bajo</h3>
-          <router-link to="/products">Ver catálogo</router-link>
+          <router-link to="/inventory?tab=sugerido">Sugerido de compra</router-link>
         </div>
         <ul class="low-stock-wlist">
           <li v-for="item in lowStockItems.slice(0, 8)" :key="item.id">
             <span class="lsw-name">{{ item.name }}</span>
             <span class="lsw-stock">{{ Number(item.stock) || 0 }} uds</span>
             <span class="lsw-threshold">mín. {{ item.lowStockThreshold != null ? item.lowStockThreshold : 5 }}</span>
+          </li>
+        </ul>
+      </section>
+
+      <section v-if="expiringItems.length" class="t-card expiry-widget">
+        <div class="panel-head">
+          <h3>⚠️ Por caducar</h3>
+          <div class="panel-links">
+            <button type="button" class="linkish" @click="exportExpiry">Exportar</button>
+            <router-link to="/inventory?tab=caducidad">Ver todo</router-link>
+          </div>
+        </div>
+        <p class="expiry-summary">
+          {{ expirySummary.expired }} vencido(s) · {{ expirySummary.d7 }} en 7 días · {{ expirySummary.d15 }} en 15 · {{ expirySummary.d30 }} en 30
+        </p>
+        <ul class="low-stock-wlist">
+          <li v-for="item in expiringItems.slice(0, 8)" :key="item.id">
+            <span class="lsw-name">{{ item.foodName }}</span>
+            <span class="lsw-stock" :class="{ expired: item.bucket === 'expired' }">
+              {{ item.bucket === 'expired' ? 'Vencido' : item.daysLeft + ' d' }}
+            </span>
+            <span class="lsw-threshold">{{ item.quantity }} uds · {{ item.lot }}</span>
           </li>
         </ul>
       </section>
@@ -241,6 +263,8 @@ import { labelOf, paymentStatusLabel } from "../labels";
 const orders = ref([]);
 const productCount = ref(0);
 const lowStockItems = ref([]);
+const expiringItems = ref([]);
+const expirySummary = ref({ expired: 0, d7: 0, d15: 0, d30: 0 });
 const cashOpen = ref(false);
 const cashSession = ref(null);
 const cashTotals = ref({ cash: 0, card: 0, transfer: 0, other: 0, total: 0 });
@@ -418,6 +442,27 @@ function itemCount(o) {
   return (o.items || []).reduce((s, i) => s + Number(i.quantity || 0), 0);
 }
 
+function exportExpiry() {
+  const rows = expiringItems.value || [];
+  const header = "Producto,Lote,Caducidad,Dias,Cantidad,Costo unitario,Alerta";
+  const lines = rows.map((row) => {
+    const exp = row.expiresAt ? new Date(row.expiresAt).toISOString().slice(0, 10) : "";
+    const label = row.bucket === "expired" ? "Vencido" : `${row.daysLeft} dias`;
+    const cell = (v) => {
+      const s = String(v ?? "");
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    return [cell(row.foodName || ""), cell(row.lot || ""), exp, row.daysLeft == null ? "" : row.daysLeft, Number(row.quantity) || 0, Number(row.unitCost) || 0, label].join(",");
+  });
+  const blob = new Blob(["\uFEFF" + [header, ...lines].join("\n")], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "caducidad.csv";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 onMounted(async () => {
   try {
     orders.value = (await apiService.getOrders()) || [];
@@ -434,6 +479,13 @@ onMounted(async () => {
     lowStockItems.value = (await apiService.getLowStockFoods()) || [];
   } catch {
     lowStockItems.value = [];
+  }
+  try {
+    const data = await apiService.getExpiringLots(30);
+    expiringItems.value = data?.items || [];
+    expirySummary.value = data?.summary || { expired: 0, d7: 0, d15: 0, d30: 0 };
+  } catch {
+    expiringItems.value = [];
   }
   try {
     const data = await apiService.getCashSession();
@@ -760,7 +812,29 @@ async function loadReport() {
 }
 .lsw-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; }
 .lsw-stock { font-weight: 800; color: var(--timber-warning); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.lsw-stock.expired { color: var(--timber-danger); }
 .lsw-threshold { font-size: 0.72rem; color: var(--timber-muted); flex-shrink: 0; }
+.expiry-widget {
+  padding: 1rem;
+  margin-bottom: 0.85rem;
+  background: color-mix(in srgb, var(--timber-danger) 7%, var(--timber-panel));
+  border-color: color-mix(in srgb, var(--timber-danger) 28%, var(--timber-line));
+}
+.expiry-summary {
+  margin: 0 0 0.65rem;
+  font-size: 0.85rem;
+  color: var(--timber-muted);
+}
+.panel-links { display: flex; gap: 0.75rem; align-items: center; }
+.panel-links .linkish {
+  border: none;
+  background: none;
+  color: var(--timber-primary);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0;
+}
 
 .report-range { padding: 1rem; }
 .date-range {

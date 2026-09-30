@@ -5,7 +5,7 @@
         <header class="head">
           <div>
             <p class="kicker">Inventario Mágico · Precio Mágico</p>
-            <h3>Actualizar precios</h3>
+            <h3>Registrar compra y precios</h3>
           </div>
           <button type="button" class="x" aria-label="Cerrar" @click="close">×</button>
         </header>
@@ -53,7 +53,8 @@
           <img v-if="photoUrl && !photoBusy" :src="photoUrl" alt="Foto de la lista" class="thumb" />
 
           <p class="hint">
-            Inventario Mágico mete productos y existencias. Precio Mágico avisa si el costo subió y te sugiere el precio al público.
+            Inventario Mágico registra una compra: proveedor, lote y caducidad (si la nota no trae caducidad, usamos la fecha).
+            Precio Mágico avisa si el costo subió y te sugiere el precio al público.
             Cada revisión usa 1 intento; si no encuentra nada, no se descuenta.
           </p>
 
@@ -78,6 +79,55 @@
 
         <template v-else>
           <img v-if="photoUrl" :src="photoUrl" alt="" class="thumb mini" />
+
+          <section class="block">
+            <h4>Datos de la compra</h4>
+            <p class="hint">
+              Si la nota no trae caducidad, usamos esta fecha. Bórrala si no quieres lotes.
+            </p>
+            <div class="new-grid">
+              <label class="field wide">
+                <span>Proveedor</span>
+                <select v-model="purchase.supplierId" class="inp" @change="onSupplierPick">
+                  <option value="">De la nota / nuevo</option>
+                  <option v-for="s in supplierOptions" :key="s.id" :value="s.id">{{ s.name }}</option>
+                </select>
+              </label>
+              <label class="field wide">
+                <span>Nombre</span>
+                <input
+                  v-model="purchase.name"
+                  class="inp"
+                  list="magic-suppliers"
+                  placeholder="Proveedor (nota)"
+                  maxlength="80"
+                />
+                <datalist id="magic-suppliers">
+                  <option v-for="s in supplierOptions" :key="s.id" :value="s.name" />
+                </datalist>
+              </label>
+              <label class="field">
+                <span>Contacto</span>
+                <input v-model="purchase.contact" class="inp" maxlength="80" />
+              </label>
+              <label class="field">
+                <span>WhatsApp</span>
+                <input v-model="purchase.whatsapp" class="inp" inputmode="tel" maxlength="15" />
+              </label>
+              <label class="field">
+                <span>Fecha de la nota</span>
+                <input v-model="purchase.date" class="inp" type="date" />
+              </label>
+              <label class="field">
+                <span>Caducidad</span>
+                <input v-model="purchase.expiresAt" class="inp" type="date" />
+              </label>
+              <label class="field wide">
+                <span>Lote (si no viene en el renglón)</span>
+                <input v-model="purchase.lot" class="inp" maxlength="60" placeholder="Se arma solo si falta" />
+              </label>
+            </div>
+          </section>
 
           <p v-if="costAlerts.length" class="cost-banner">
             ⚠️ {{ costAlerts.length === 1 ? 'Un producto subió de costo' : `${costAlerts.length} productos subieron de costo` }}.
@@ -115,6 +165,14 @@
                       <label>
                         Entrada
                         <input v-model.number="row.stockIn" class="price-in" type="number" min="0" step="1" />
+                      </label>
+                      <label>
+                        Lote
+                        <input v-model="row.lot" class="price-in lot-in" maxlength="60" />
+                      </label>
+                      <label>
+                        Caduca
+                        <input v-model="row.expiresAt" class="price-in lot-in" type="date" />
                       </label>
                     </span>
                     <small v-if="row.oldPrice != null">
@@ -190,9 +248,17 @@
                     <input v-model.number="row.stockIn" class="inp" type="number" min="0" step="1" />
                   </label>
                   <label class="field">
+                    <span>Lote</span>
+                    <input v-model="row.lot" class="inp" maxlength="60" />
+                  </label>
+                  <label class="field">
+                    <span>Caducidad</span>
+                    <input v-model="row.expiresAt" class="inp" type="date" />
+                  </label>
+                  <label class="field">
                     <span>Categoría</span>
                     <select v-model="row.menuId" class="inp">
-                      <option v-for="m in menus" :key="m.id" :value="m.id">{{ m.name }}</option>
+                      <option v-for="m in catalogMenus" :key="m.id" :value="m.id">{{ m.name }}</option>
                     </select>
                   </label>
                 </div>
@@ -227,6 +293,7 @@ import { apiService } from "../apiService";
 const props = defineProps({
   menus: { type: Array, default: () => [] },
   defaultMenuId: { type: String, default: "" },
+  suppliers: { type: Array, default: () => [] },
 });
 
 const emit = defineEmits(["close", "applied", "manual"]);
@@ -245,6 +312,32 @@ const busy = ref(false);
 const result = ref(null);
 const picks = ref([]);
 const news = ref([]);
+const supplierOptions = ref([]);
+const menuOptions = ref([]);
+const purchase = ref(emptyPurchase());
+
+function todayYmd() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function emptyPurchase() {
+  const today = todayYmd();
+  return {
+    supplierId: "",
+    name: "",
+    contact: "",
+    whatsapp: "",
+    date: today,
+    expiresAt: today,
+    lot: "",
+    notes: "",
+  };
+}
+
+const catalogMenus = computed(() =>
+  props.menus?.length ? props.menus : menuOptions.value
+);
 
 const blocked = computed(() => {
   if (!quota.value || result.value || quota.value.limit == null) return false;
@@ -289,7 +382,17 @@ function errText(e, fallback) {
 }
 
 function defaultMenu() {
-  return props.defaultMenuId || props.menus[0]?.id || "";
+  return props.defaultMenuId || catalogMenus.value[0]?.id || "";
+}
+
+async function ensureMenus() {
+  if (catalogMenus.value.length) return catalogMenus.value;
+  try {
+    menuOptions.value = (await apiService.getAllMenus()) || [];
+  } catch {
+    menuOptions.value = [];
+  }
+  return catalogMenus.value;
 }
 
 async function loadQuota() {
@@ -433,6 +536,34 @@ async function onPhoto(event) {
   }
 }
 
+function fillPurchase(data) {
+  const s = data?.supplier || {};
+  const date = String(s.date || "").slice(0, 10) || todayYmd();
+  const name = String(s.name || "").trim();
+  const listed = supplierOptions.value.length ? supplierOptions.value : props.suppliers || [];
+  const match =
+    (s.id && listed.find((item) => item.id === s.id)) ||
+    listed.find((item) => String(item.name || "").toLowerCase() === name.toLowerCase());
+  purchase.value = {
+    supplierId: match?.id || s.id || "",
+    name: name || match?.name || "",
+    contact: String(s.contact || match?.contact || "").trim(),
+    whatsapp: String(s.whatsapp || match?.whatsapp || "").replace(/\D/g, "").slice(0, 15),
+    date,
+    expiresAt: String(s.expiresAt || "").slice(0, 10) || date,
+    lot: String(s.lot || "").trim(),
+    notes: "",
+  };
+}
+
+function onSupplierPick() {
+  const found = supplierOptions.value.find((item) => item.id === purchase.value.supplierId);
+  if (!found) return;
+  purchase.value.name = found.name || purchase.value.name;
+  if (!purchase.value.contact) purchase.value.contact = found.contact || "";
+  if (!purchase.value.whatsapp) purchase.value.whatsapp = found.whatsapp || "";
+}
+
 function fillPicks(data) {
   const rows = [];
   for (const row of data.matches || []) {
@@ -449,6 +580,8 @@ function fillPicks(data) {
       packSize: Number(row.packSize) || 0,
       packs: Number(row.packs) || 1,
       isPack: Boolean(row.isPack),
+      lot: String(row.lot || "").trim(),
+      expiresAt: String(row.expiresAt || "").slice(0, 10),
       from: row.from,
       checked: true,
       options: null,
@@ -474,6 +607,8 @@ function fillPicks(data) {
       packSize: Number(row.packSize) || 0,
       packs: Number(row.packs) || 1,
       isPack: Boolean(row.isPack),
+      lot: String(row.lot || "").trim(),
+      expiresAt: String(row.expiresAt || "").slice(0, 10),
       from: row.from,
       checked: false,
       options: row.options,
@@ -497,6 +632,8 @@ function fillPicks(data) {
         packSize: 0,
         packs: 1,
         isPack: /pack|paq|caja/i.test(row),
+        lot: "",
+        expiresAt: "",
         menuId: defaultMenu(),
         checked: true,
       };
@@ -511,6 +648,8 @@ function fillPicks(data) {
       packSize: Number(row.packSize) || 0,
       packs: Number(row.packs) || 1,
       isPack: Boolean(row.isPack),
+      lot: String(row.lot || "").trim(),
+      expiresAt: String(row.expiresAt || "").slice(0, 10),
       menuId: defaultMenu(),
       checked: true,
     };
@@ -528,6 +667,8 @@ function addExtra() {
     packSize: 0,
     packs: 1,
     isPack: false,
+    lot: "",
+    expiresAt: "",
     manual: true,
     menuId: defaultMenu(),
     checked: true,
@@ -566,6 +707,7 @@ function resetReview() {
   result.value = null;
   picks.value = [];
   news.value = [];
+  purchase.value = emptyPurchase();
   notice.value = "";
   error.value = "";
 }
@@ -581,7 +723,10 @@ async function review() {
     error.value = `Ya usaste las ${quota.value.limit} actualizaciones de este mes. Se reinician el día 1.`;
     return;
   }
-  if (!props.menus?.length) {
+  if (!catalogMenus.value.length) {
+    await ensureMenus();
+  }
+  if (!catalogMenus.value.length) {
     error.value = "Primero crea una categoría en el catálogo.";
     return;
   }
@@ -596,6 +741,7 @@ async function review() {
     if (data.message) notice.value = data.message;
     if (data.charged) {
       result.value = data;
+      fillPurchase(data);
       fillPicks(data);
     }
   } catch (e) {
@@ -650,7 +796,11 @@ async function save() {
   }
 
   busy.value = true;
+  busy.value = true;
   try {
+    const lineLot = (row) => String(row.lot || purchase.value.lot || "").trim();
+    const lineExpiry = (row) =>
+      String(row.expiresAt || "").slice(0, 10) || String(purchase.value.expiresAt || "").slice(0, 10);
     const updates = picks.value
       .filter((row) => row.checked && row.id)
       .map((row) => ({
@@ -658,6 +808,8 @@ async function save() {
         price: Number(row.price),
         cost: Number(row.cost) || 0,
         stockIn: Math.max(0, Math.floor(Number(row.stockIn) || 0)),
+        lot: lineLot(row),
+        expiresAt: lineExpiry(row),
       }));
     const creates = news.value
       .filter(readyNew)
@@ -668,13 +820,25 @@ async function save() {
         barcode: row.barcode || "",
         menuId: row.menuId,
         stockIn: Math.max(0, Math.floor(Number(row.stockIn) || 0)),
+        lot: lineLot(row),
+        expiresAt: lineExpiry(row),
       }));
-    const data = await apiService.aiApply(updates, creates);
+    const data = await apiService.aiApply(updates, creates, {
+      supplierId: purchase.value.supplierId || undefined,
+      name: String(purchase.value.name || "").trim(),
+      contact: String(purchase.value.contact || "").trim(),
+      whatsapp: String(purchase.value.whatsapp || "").replace(/\D/g, ""),
+      date: purchase.value.date || todayYmd(),
+      expiresAt: String(purchase.value.expiresAt || "").slice(0, 10),
+      lot: String(purchase.value.lot || "").trim(),
+      notes: "Inventario Mágico",
+    });
     notice.value = data.message || "Cambios guardados.";
     emit("applied");
     result.value = null;
     picks.value = [];
     news.value = [];
+    purchase.value = emptyPurchase();
     text.value = "";
     clearPhoto();
   } catch (e) {
@@ -691,6 +855,22 @@ function close() {
 
 onMounted(async () => {
   busy.value = false;
+  menuOptions.value = Array.isArray(props.menus) ? [...props.menus] : [];
+  supplierOptions.value = Array.isArray(props.suppliers) ? [...props.suppliers] : [];
+  if (!menuOptions.value.length) {
+    try {
+      menuOptions.value = (await apiService.getAllMenus()) || [];
+    } catch {
+      menuOptions.value = [];
+    }
+  }
+  if (!supplierOptions.value.length) {
+    try {
+      supplierOptions.value = (await apiService.getSuppliers()) || [];
+    } catch {
+      supplierOptions.value = [];
+    }
+  }
   await loadQuota();
 });
 </script>
@@ -855,6 +1035,7 @@ select.inp { min-height: 2.65rem; }
   color: var(--timber-ink);
   background: var(--timber-panel);
 }
+.price-in.lot-in { width: 8.2rem; }
 .from { margin: 0.25rem 0 0 1.7rem; color: var(--timber-muted); font-size: 0.82rem; }
 .from select {
   display: block;

@@ -1,6 +1,12 @@
 const db = require('../database/mongodb');
 const limits = require('../services/plan-limits.service');
 const { seedStarterCatalog, starterProductCount } = require('../services/starter-catalog.service');
+const { ObjectId } = require('mongodb');
+
+function sanitizeSupplierIds(raw) {
+  if (!Array.isArray(raw)) return [];
+  return [...new Set(raw.map((id) => String(id || '').trim()).filter((id) => ObjectId.isValid(id)))];
+}
 
 async function listMenus(req, res) {
   try {
@@ -96,6 +102,8 @@ async function createFood(req, res) {
       priceIncludesTax,
       stock,
       lowStockThreshold,
+      tracksExpiry,
+      supplierIds,
     } = req.body || {};
     if (!name || price == null || !menuId) {
       return res.status(400).send('name, price y menuId son requeridos');
@@ -126,6 +134,8 @@ async function createFood(req, res) {
       tenantId: req.tenantId,
       stock: stock == null || stock === '' ? 0 : Math.max(0, Number(stock) || 0),
       lowStockThreshold: lowStockThreshold == null || lowStockThreshold === '' ? 5 : Math.max(0, Number(lowStockThreshold) || 5),
+      tracksExpiry: Boolean(tracksExpiry),
+      supplierIds: sanitizeSupplierIds(supplierIds),
     });
     return res.status(201).json(created);
   } catch (err) {
@@ -156,6 +166,8 @@ async function updateFood(req, res) {
     if (body.lowStockThreshold != null && body.lowStockThreshold !== '') {
       body.lowStockThreshold = Math.max(0, Number(body.lowStockThreshold) || 5);
     }
+    if (body.tracksExpiry != null) body.tracksExpiry = Boolean(body.tracksExpiry);
+    if (body.supplierIds != null) body.supplierIds = sanitizeSupplierIds(body.supplierIds);
     const updated = await db.UpdateFood(req.params.id, body, req.tenantId);
     if (!updated) return res.status(404).send('Producto no encontrado');
     return res.status(200).json(updated);

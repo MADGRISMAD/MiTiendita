@@ -58,6 +58,10 @@ async function ensureIndexes() {
     { tenantId: 1, clientSaleId: 1 },
     { unique: true, sparse: true, name: 'tenant_clientSaleId' }
   );
+  await dbConnection.collection('suppliers').createIndex({ tenantId: 1, name: 1 }).catch(() => {});
+  await dbConnection.collection('purchases').createIndex({ tenantId: 1, date: -1 }).catch(() => {});
+  await dbConnection.collection('lots').createIndex({ tenantId: 1, foodId: 1, expiresAt: 1 }).catch(() => {});
+  await dbConnection.collection('activity_log').createIndex({ tenantId: 1, createdAt: -1 }).catch(() => {});
 }
 
 async function migrateLegacyTenant() {
@@ -391,16 +395,67 @@ async function UpdateFood(id, data, tenantId) {
 }
 /** Resta existencias al cobrar. No bloquea la venta; el stock no baja de 0. */
 async function DecrementFoodStock(id, quantity, tenantId) {
+  const result = await ApplySaleDecrement(id, quantity, tenantId);
+  return result.food;
+}
+
+/** Descuenta stock y, si el producto lleva caducidad, consume lotes FEFO. */
+async function ApplySaleDecrement(id, quantity, tenantId) {
   const filter = oidFilter(id, tenantId);
-  if (!filter) return null;
+  if (!filter) return { food: null, allocations: [] };
   const food = await dbConnection.collection('foods').findOne(filter);
-  if (!food) return null;
+  if (!food) return { food: null, allocations: [] };
   const qty = Math.max(0, Number(quantity) || 0);
-  if (!qty) return withId(food);
+  if (!qty) return { food: withId(food), allocations: [] };
+
+  const allocations = [];
+  if (food.tracksExpiry) {
+    const lots = await dbConnection
+      .collection('lots')
+      .find({ tenantId, foodId: String(id), quantity: { $gt: 0 } })
+      .sort({ expiresAt: 1, createdAt: 1 })
+      .toArray();
+    let remaining = qty;
+    for (const lot of lots) {
+      if (remaining <= 0) break;
+      const take = Math.min(Math.max(0, Number(lot.quantity) || 0), remaining);
+      if (!take) continue;
+      await dbConnection.collection('lots').updateOne(
+        { _id: lot._id },
+        { $inc: { quantity: -take }, $set: { updatedAt: new Date() } }
+      );
+      allocations.push({
+        lotId: String(lot._id),
+        qty: take,
+        lot: lot.lot || '',
+        expiresAt: lot.expiresAt || null,
+      });
+      remaining -= take;
+    }
+  }
+
   const current = Math.max(0, Number(food.stock) || 0);
   const next = Math.max(0, current - qty);
   await dbConnection.collection('foods').updateOne(filter, { $set: { stock: next } });
-  return GetFoodById(id, tenantId);
+  return { food: await GetFoodById(id, tenantId), allocations };
+}
+
+/** Devuelve piezas al inventario y restaura lotes si la venta se anuló. */
+async function RestoreSaleStock(id, quantity, allocations, tenantId) {
+  const qty = Math.max(0, Number(quantity) || 0);
+  if (Array.isArray(allocations)) {
+    for (const alloc of allocations) {
+      const take = Math.max(0, Number(alloc?.qty) || 0);
+      if (!take || !ObjectId.isValid(alloc.lotId)) continue;
+      const lotFilter = { _id: new ObjectId(alloc.lotId) };
+      if (tenantId) lotFilter.tenantId = tenantId;
+      await dbConnection.collection('lots').updateOne(
+        lotFilter,
+        { $inc: { quantity: take }, $set: { updatedAt: new Date() } }
+      );
+    }
+  }
+  return IncrementFoodStock(id, qty, tenantId);
 }
 /** Suma piezas al inventario (entrada por compra / pack). */
 async function IncrementFoodStock(id, quantity, tenantId) {
@@ -417,6 +472,10 @@ async function IncrementFoodStock(id, quantity, tenantId) {
 async function DeleteFood(id, tenantId) {
   const filter = oidFilter(id, tenantId);
   if (!filter) return { deletedCount: 0 };
+  await dbConnection.collection('lots').deleteMany({
+    foodId: String(id),
+    ...(tenantId ? { tenantId } : {}),
+  });
   return await dbConnection.collection('foods').deleteOne(filter);
 }
 
@@ -1013,6 +1072,137 @@ async function GetBulkLastCosts(tenantId, foodIds) {
   return map;
 }
 
+// ── Proveedores ──
+async function CreateSupplier(data) {
+  const result = await dbConnection.collection('suppliers').insertOne(data);
+  return withId(await dbConnection.collection('suppliers').findOne({ _id: result.insertedId }));
+}
+async function GetSuppliers(tenantId) {
+  const filter = tenantId ? { tenantId } : {};
+  return (await dbConnection.collection('suppliers').find(filter).sort({ name: 1 }).toArray()).map(withId);
+}
+async function GetSupplierById(id, tenantId) {
+  const filter = oidFilter(id, tenantId);
+  if (!filter) return null;
+  return withId(await dbConnection.collection('suppliers').findOne(filter));
+}
+async function UpdateSupplier(id, data, tenantId) {
+  const filter = oidFilter(id, tenantId);
+  if (!filter) return null;
+  const clean = { ...data, updatedAt: new Date() };
+  delete clean.id;
+  delete clean._id;
+  await dbConnection.collection('suppliers').updateOne(filter, { $set: clean });
+  return GetSupplierById(id, tenantId);
+}
+async function DeleteSupplier(id, tenantId) {
+  const filter = oidFilter(id, tenantId);
+  if (!filter) return { deletedCount: 0 };
+  return dbConnection.collection('suppliers').deleteOne(filter);
+}
+async function SearchSuppliers(tenantId, query) {
+  const q = String(query || '').trim();
+  if (!q) return GetSuppliers(tenantId);
+  const regex = { $regex: q, $options: 'i' };
+  const filter = {
+    ...(tenantId ? { tenantId } : {}),
+    $or: [{ name: regex }, { contact: regex }, { whatsapp: regex }],
+  };
+  return (await dbConnection.collection('suppliers').find(filter).sort({ name: 1 }).toArray()).map(withId);
+}
+async function FindSupplierByName(tenantId, name) {
+  const n = String(name || '').trim();
+  if (!n) return null;
+  const escaped = n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return withId(
+    await dbConnection.collection('suppliers').findOne({
+      ...(tenantId ? { tenantId } : {}),
+      name: { $regex: `^${escaped}$`, $options: 'i' },
+    })
+  );
+}
+async function GetFoodsBySupplier(supplierId, tenantId) {
+  const filter = {
+    ...(tenantId ? { tenantId } : {}),
+    supplierIds: String(supplierId),
+  };
+  return (await dbConnection.collection('foods').find(filter).sort({ name: 1 }).toArray()).map(withId);
+}
+async function UnlinkSupplierFromFoods(supplierId, tenantId) {
+  const filter = tenantId ? { tenantId } : {};
+  await dbConnection.collection('foods').updateMany(filter, { $pull: { supplierIds: String(supplierId) } });
+}
+
+// ── Compras ──
+async function CreatePurchase(data) {
+  const result = await dbConnection.collection('purchases').insertOne(data);
+  return withId(await dbConnection.collection('purchases').findOne({ _id: result.insertedId }));
+}
+async function GetPurchases(tenantId, opts = {}) {
+  const filter = { ...(tenantId ? { tenantId } : {}) };
+  if (opts.supplierId) filter.supplierId = String(opts.supplierId);
+  return (await dbConnection.collection('purchases').find(filter).sort({ date: -1, createdAt: -1 }).limit(200).toArray()).map(withId);
+}
+async function GetPurchaseById(id, tenantId) {
+  const filter = oidFilter(id, tenantId);
+  if (!filter) return null;
+  return withId(await dbConnection.collection('purchases').findOne(filter));
+}
+
+// ── Lotes ──
+async function CreateLot(data) {
+  const result = await dbConnection.collection('lots').insertOne(data);
+  return withId(await dbConnection.collection('lots').findOne({ _id: result.insertedId }));
+}
+async function GetLotsByFood(foodId, tenantId) {
+  const filter = { foodId: String(foodId), ...(tenantId ? { tenantId } : {}) };
+  return (await dbConnection.collection('lots').find(filter).sort({ expiresAt: 1 }).toArray()).map(withId);
+}
+async function GetExpiringLots(tenantId, until) {
+  const filter = {
+    ...(tenantId ? { tenantId } : {}),
+    quantity: { $gt: 0 },
+    expiresAt: { $ne: null, $lte: until },
+  };
+  return (await dbConnection.collection('lots').find(filter).sort({ expiresAt: 1 }).toArray()).map(withId);
+}
+
+// ── Bitácora ──
+async function CreateActivityLog(data) {
+  const result = await dbConnection.collection('activity_log').insertOne(data);
+  return withId(await dbConnection.collection('activity_log').findOne({ _id: result.insertedId }));
+}
+async function GetActivityLog(tenantId, limit = 80) {
+  const filter = tenantId ? { tenantId } : {};
+  return (await dbConnection
+    .collection('activity_log')
+    .find(filter)
+    .sort({ createdAt: -1 })
+    .limit(Math.min(200, Math.max(1, Number(limit) || 80)))
+    .toArray()).map(withId);
+}
+
+async function GetPaidItemQtySince(tenantId, since) {
+  const orders = await dbConnection
+    .collection('orders')
+    .find({
+      tenantId,
+      paymentStatus: 'paid',
+      createdAt: { $gte: since },
+    })
+    .project({ items: 1 })
+    .toArray();
+  const map = {};
+  for (const order of orders) {
+    for (const item of order.items || []) {
+      const id = String(item.foodId || item.food || '');
+      if (!id) continue;
+      map[id] = (map[id] || 0) + (Number(item.quantity) || 0);
+    }
+  }
+  return map;
+}
+
 module.exports = {
   ensureConnection,
   CreateTenant, GetTenantById, UpdateTenant, ListTenants, CountUsersByTenant, CountPendingInvites, ListUsersByTenant, GetTenantByMpPreapprovalId,
@@ -1024,7 +1214,7 @@ module.exports = {
   AddWaitList, GetWaitList, GetWaitListByNumber, DeleteWaitList,
   GetSettings, CreateSettings, UpdateSettings,
   GetMenus, GetMenuById, CreateMenu, UpdateMenu, DeleteMenu,
-  GetFoods, CountFoods, CountPaidOrders, CountCashSessions, GetFoodById, GetFoodByBarcode, CreateFood, UpdateFood, DecrementFoodStock, IncrementFoodStock, DeleteFood, GetLowStockFoods, SearchFoods,
+  GetFoods, CountFoods, CountPaidOrders, CountCashSessions, GetFoodById, GetFoodByBarcode, CreateFood, UpdateFood, DecrementFoodStock, ApplySaleDecrement, RestoreSaleStock, IncrementFoodStock, DeleteFood, GetLowStockFoods, SearchFoods,
   CreateBillingEvent, ListBillingEvents,
   GetOrders, GetOrderById, GetOrderByInvoiceToken, GetOrderByClientSaleId, CreateOrder, UpdateOrder, GetOrdersByCashSession,
   GetOrdersByDateRange, GetSalesReport,
@@ -1036,4 +1226,9 @@ module.exports = {
   SavePlatformSnapshot, ListPlatformSnapshots,
   CreateCustomer, GetCustomers, GetCustomerById, UpdateCustomer, DeleteCustomer, SearchCustomers,
   SaveCostSnapshot, GetCostHistory, GetLastCostSnapshot, GetBulkLastCosts,
+  CreateSupplier, GetSuppliers, GetSupplierById, UpdateSupplier, DeleteSupplier, SearchSuppliers, FindSupplierByName,
+  GetFoodsBySupplier, UnlinkSupplierFromFoods,
+  CreatePurchase, GetPurchases, GetPurchaseById,
+  CreateLot, GetLotsByFood, GetExpiringLots,
+  CreateActivityLog, GetActivityLog, GetPaidItemQtySince,
 };

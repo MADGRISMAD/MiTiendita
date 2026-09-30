@@ -292,6 +292,7 @@
           <div class="toolbar-right">
             <button type="button" class="seg" @click="goMode('pos')">Vender</button>
             <button type="button" class="seg on">Editar</button>
+            <router-link to="/inventory" class="seg">Compras</router-link>
           </div>
         </div>
 
@@ -305,6 +306,7 @@
               <template v-if="lowStockItems.length > 5"> y {{ lowStockItems.length - 5 }} más…</template>
             </span>
           </div>
+          <router-link to="/inventory?tab=sugerido" class="low-stock-go">Sugerido</router-link>
         </div>
 
         <!-- Barra de búsqueda y toggle de vista -->
@@ -345,7 +347,7 @@
               :disabled="cashBlocked"
               @click="openMagic"
             >
-              <span class="magic-title">Actualizar precios</span>
+              <span class="magic-title">Registrar compra y precios</span>
               <span class="magic-sub">
                 {{ cashBlocked ? 'Bloqueado hasta el corte de caja' : 'Inventario Mágico · Precio Mágico' }}
               </span>
@@ -369,6 +371,7 @@
                   <span class="psku">{{ producto.barcode || producto.sku || 'Sin código' }} · {{ producto.priceIncludesTax ? 'Bruto' : 'Neto' }}</span>
                   <span v-if="inventoryOn" class="pstock" :class="{ low: Number(producto.stock || 0) <= Number(producto.lowStockThreshold || 5) }">
                     Stock {{ Number(producto.stock) || 0 }}
+                    <template v-if="producto.tracksExpiry"> · caduca</template>
                   </span>
                   <span class="price">{{ money(producto.price) }}</span>
                   <span v-if="Number(producto.cost)" class="pcost">
@@ -570,6 +573,7 @@
         v-if="aiEnabled && showMagic"
         :menus="menus"
         :default-menu-id="selectedMenuId"
+        :suppliers="suppliers"
         @close="showMagic = false"
         @applied="onMagicApplied"
         @manual="onMagicManual"
@@ -726,6 +730,19 @@
                 <span>Stock mínimo</span>
                 <input v-model.number="foodForm.lowStockThreshold" class="inp" type="number" min="0" step="1" placeholder="5" />
               </label>
+              <label v-if="inventoryOn" class="check-wide wide">
+                <input v-model="foodForm.tracksExpiry" type="checkbox" />
+                <span>Este producto caduca (lotes y FEFO)</span>
+              </label>
+              <div v-if="inventoryOn && suppliers.length" class="field wide">
+                <span>Proveedores</span>
+                <div class="supplier-picks">
+                  <label v-for="s in suppliers" :key="s.id">
+                    <input v-model="foodForm.supplierIds" type="checkbox" :value="s.id" />
+                    {{ s.name }}
+                  </label>
+                </div>
+              </div>
               <label v-if="!inventoryOn" class="field">
                 <span>Código de barras</span>
                 <input v-model="foodForm.barcode" class="inp" placeholder="Escanea o escribe" autocomplete="off" data-scan="barcode" />
@@ -874,12 +891,15 @@ export default {
       priceMode: "gross", // gross = el precio ya incluye IVA
       stock: 0,
       lowStockThreshold: 5,
+      tracksExpiry: false,
+      supplierIds: [],
     });
 
     // Búsqueda y vista de lista en modo catálogo
     const catalogSearch = ref("");
     const viewMode = ref("grid"); // "grid" o "list"
     const lowStockItems = ref([]);
+    const suppliers = ref([]);
 
     const inventoryOn = computed(() => Boolean(venueStore.inventoryEnabled));
     const TAX_RATE = computed(() => Number(venueStore.taxRate) || 0.16);
@@ -1730,6 +1750,11 @@ export default {
         menus.value = (await apiService.getAllMenus()) || [];
         if (mode.value === "manage" && menus.value[0]) loadMenuProducts(menus.value[0].id);
         pickFoods.value = (await apiService.getAllFoods()) || [];
+        try {
+          suppliers.value = (await apiService.getSuppliers()) || [];
+        } catch {
+          suppliers.value = [];
+        }
         await saveCatalog(authStore.tenantId, {
           foods: pickFoods.value,
           menus: menus.value,
@@ -1787,6 +1812,15 @@ export default {
       loadMenuProducts(created.id);
     }
 
+    async function ensureSuppliers() {
+      if (suppliers.value.length) return;
+      try {
+        suppliers.value = (await apiService.getSuppliers()) || [];
+      } catch {
+        suppliers.value = [];
+      }
+    }
+
     function editFood(producto) {
       editingFood.value = producto;
       foodForm.name = producto.name;
@@ -1798,7 +1832,10 @@ export default {
       foodForm.priceMode = producto.priceIncludesTax ? "gross" : "net";
       foodForm.stock = Number(producto.stock) || 0;
       foodForm.lowStockThreshold = producto.lowStockThreshold != null ? Number(producto.lowStockThreshold) : 5;
+      foodForm.tracksExpiry = Boolean(producto.tracksExpiry);
+      foodForm.supplierIds = Array.isArray(producto.supplierIds) ? [...producto.supplierIds] : [];
       showFoodForm.value = true;
+      ensureSuppliers();
     }
 
     function openNewFood() {
@@ -1811,10 +1848,12 @@ export default {
         return;
       }
       showFoodForm.value = true;
+      ensureSuppliers();
     }
 
-    function openMagic() {
+    async function openMagic() {
       if (cashBlocked.value) return;
+      await ensureSuppliers();
       showMagic.value = true;
     }
 
@@ -1825,6 +1864,8 @@ export default {
 
     async function onMagicApplied() {
       await fetchVenueSettings().catch(() => {});
+      suppliers.value = [];
+      await ensureSuppliers();
       if (selectedMenuId.value) await loadMenuProducts(selectedMenuId.value);
     }
 
@@ -1840,6 +1881,8 @@ export default {
       foodForm.priceMode = "gross";
       foodForm.stock = 0;
       foodForm.lowStockThreshold = 5;
+      foodForm.tracksExpiry = false;
+      foodForm.supplierIds = [];
       foodError.value = "";
       addAfterSave.value = false;
       pendingBarcode.value = "";
@@ -1870,6 +1913,8 @@ export default {
         menuId: selectedMenuId.value,
         stock: Number(foodForm.stock) || 0,
         lowStockThreshold: Number(foodForm.lowStockThreshold) || 5,
+        tracksExpiry: Boolean(foodForm.tracksExpiry),
+        supplierIds: [...foodForm.supplierIds],
       };
       try {
         let saved;
@@ -2028,6 +2073,7 @@ export default {
       catalogSearch,
       viewMode,
       lowStockItems,
+      suppliers,
       filteredProducts,
       lastLineQty,
       lastLineTotal,
@@ -2575,6 +2621,39 @@ export default {
 .seg.on {
   background: var(--timber-primary);
   color: var(--timber-on-primary);
+}
+a.seg {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+.check-wide {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--timber-ink);
+  margin: 0.15rem 0;
+}
+.check-wide input { width: 1.05rem; height: 1.05rem; }
+.supplier-picks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.supplier-picks label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid var(--timber-line);
+  background: var(--timber-panel-elevated);
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--timber-ink);
+  cursor: pointer;
 }
 .manage-body {
   flex: 1;
@@ -3568,7 +3647,7 @@ export default {
   color: var(--timber-ink);
 }
 .low-stock-icon { font-size: 1.3rem; flex-shrink: 0; }
-.low-stock-body { display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; }
+.low-stock-body { display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; flex: 1; }
 .low-stock-body strong { font-size: 0.82rem; color: var(--timber-warning); }
 .low-stock-list {
   font-size: 0.8rem;
@@ -3576,6 +3655,14 @@ export default {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.low-stock-go {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: var(--timber-primary);
+  text-decoration: none;
 }
 
 /* —— Barra de búsqueda del catálogo —— */

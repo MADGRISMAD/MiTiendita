@@ -15,13 +15,20 @@ function hasGeminiConfig() {
   return Boolean(String(process.env.GEMINI_API_KEY || '').trim());
 }
 
-const EXTRACT_PROMPT = `Eres el ayudante de una tienda de abarrotes en México.
-Del texto o de la foto, saca cada producto.
+const EXTRACT_PROMPT = `Eres el ayudante de una tienda de abarrotes o farmacia en México.
+Del texto o de la foto, saca cada producto y, si es factura/nota de proveedor, los datos del proveedor.
 La lista NO siempre es una factura: a veces es una nota escrita a mano, corta y sin precios.
 Responde solo JSON:
-{"items":[{"name":"","cost":0,"price":0,"barcode":"","packs":1,"packSize":1}]}
+{"supplier":{"name":"","contact":"","whatsapp":"","date":"","expiresAt":""},"items":[{"name":"","cost":0,"price":0,"barcode":"","packs":1,"packSize":1,"lot":"","expiresAt":""}]}
 
-Significado de campos:
+Proveedor (solo si se ve en la nota/factura; si no, strings vacíos):
+- name: razón social o nombre comercial del proveedor.
+- contact: persona de contacto o correo, si aparece.
+- whatsapp: teléfono o WhatsApp (solo dígitos si puedes).
+- date: fecha de la factura/nota en YYYY-MM-DD. Si está en DD/MM/AAAA, conviértela.
+- expiresAt: caducidad general del documento si hay UNA sola para toda la nota; si no, "".
+
+Significado de campos de producto:
 - name: producto (marca y tamaño si aparecen). Si dice PACK/PAQUETE/CAJA, déjalo en el nombre.
 - cost: precio de COMPRA del renglón. Si no hay dinero, 0.
 - price: precio de VENTA al cliente por pieza. Si no hay dinero, 0.
@@ -29,6 +36,8 @@ Significado de campos:
 - packs: cuántas piezas (o packs, si es mayoreo) entran. Si no se ve, 1.
 - packSize: cuántas PIEZAS trae cada pack. Si es pieza suelta, 1.
   Si no puedes saber las piezas del pack, packSize = 0.
+- lot: lote / número de lote si aparece; si no, "".
+- expiresAt: caducidad del renglón en YYYY-MM-DD si aparece (a veces dice CAD, Caducidad, Exp). Si no, "".
 
 Cómo leen los dueños (imítalo):
 - "15 cocas de 600" → name "Coca Cola 600 ml", packs 15, packSize 1, cost 0, price 0.
@@ -46,8 +55,53 @@ Reglas:
 - PACK / PAQUETE / CAJA = mayoreo: packSize = piezas del pack.
 - Factura de proveedor: el monto va en cost. Lista de venta ("a 22"): el monto va en price.
 - Números en pesos, sin $ ni comas.
-- No incluyas totales, IVA, fecha, RFC ni el nombre del proveedor.
-- Si no lees nada, {"items":[]}.`;
+- No incluyas totales, IVA ni RFC como productos.
+- SÍ extrae proveedor, fecha, lote y caducidad cuando existan.
+- Si no lees nada, {"supplier":{"name":"","contact":"","whatsapp":"","date":"","expiresAt":""},"items":[]}.`;
+
+function ymd(year, month, day) {
+  const y = Number(year);
+  const m = Number(month);
+  const d = Number(day);
+  if (!y || !m || !d || m > 12 || d > 31) return '';
+  return `${String(y).padStart(4, '0')}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+}
+
+function parseDocDate(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  const iso = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (iso) return ymd(iso[1], iso[2], iso[3]);
+  const dmy = raw.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/);
+  if (dmy) {
+    const year = dmy[3].length === 2 ? `20${dmy[3]}` : dmy[3];
+    return ymd(year, dmy[2], dmy[1]);
+  }
+  const dt = new Date(raw);
+  if (!Number.isNaN(dt.getTime()) && dt.getUTCFullYear() > 2000) {
+    return ymd(dt.getUTCFullYear(), dt.getUTCMonth() + 1, dt.getUTCDate());
+  }
+  return '';
+}
+
+function digitsPhone(value) {
+  return String(value || '').replace(/\D/g, '').slice(0, 15);
+}
+
+function emptySupplier() {
+  return { name: '', contact: '', whatsapp: '', date: '', expiresAt: '' };
+}
+
+function normalizeSupplier(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return emptySupplier();
+  return {
+    name: String(raw.name || raw.supplierName || '').trim().slice(0, 80),
+    contact: String(raw.contact || '').trim().slice(0, 80),
+    whatsapp: digitsPhone(raw.whatsapp || raw.phone || raw.telefono),
+    date: parseDocDate(raw.date || raw.fecha),
+    expiresAt: parseDocDate(raw.expiresAt || raw.caducidad),
+  };
+}
 
 function stripJsonFence(text) {
   const raw = String(text || '').trim();
@@ -66,7 +120,7 @@ function intQty(value, fallback = 0) {
   return Math.min(5000, n);
 }
 
-const SKIP_LINE = /^(total|subtotal|iva|ieps|cambio|efectivo|fecha|rfc|proveedor|gracias)\b/i;
+const SKIP_LINE = /^(total|subtotal|iva|ieps|cambio|efectivo|fecha|rfc|proveedor|gracias|factura|whatsapp)\b/i;
 const BRANDS = [
   [/^(?:las?\s+)?cocas?(?:\s+colas?)?$/, 'Coca Cola'],
   [/^pepsis?$/, 'Pepsi'],
@@ -207,6 +261,8 @@ function parseLooseLine(line) {
     barcode: '',
     packs: Math.max(1, qty),
     packSize,
+    lot: '',
+    expiresAt: '',
     explicitQty,
     fromLoose: true,
   };
@@ -233,6 +289,8 @@ function parseLooseList(text) {
 }
 
 function absorbLoose(row) {
+  const lot = String(row?.lot || row?.lote || '').trim().slice(0, 60);
+  const expiresAt = parseDocDate(row?.expiresAt || row?.caducidad || row?.expiry);
   const loose = parseLooseLine(row?.name);
   if (!loose) {
     return {
@@ -242,6 +300,8 @@ function absorbLoose(row) {
       barcode: String(row?.barcode || '').replace(/\s/g, ''),
       packs: intQty(row?.packs, 1) || 1,
       packSize: intQty(row?.packSize, 0),
+      lot,
+      expiresAt,
       fromLoose: false,
     };
   }
@@ -261,18 +321,27 @@ function absorbLoose(row) {
     packSize: loose.explicitQty || loose.packSize !== 1
       ? loose.packSize
       : intQty(row?.packSize, loose.packSize),
+    lot: lot || loose.lot || '',
+    expiresAt: expiresAt || loose.expiresAt || '',
     fromLoose: true,
   };
 }
 
-function parseItems(text) {
+function parsePayload(text) {
   const parsed = JSON.parse(stripJsonFence(text));
   const list = Array.isArray(parsed) ? parsed : parsed?.items;
-  if (!Array.isArray(list)) return [];
-  return list
-    .map((row) => absorbLoose(row))
-    .filter((row) => row.name && (row.cost > 0 || row.price > 0 || row.packs > 1 || row.packSize !== 1 || row.fromLoose))
-    .slice(0, 80);
+  const items = Array.isArray(list)
+    ? list
+        .map((row) => absorbLoose(row))
+        .filter((row) => row.name && (row.cost > 0 || row.price > 0 || row.packs > 1 || row.packSize !== 1 || row.fromLoose))
+        .slice(0, 80)
+    : [];
+  const supplier = normalizeSupplier(Array.isArray(parsed) ? null : parsed?.supplier);
+  return { items, supplier };
+}
+
+function parseItems(text) {
+  return parsePayload(text).items;
 }
 
 function itemKey(name) {
@@ -312,6 +381,10 @@ function isTimeoutError(err) {
   );
 }
 
+function looksLikeInvoice(text) {
+  return /\b(factura|proveedor|rfc|remisi[oó]n|caducidad|lote|fecha|iva|subtotal)\b/i.test(String(text || ''));
+}
+
 async function extractPrices({ text, imageBase64, mimeType }) {
   const key = String(process.env.GEMINI_API_KEY || '').trim();
   if (!key) {
@@ -322,8 +395,8 @@ async function extractPrices({ text, imageBase64, mimeType }) {
 
   const hasImage = Boolean(imageBase64);
   const loose = parseLooseList(text);
-  if (!hasImage && loose.complete) {
-    return loose.items.map(publicItem);
+  if (!hasImage && loose.complete && !looksLikeInvoice(text)) {
+    return { items: loose.items.map(publicItem), supplier: emptySupplier() };
   }
 
   const parts = [
@@ -360,6 +433,16 @@ async function extractPrices({ text, imageBase64, mimeType }) {
           responseSchema: {
             type: 'OBJECT',
             properties: {
+              supplier: {
+                type: 'OBJECT',
+                properties: {
+                  name: { type: 'STRING' },
+                  contact: { type: 'STRING' },
+                  whatsapp: { type: 'STRING' },
+                  date: { type: 'STRING' },
+                  expiresAt: { type: 'STRING' },
+                },
+              },
               items: {
                 type: 'ARRAY',
                 items: {
@@ -371,6 +454,8 @@ async function extractPrices({ text, imageBase64, mimeType }) {
                     barcode: { type: 'STRING' },
                     packs: { type: 'NUMBER' },
                     packSize: { type: 'NUMBER' },
+                    lot: { type: 'STRING' },
+                    expiresAt: { type: 'STRING' },
                   },
                   required: ['name'],
                 },
@@ -383,7 +468,9 @@ async function extractPrices({ text, imageBase64, mimeType }) {
       signal: AbortSignal.timeout(hasImage ? IMAGE_TIMEOUT_MS : TEXT_TIMEOUT_MS),
     });
   } catch (err) {
-    if (loose.items.length && !hasImage) return loose.items.map(publicItem);
+    if (loose.items.length && !hasImage) {
+      return { items: loose.items.map(publicItem), supplier: emptySupplier() };
+    }
     if (isTimeoutError(err)) {
       const soft = new Error(
         'La foto tardó demasiado. Toma otra más cerca y con buena luz, o pega la lista como texto.'
@@ -397,7 +484,9 @@ async function extractPrices({ text, imageBase64, mimeType }) {
 
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    if (loose.items.length && !hasImage) return loose.items.map(publicItem);
+    if (loose.items.length && !hasImage) {
+      return { items: loose.items.map(publicItem), supplier: emptySupplier() };
+    }
     const apiMsg = data?.error?.message || '';
     const err = new Error(apiMsg || 'Gemini no pudo leer la lista.');
     err.code = 'GEMINI_ERROR';
@@ -406,16 +495,21 @@ async function extractPrices({ text, imageBase64, mimeType }) {
   }
 
   const reply = data?.candidates?.[0]?.content?.parts?.map((p) => p.text || '').join('') || '';
-  let ai = [];
+  let payload = { items: [], supplier: emptySupplier() };
   try {
-    ai = parseItems(reply);
+    payload = parsePayload(reply);
   } catch (err) {
-    if (loose.items.length) return loose.items.map(publicItem);
+    if (loose.items.length) {
+      return { items: loose.items.map(publicItem), supplier: emptySupplier() };
+    }
     const parseErr = new Error('La respuesta de la IA no se pudo leer.');
     parseErr.code = 'GEMINI_PARSE';
     throw parseErr;
   }
-  return mergeItems(loose.items, ai).map(publicItem);
+  return {
+    items: mergeItems(loose.items, payload.items).map(publicItem),
+    supplier: payload.supplier || emptySupplier(),
+  };
 }
 
 function publicItem(row) {
@@ -426,6 +520,8 @@ function publicItem(row) {
     barcode: row.barcode || '',
     packs: Math.max(1, Number(row.packs) || 1),
     packSize: row.packSize == null ? 1 : Number(row.packSize),
+    lot: String(row.lot || '').trim().slice(0, 60),
+    expiresAt: parseDocDate(row.expiresAt),
   };
 }
 
@@ -434,6 +530,7 @@ module.exports = {
   hasGeminiConfig,
   extractPrices,
   parseItems,
+  parsePayload,
   parseLooseList,
   parseLooseLine,
 };

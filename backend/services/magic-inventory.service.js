@@ -112,6 +112,8 @@ function enrichItem(item) {
     lineCost,
     cost,
     price: sell > 0 ? sell : suggestSell(cost),
+    lot: String(item.lot || '').trim().slice(0, 60),
+    expiresAt: String(item.expiresAt || '').trim().slice(0, 10),
   };
 }
 
@@ -179,6 +181,8 @@ function matchItems(items, foods) {
         packSize: item.packSize,
         packs: item.packs,
         isPack: item.isPack,
+        lot: item.lot,
+        expiresAt: item.expiresAt,
         from: item.name,
         sellChanged,
         costChanged,
@@ -205,6 +209,8 @@ function matchItems(items, foods) {
         packSize: item.packSize,
         packs: item.packs,
         isPack: item.isPack,
+        lot: item.lot,
+        expiresAt: item.expiresAt,
         options,
       });
     } else if (!ranked.length) {
@@ -218,6 +224,8 @@ function matchItems(items, foods) {
         packSize: item.packSize,
         packs: item.packs,
         isPack: item.isPack,
+        lot: item.lot,
+        expiresAt: item.expiresAt,
       });
     }
   }

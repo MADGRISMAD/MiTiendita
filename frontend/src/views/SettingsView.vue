@@ -128,6 +128,15 @@
         </label>
 
         <label class="field-inline">
+          <strong>Costo al registrar una compra</strong>
+          <small>Último deja el costo de la entrada más reciente. Promedio pondera existencias actuales y la compra nueva.</small>
+          <select v-model="form.costMethod" class="tax-input">
+            <option value="last">Último costo</option>
+            <option value="average">Promedio ponderado</option>
+          </select>
+        </label>
+
+        <label class="field-inline">
           <strong>Tasa de IVA (%)</strong>
           <small>Porcentaje de impuesto aplicado a ventas. México: 16%, Colombia: 19%.</small>
           <input v-model.number="form.taxRate" type="number" min="0" max="100" step="1" class="tax-input" />
@@ -201,6 +210,7 @@ const form = reactive({
   timezone: venueStore.timezone || "America/Mexico_City",
   initialTables: venueStore.initialTables || 8,
   inventoryEnabled: Boolean(venueStore.inventoryEnabled),
+  costMethod: venueStore.costMethod === "average" ? "average" : "last",
   taxRate: venueStore.taxRate != null ? Number(venueStore.taxRate) * 100 : 16,
 });
 
@@ -228,7 +238,12 @@ async function saveBrand() {
   saving.value = true;
   message.value = "";
   try {
-    await saveVenueSettings({ ...form });
+    await saveVenueSettings({
+      ...form,
+      taxRate: Math.min(100, Math.max(0, Number(form.taxRate) || 0)) / 100,
+      costMethod: form.costMethod === "average" ? "average" : "last",
+      inventoryEnabled: Boolean(form.inventoryEnabled),
+    });
     message.value = "Configuración guardada.";
   } catch {
     message.value = "No se pudo guardar.";
@@ -253,6 +268,7 @@ async function savePrefs() {
       timezone: venueStore.timezone || form.timezone,
       initialTables: venueStore.initialTables || form.initialTables,
       inventoryEnabled: form.inventoryEnabled,
+      costMethod: form.costMethod === "average" ? "average" : "last",
       taxRate: taxDecimal,
     });
     prefsMsg.value = form.inventoryEnabled

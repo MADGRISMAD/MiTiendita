@@ -14,6 +14,7 @@ const defaultSettings = {
   timezone: "America/Mexico_City",
   initialTables: 0,
   inventoryEnabled: false,
+  costMethod: "last",
   taxRate: 0.16,
   setupCompleted: false,
 };
@@ -48,6 +49,7 @@ watch(
       timezone: value.timezone,
       initialTables: value.initialTables,
       inventoryEnabled: Boolean(value.inventoryEnabled),
+      costMethod: value.costMethod === "average" ? "average" : "last",
       taxRate: value.taxRate ?? 0.16,
       setupCompleted: value.setupCompleted,
     };

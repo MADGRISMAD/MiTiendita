@@ -28,7 +28,7 @@ const props = defineProps({
 const COPY = {
   inventario: {
     name: "Inventario Mágico",
-    tip: "Pegas el papelito o una foto y Mi Tiendita mete productos, packs y existencias al catálogo — en segundos, desde la nube.",
+    tip: "Pegas el papelito o una foto y Mi Tiendita registra la compra: proveedor, productos, lotes y existencias — en segundos, desde la nube.",
     hash: "#inventario-magico",
   },
   precio: {

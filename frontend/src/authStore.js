@@ -111,6 +111,7 @@ export const routeRoles = {
   printOffline: ["admin", "cashier", "waiter", "hosstess", "kitchen"],
   printCash: ["admin", "cashier"],
   customers: ["admin", "cashier"],
+  inventory: ["admin", "cashier"],
 };
 
 export function canAccessRoute(name) {
