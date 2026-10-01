@@ -450,7 +450,7 @@
 
       <!-- Ticket móvil -->
       <Teleport to="body">
-        <div v-if="showMobileCart" class="sheet-bg m-cart-bg" @click.self="showMobileCart = false">
+        <div v-if="showMobileCart" class="sheet-bg m-cart-bg">
           <div class="m-cart-sheet" role="dialog" aria-labelledby="m-cart-title">
             <header class="m-cart-head">
               <div>
@@ -498,7 +498,7 @@
 
       <!-- Precio F4 -->
       <Teleport to="body">
-        <div v-if="showPriceCheck" class="sheet-bg" @click.self="closePriceCheck">
+        <div v-if="showPriceCheck" class="sheet-bg">
           <form class="sheet" @submit.prevent="runPriceCheck">
             <h3>Consulta de precio</h3>
             <p class="sheet-hint">Escanea o escribe el código (F4)</p>
@@ -529,7 +529,7 @@
       </Teleport>
 
       <Teleport to="body">
-        <div v-if="missingCode" class="sheet-bg" @click.self="dismissMissing">
+        <div v-if="missingCode" class="sheet-bg">
           <div class="sheet" role="dialog" aria-labelledby="missing-title">
             <h3 id="missing-title">No está en el catálogo</h3>
             <p class="sheet-hint">
@@ -544,7 +544,7 @@
 
       <!-- Descuento F9 -->
       <Teleport to="body">
-        <div v-if="showDiscount" class="sheet-bg" @click.self="showDiscount = false">
+        <div v-if="showDiscount" class="sheet-bg">
           <form class="sheet" @submit.prevent="applyDiscount">
             <h3>Descuento del ticket</h3>
             <label class="field">
@@ -558,7 +558,7 @@
       </Teleport>
 
       <Teleport to="body">
-        <div v-if="showMenuForm" class="sheet-bg" @click.self="cancelMenuForm">
+        <div v-if="showMenuForm" class="sheet-bg">
           <form class="sheet" @submit.prevent="createMenu">
             <h3>Nueva categoría</h3>
             <input v-model="menuForm.name" class="inp" placeholder="Nombre" required />
@@ -581,7 +581,7 @@
 
       <!-- Modal de pago / cobro -->
       <Teleport to="body">
-        <div v-if="showPayment" class="sheet-bg" @click.self="closePayment">
+        <div v-if="showPayment" class="sheet-bg">
           <div class="sheet pay-sheet">
             <h3>Cobrar venta</h3>
 
@@ -680,7 +680,7 @@
       </Teleport>
 
       <Teleport to="body">
-        <div v-if="showFoodForm" class="sheet-bg product-modal" @click.self="closeFoodForm">
+        <div v-if="showFoodForm" class="sheet-bg product-modal">
           <form class="sheet product-sheet" @submit.prevent="createFood">
             <div class="product-banner">
               <img
@@ -2762,6 +2762,7 @@ a.seg {
   line-height: 1.2;
   display: -webkit-box;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -2856,12 +2857,16 @@ a.seg {
   color: #fff;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
 }
-.product-banner .sheet-x {
+.product-sheet .product-banner .sheet-x {
   position: absolute;
   top: 0.65rem;
   right: 0.65rem;
   z-index: 2;
-  background: rgba(255, 255, 255, 0.94);
+  display: grid;
+  place-items: center;
+  background: var(--timber-surface);
+  color: var(--timber-ink);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
 }
 .banner-url {
   position: absolute;
@@ -3056,9 +3061,9 @@ a.seg {
 
 /* Aviso de caja abierta mucho tiempo */
 .cash-warning-banner {
-  background: var(--timber-warning-soft, #fff3cd);
-  color: var(--timber-warning, #856404);
-  border: 1px solid var(--timber-warning, #ffc107);
+background: color-mix(in srgb, var(--timber-warning) 14%, var(--timber-panel));
+  color: var(--timber-ink);
+  border: 1px solid color-mix(in srgb, var(--timber-warning) 40%, var(--timber-line));
   border-radius: 0.65rem;
   padding: 0.65rem 0.85rem;
   margin: 0.35rem 0.5rem;
@@ -3170,7 +3175,7 @@ a.seg {
   font-weight: 800;
   color: var(--timber-success);
   padding: 0.45rem;
-  background: var(--timber-success-soft, #d4edda);
+  background: color-mix(in srgb, var(--timber-success) 14%, var(--timber-panel));
   border-radius: 0.65rem;
 }
 .pay-split-info {
