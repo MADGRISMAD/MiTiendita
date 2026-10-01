@@ -696,10 +696,7 @@
                 <p class="sheet-kicker">Catálogo</p>
                 <h3>{{ editingFood ? "Editar producto" : "Nuevo producto" }}</h3>
               </div>
-              <label class="banner-url">
-                <input v-model="foodForm.imgUrl" type="url" placeholder="Pega aquí el link de la foto" />
-              </label>
-            </div>
+                          </div>
 
             <div class="product-body">
               <label class="field wide">
@@ -771,6 +768,13 @@
                 <span>Código de barras</span>
                 <input v-model="foodForm.barcode" class="inp" placeholder="Escanea o escribe" autocomplete="off" data-scan="barcode" />
               </label>
+
+              <!-- Link de la foto: ahora arriba de Descripción -->
+              <label class="field wide">
+                <span>Foto (link)</span>
+                <input v-model="foodForm.imgUrl" class="inp" type="url" placeholder="Pega aquí el link de la foto" />
+              </label>
+
               <label class="field" :class="{ wide: !inventoryOn }">
                 <span>Descripción</span>
                 <input v-model="foodForm.description" class="inp" placeholder="Opcional" />
@@ -3647,7 +3651,7 @@ a.seg {
   color: var(--timber-ink);
 }
 .low-stock-icon { font-size: 1.3rem; flex-shrink: 0; }
-.low-stock-body { display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; flex: 1; }
+.low-stock-body { display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; }
 .low-stock-body strong { font-size: 0.82rem; color: var(--timber-warning); }
 .low-stock-list {
   font-size: 0.8rem;
