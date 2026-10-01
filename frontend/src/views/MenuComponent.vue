@@ -606,11 +606,13 @@
                 <span>Efectivo inicial</span>
                 <input
                   v-model.number="openingFloat"
+                  v-select-on-focus
                   class="inp pay-inp"
                   type="number"
                   min="0"
                   step="1"
                   inputmode="decimal"
+                  placeholder="0"
                 />
               </label>
               <p v-if="payError" class="scan-msg err">{{ payError }}</p>
@@ -639,7 +641,7 @@
               <template v-if="payMethod === 'cash'">
                 <label class="field">
                   <span>Efectivo recibido</span>
-                  <input v-model.number="payCashReceived" class="inp pay-inp" type="number" min="0" step="0.01" placeholder="0.00" />
+                  <input v-model.number="payCashReceived" v-select-on-focus class="inp pay-inp" type="number" min="0" step="0.01" placeholder="0.00" />
                 </label>
                 <div v-if="payChange > 0" class="pay-change">
                   Cambio: <strong>{{ money(payChange) }}</strong>
@@ -649,14 +651,14 @@
               <template v-if="payMethod === 'split'">
                 <label class="field">
                   <span>Monto con tarjeta</span>
-                  <input v-model.number="payCardAmount" class="inp pay-inp" type="number" min="0" :max="total" step="0.01" placeholder="0.00" />
+                  <input v-model.number="payCardAmount" v-select-on-focus class="inp pay-inp" type="number" min="0" :max="total" step="0.01" placeholder="0.00" />
                 </label>
                 <div class="pay-split-info">
                   Efectivo: <strong>{{ money(payCashPortion) }}</strong>
                 </div>
                 <label class="field">
                   <span>Efectivo recibido</span>
-                  <input v-model.number="payCashReceived" class="inp pay-inp" type="number" min="0" step="0.01" placeholder="0.00" />
+                  <input v-model.number="payCashReceived" v-select-on-focus class="inp pay-inp" type="number" min="0" step="0.01" placeholder="0.00" />
                 </label>
                 <div v-if="payChange > 0" class="pay-change">
                   Cambio: <strong>{{ money(payChange) }}</strong>
@@ -828,12 +830,24 @@ import {
 } from "../offlineDb";
 import { flushOfflineSales, offlineStore, queueSale } from "../offlineSync";
 
+const vSelectOnFocus = {
+  mounted(el) {
+    el.addEventListener("focus", () => {
+      // setTimeout para que funcione también en móvil/Safari
+      setTimeout(() => el.select?.(), 0);
+    });
+  },
+};
+
 export default {
   components: { AppShell, MagicPricesSheet },
   props: {
     initialMode: { type: String, default: "pos" },
   },
+  directives: { selectOnFocus: vSelectOnFocus },
   setup(props) {
+    const openingInput = ref(null);
+    const cashReceivedInput = ref(null);
     const route = useRoute();
     const router = useRouter();
     const menus = ref([]);
@@ -911,8 +925,8 @@ export default {
     // Estado del modal de pago
     const showPayment = ref(false);
     const payMethod = ref("cash"); // 'cash' | 'card' | 'split'
-    const payCashReceived = ref(0);
-    const payCardAmount = ref(0);
+    const payCashReceived = ref("");
+    const payCardAmount = ref("");
     const payError = ref("");
     const payChange = computed(() => {
       if (payMethod.value === "card") return 0;
@@ -932,7 +946,7 @@ export default {
     const cashSession = ref(null);
     const cashOpenWarning = ref(false);
     const cashOpen = computed(() => Boolean(cashSession.value));
-    const openingFloat = ref(0);
+    const openingFloat = ref("");
     const cashBusy = ref(false);
     const lastTicketId = ref("");
     const lastTicketOffline = ref(false);
@@ -1468,10 +1482,10 @@ export default {
       }
       if (!lines.value.length || sending.value) return;
       payMethod.value = "cash";
-      payCashReceived.value = 0;
-      payCardAmount.value = 0;
+      payCashReceived.value = "";
+      payCardAmount.value = "";
       payError.value = "";
-      openingFloat.value = 0;
+      openingFloat.value = "";
       showMobileCart.value = false;
       showPayment.value = true;
       loadCashSession();
