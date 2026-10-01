@@ -605,6 +605,7 @@
               <label class="field">
                 <span>Efectivo inicial</span>
                 <input
+                  ref="openingInput"
                   v-model.number="openingFloat"
                   v-select-on-focus
                   class="inp pay-inp"
@@ -641,7 +642,16 @@
               <template v-if="payMethod === 'cash'">
                 <label class="field">
                   <span>Efectivo recibido</span>
-                  <input v-model.number="payCashReceived" v-select-on-focus class="inp pay-inp" type="number" min="0" step="0.01" placeholder="0.00" />
+                  <input
+                    ref="cashReceivedInput"
+                    v-model.number="payCashReceived"
+                    v-select-on-focus
+                    class="inp pay-inp"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="0.00"
+                  />
                 </label>
                 <div v-if="payChange > 0" class="pay-change">
                   Cambio: <strong>{{ money(payChange) }}</strong>
@@ -658,7 +668,16 @@
                 </div>
                 <label class="field">
                   <span>Efectivo recibido</span>
-                  <input v-model.number="payCashReceived" v-select-on-focus class="inp pay-inp" type="number" min="0" step="0.01" placeholder="0.00" />
+                  <input
+                    ref="cashReceivedInput"
+                    v-model.number="payCashReceived"
+                    v-select-on-focus
+                    class="inp pay-inp"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="0.00"
+                  />
                 </label>
                 <div v-if="payChange > 0" class="pay-change">
                   Cambio: <strong>{{ money(payChange) }}</strong>
@@ -841,13 +860,11 @@ const vSelectOnFocus = {
 
 export default {
   components: { AppShell, MagicPricesSheet },
+  directives: { selectOnFocus: vSelectOnFocus },
   props: {
     initialMode: { type: String, default: "pos" },
   },
-  directives: { selectOnFocus: vSelectOnFocus },
   setup(props) {
-    const openingInput = ref(null);
-    const cashReceivedInput = ref(null);
     const route = useRoute();
     const router = useRouter();
     const menus = ref([]);
@@ -865,6 +882,8 @@ export default {
 
     const scanInput = ref(null);
     const priceInput = ref(null);
+    const openingInput = ref(null);
+    const cashReceivedInput = ref(null);
     const scanCode = ref("");
     const scanError = ref("");
     const scanFlash = ref(false);
@@ -953,6 +972,15 @@ export default {
     const cashBlocked = computed(() => cashOpenWarning.value);
     const BLOCK_MSG = "Caja abierta más de 12 horas. Realiza el corte de caja para continuar.";
 
+    // Enfoca el campo correcto del modal de pago
+    function focusPayField() {
+      nextTick(() => {
+        if (!showPayment.value) return;
+        if (!cashOpen.value) openingInput.value?.focus();
+        else if (payMethod.value !== "card") cashReceivedInput.value?.focus();
+      });
+    }
+
     async function loadCashSession() {
       try {
         const data = await apiSvc.getCashSession();
@@ -992,6 +1020,7 @@ export default {
       try {
         await apiService.openCashSession(Number(openingFloat.value || 0));
         await loadCashSession();
+        focusPayField();
       } catch (e) {
         payError.value = isNetworkError(e)
           ? "Necesitas internet para abrir la caja la primera vez."
@@ -1377,7 +1406,8 @@ export default {
         }
       }, 220);
     });
-      watch(cashBlocked, (blocked) => {
+
+    watch(cashBlocked, (blocked) => {
       if (!blocked) {
         if (scanError.value === BLOCK_MSG) scanError.value = "";
         if (payError.value === BLOCK_MSG) payError.value = "";
@@ -1388,6 +1418,11 @@ export default {
         nameHits.value = [];
         scanInput.value?.blur();
       }
+    });
+
+    // Al cambiar el método de pago, enfoca el campo de efectivo
+    watch(payMethod, () => {
+      if (showPayment.value && cashOpen.value) focusPayField();
     });
 
     function bumpQty(i, delta) {
@@ -1474,7 +1509,7 @@ export default {
       }, 280);
     });
 
-    function finalizeOrder() {
+    async function finalizeOrder() {
       if (cashBlocked.value) {
         scanError.value = BLOCK_MSG;
         showMobileCart.value = false;
@@ -1488,7 +1523,10 @@ export default {
       openingFloat.value = "";
       showMobileCart.value = false;
       showPayment.value = true;
-      loadCashSession();
+      focusPayField();
+      const wasOpen = cashOpen.value;
+      await loadCashSession();
+      if (cashOpen.value !== wasOpen) focusPayField();
     }
 
     function payFromMobileCart() {
@@ -1999,7 +2037,8 @@ export default {
     watch(showPriceCheck, (v) => {
       if (v) nextTick(() => priceInput.value?.focus());
     });
-      function onWindowFocus() {
+
+    function onWindowFocus() {
       loadCashSession();
       focusScan();
     }
@@ -2041,6 +2080,8 @@ export default {
       businessName,
       scanInput,
       priceInput,
+      openingInput,
+      cashReceivedInput,
       scanCode,
       scanError,
       scanFlash,
