@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - "backend/**"
+      - "frontend/src/tax.ts"
       - "package.json"
       - "package-lock.json"
     branches:
@@ -11,6 +12,7 @@ on:
   pull_request:
     paths:
       - "backend/**"
+      - "frontend/src/tax.ts"
       - "package.json"
       - "package-lock.json"
     branches:
@@ -29,3 +31,5 @@ jobs:
         run: |
           npm install
           npm run back:prod
+      - name: Test backend
+        run: npm test --workspace backend

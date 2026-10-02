@@ -8,6 +8,7 @@
     "dev": "nodemon app.js",
     "build": "webpack",
     "prod": "node dist/server.js",
+    "test": "node --test",
     "seed:menu": "node scripts/seed-menu.js",
     "seed:platform-admin": "node scripts/create-platform-admin.js",
     "mail:preview": "node scripts/send-mail-previews.js"

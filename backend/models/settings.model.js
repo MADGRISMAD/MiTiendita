@@ -18,6 +18,8 @@ const settingsSchema = Joi.object({
   initialTables: Joi.number().integer().min(0).max(100).default(0),
   /** Si true, todas las ventas restan existencias de cada producto */
   inventoryEnabled: Joi.boolean().default(false),
+  /** Con inventario: si false, no se cobra una venta con más piezas de las que hay (responde 409) */
+  allowNegativeStock: Joi.boolean().default(false),
   /** Cómo actualizar el costo al confirmar una compra: último o promedio ponderado */
   costMethod: Joi.string().valid('last', 'average').default('last'),
   /** Tasa de IVA configurable por tenant (default 0.16 = 16% México) */

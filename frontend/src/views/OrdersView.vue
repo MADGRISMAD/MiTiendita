@@ -203,6 +203,8 @@
                 <div v-if="o.discountAmount"><dt>Descuento {{ o.discountPercent }}%</dt><dd>−{{ money(o.discountAmount) }}</dd></div>
                 <div v-if="o.paymentMethod"><dt>Pago</dt><dd>{{ methodLabel(o.paymentMethod) }}</dd></div>
                 <div v-if="o.paymentMethod === 'split'"><dt>Con tarjeta</dt><dd>{{ money(o.cardAmount) }}</dd></div>
+                <div v-if="o.paymentReference"><dt>Referencia</dt><dd>{{ o.paymentReference }}</dd></div>
+                <div v-if="o.stockReview"><dt>Inventario</dt><dd>Revisar: se vendió sin existencias<template v-if="o.stockShortages?.length"> ({{ o.stockShortages.map((s) => s.name).join(', ') }})</template></dd></div>
                 <div v-if="Number(o.cashReceived)"><dt>Recibido</dt><dd>{{ money(o.cashReceived) }}</dd></div>
                 <div v-if="Number(o.change)"><dt>Cambio</dt><dd>{{ money(o.change) }}</dd></div>
                 <div v-if="o.invoice?.status"><dt>Factura</dt><dd>{{ o.invoice.status === 'issued' ? 'Emitida' : 'Solicitada' }}<template v-if="o.invoice.legalName"> · {{ o.invoice.legalName }}</template><template v-if="o.invoice.rfc"> ({{ o.invoice.rfc }})</template></dd></div>

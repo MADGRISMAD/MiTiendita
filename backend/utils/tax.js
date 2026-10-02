@@ -1,4 +1,15 @@
+// Mantener idéntico a frontend/src/tax.ts (lo comprueba backend/test/tax.test.js).
+// Convención única: precios al cliente con IVA incluido. Cada renglón es «precio c/u con IVA
+// (a centavos) × cantidad», el subtotal es la suma de renglones, el descuento se resta del
+// subtotal y el IVA se desglosa del total («IVA incluido»).
+
 const DEFAULT_TAX_RATE = 0.16;
+
+/** Redondea a centavos sin el error de flotantes (1.005 → 1.01). */
+function round2(value) {
+  const n = Number(value) || 0;
+  return Math.round(Number((n * 100).toPrecision(12))) / 100;
+}
 
 /** Tasa de IVA válida (0 a 1). 0% es una tasa real; solo sin dato se usa 16%. */
 function rateOf(value, fallback = DEFAULT_TAX_RATE) {
@@ -11,6 +22,7 @@ function rateOf(value, fallback = DEFAULT_TAX_RATE) {
  * Desglosa una línea de venta.
  * - neto (priceIncludesTax=false): price es base; IVA se suma al cobrar
  * - bruto (priceIncludesTax=true): price ya incluye IVA; se desglosa
+ * unitGross es el precio c/u que ve el cliente; gross = unitGross × cantidad (a centavos).
  */
 function lineBreakdown(price, quantity, priceIncludesTax, taxRate = DEFAULT_TAX_RATE) {
   const qty = Number(quantity) || 0;
@@ -18,57 +30,51 @@ function lineBreakdown(price, quantity, priceIncludesTax, taxRate = DEFAULT_TAX_
   const rate = Number(taxRate) || 0;
   const includes = Boolean(priceIncludesTax);
 
-  if (includes) {
-    const gross = Number((unit * qty).toFixed(4));
-    const net = rate > 0 ? Number((gross / (1 + rate)).toFixed(4)) : gross;
-    const tax = Number((gross - net).toFixed(4));
-    return { net, tax, gross, unitNet: qty ? net / qty : 0, unitGross: unit };
-  }
-
-  const net = Number((unit * qty).toFixed(4));
-  const tax = Number((net * rate).toFixed(4));
-  const gross = Number((net + tax).toFixed(4));
-  return { net, tax, gross, unitNet: unit, unitGross: qty ? gross / qty : 0 };
+  const unitGross = includes ? round2(unit) : round2(unit * (1 + rate));
+  const gross = round2(unitGross * qty);
+  const net = includes ? (rate > 0 ? gross / (1 + rate) : gross) : unit * qty;
+  const tax = gross - net;
+  return { net, tax, gross, unitGross };
 }
 
 /**
  * cardExtraIva: se cobra la comisión por pago con tarjeta.
  * cardFeeRate: su porcentaje (0 a 0.3); sin dato usa la tasa de IVA, como antes.
+ * Siempre se cumple: subtotal − discountAmount = payable = net + tax, y payable + cardExtraTax = total.
  */
 function cartTotals(items = [], { discountPercent = 0, taxRate = DEFAULT_TAX_RATE, cardExtraIva = false, cardFeeRate = null } = {}) {
+  let subtotal = 0;
   let subtotalNet = 0;
-  let subtotalTax = 0;
-  let subtotalGross = 0;
 
   for (const item of items) {
     const b = lineBreakdown(item.price, item.quantity, item.priceIncludesTax, taxRate);
+    subtotal += b.gross;
     subtotalNet += b.net;
-    subtotalTax += b.tax;
-    subtotalGross += b.gross;
   }
 
-  subtotalNet = Number(subtotalNet.toFixed(2));
-  subtotalTax = Number(subtotalTax.toFixed(2));
-  subtotalGross = Number(subtotalGross.toFixed(2));
+  subtotal = round2(subtotal);
+  subtotalNet = round2(subtotalNet);
+  const subtotalTax = round2(subtotal - subtotalNet);
 
   const d = Math.min(100, Math.max(0, Number(discountPercent) || 0));
-  const discountAmount = Number(((subtotalGross * d) / 100).toFixed(2));
-  const scale = subtotalGross > 0 ? (subtotalGross - discountAmount) / subtotalGross : 1;
-  const net = Number((subtotalNet * scale).toFixed(2));
-  const tax = Number((subtotalTax * scale).toFixed(2));
-  const payable = Number((subtotalGross - discountAmount).toFixed(2));
+  const discountAmount = round2((subtotal * d) / 100);
+  const payable = round2(subtotal - discountAmount);
+  const scale = subtotal > 0 ? payable / subtotal : 1;
+  const tax = round2(subtotalTax * scale);
+  const net = round2(payable - tax);
 
   const feeRate = cardFeeRate == null ? taxRate : Math.min(0.3, Math.max(0, Number(cardFeeRate) || 0));
-  const cardExtraTax = cardExtraIva ? Number((payable * feeRate).toFixed(2)) : 0;
-  const total = Number((payable + cardExtraTax).toFixed(2));
+  const cardExtraTax = cardExtraIva ? round2(payable * feeRate) : 0;
+  const total = round2(payable + cardExtraTax);
 
   return {
     taxRate,
     subtotalNet,
     subtotalTax,
-    subtotal: subtotalGross,
+    subtotal,
     discountPercent: d,
     discountAmount,
+    payable,
     net,
     tax,
     cardExtraTax,
@@ -79,6 +85,7 @@ function cartTotals(items = [], { discountPercent = 0, taxRate = DEFAULT_TAX_RAT
 
 module.exports = {
   DEFAULT_TAX_RATE,
+  round2,
   rateOf,
   lineBreakdown,
   cartTotals,
