@@ -263,7 +263,26 @@
               <div v-if="msg" class="sale-done">
                 <PosIcon name="check" class="sale-done-ico" :size="26" />
                 <p>{{ msg }}</p>
-                <a v-if="lastTicketId" :href="reprintHref" target="_blank" rel="noopener" class="soft-btn">
+                <div v-if="printIssue" class="print-issue" role="alert">
+                  <p><strong>No se imprimió el ticket.</strong> {{ printIssue }} La venta sí quedó registrada.</p>
+                  <div>
+                    <button type="button" class="soft-btn" :disabled="printerStore.busy" @click="retryPrint">
+                      {{ printerStore.busy ? 'Imprimiendo…' : 'Reintentar' }}
+                    </button>
+                    <button type="button" class="soft-btn" @click="printLastInBrowser">Imprimir con el navegador</button>
+                  </div>
+                </div>
+                <button
+                  v-else-if="lastTicketId && directPrinting()"
+                  type="button"
+                  class="soft-btn"
+                  :disabled="printerStore.busy"
+                  @click="retryPrint"
+                >
+                  <PosIcon name="printer" :size="18" />
+                  {{ printerStore.busy ? 'Imprimiendo…' : 'Reimprimir ticket' }}
+                </button>
+                <a v-else-if="lastTicketId" :href="reprintHref" target="_blank" rel="noopener" class="soft-btn">
                   <PosIcon name="printer" :size="18" />
                   Reimprimir ticket
                 </a>
@@ -1281,7 +1300,9 @@ import {
   saveCatalog,
   saveCashSession as saveCachedCash,
   listPending,
+  saleToPrintOrder,
 } from "../offlineDb";
+import { directPrinting, printReceiptDirect, printerStore } from "../thermalPrinter";
 import { flushOfflineSales, offlineStore, queueSale } from "../offlineSync";
 
 const vSelectOnFocus = {
@@ -1574,12 +1595,37 @@ export default {
       }
     }
 
-    function printReceipt(orderId, offline = false) {
+    function printInBrowser(orderId, offline = false) {
       if (!orderId) return;
       const path = offline
         ? `/print/offline/${orderId}?autoprint=1`
         : `/print/order/${orderId}?mode=receipt&autoprint=1`;
       window.open(path, "_blank", "noopener");
+    }
+
+    // Ticket de la última venta: con térmica configurada sale directo; si falla, se ofrece reintentar o el navegador
+    const printIssue = ref("");
+    let lastPrint = null; // { order, offline, cash }
+    async function printDirect(job, { drawer = false } = {}) {
+      printIssue.value = "";
+      try {
+        await printReceiptDirect(job.order, { openDrawer: drawer && job.cash });
+      } catch (error) {
+        printIssue.value = error.message || "La impresora no respondió.";
+      }
+    }
+    function printReceipt(order, offline = false, cash = false) {
+      if (!order?.id) return;
+      lastPrint = { order, offline, cash };
+      if (directPrinting()) printDirect(lastPrint, { drawer: true });
+      else printInBrowser(order.id, offline);
+    }
+    function retryPrint() {
+      if (lastPrint) printDirect(lastPrint);
+    }
+    function printLastInBrowser() {
+      printIssue.value = "";
+      if (lastPrint) printInBrowser(lastPrint.order.id, lastPrint.offline);
     }
 
     async function lookupFoodSmart(code) {
@@ -2111,6 +2157,9 @@ export default {
     });
 
     const status = computed(() => {
+      if (printIssue.value && !lines.value.length) {
+        return { tone: "err", text: `No se imprimió el ticket: ${printIssue.value}` };
+      }
       if (cashBlocked.value) {
         return { tone: "err", text: "Caja bloqueada: haz el corte de caja para seguir vendiendo." };
       }
@@ -2976,7 +3025,14 @@ export default {
           : (cambio > 0
             ? `Ticket ${folio} cobrado · Cambio: ${money(cambio)}`
             : `Ticket ${folio} cobrado`);
-        printReceipt(order.id, offline);
+        const cashSale = payload.paymentMethod === "cash" || payload.paymentMethod === "split";
+        printReceipt(
+          offline
+            ? saleToPrintOrder({ clientSaleId, payload, status: "pending", createdAt: Date.now() })
+            : { ...order, offlinePending: false },
+          offline,
+          cashSale
+        );
         if (!offline) flushOfflineSales();
       } catch (error) {
         payError.value =
@@ -3641,6 +3697,11 @@ export default {
       clearCart,
       lineGross,
       lineUnit,
+      printIssue,
+      printerStore,
+      directPrinting,
+      retryPrint,
+      printLastInBrowser,
       money,
       moneyShort,
       formatQty,
@@ -4442,6 +4503,26 @@ html[data-theme="dark"] .avatar {
 }
 .sale-done .soft-btn {
   background: var(--timber-panel);
+}
+.print-issue {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.7rem 0.8rem;
+  border-radius: 0.8rem;
+  background: var(--timber-danger-soft);
+  color: var(--timber-danger);
+  text-align: center;
+}
+.print-issue p {
+  margin: 0;
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+.print-issue div {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.4rem;
 }
 
 .ticket-foot {
