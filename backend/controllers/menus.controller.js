@@ -147,6 +147,9 @@ async function createFood(req, res) {
 async function updateFood(req, res) {
   try {
     const body = { ...(req.body || {}) };
+    // El producto no puede cambiar de tienda
+    delete body.tenantId;
+    delete body._id;
     if (body.barcode != null || body.sku != null) {
       const code = String(body.barcode || body.sku || '').trim();
       body.sku = code;

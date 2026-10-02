@@ -363,165 +363,261 @@
 
       <!-- ═══════════ MODO CATÁLOGO ═══════════ -->
       <template v-else>
-        <div class="sell-toolbar">
-          <p class="toolbar-title">Catálogo</p>
-          <div class="toolbar-right">
-            <button type="button" class="seg" @click="goMode('pos')">Vender</button>
-            <button type="button" class="seg on">Editar</button>
-            <router-link to="/inventory" class="seg">Compras</router-link>
-          </div>
-        </div>
-
-        <!-- Alerta de stock bajo -->
-        <div v-if="lowStockItems.length" class="low-stock-banner">
-          <span class="low-stock-icon">⚠️</span>
-          <div class="low-stock-body">
-            <strong>Stock bajo ({{ lowStockItems.length }})</strong>
-            <span class="low-stock-list">
-              {{ lowStockItems.slice(0, 5).map(p => p.name + ' (' + (Number(p.stock) || 0) + ')').join(', ') }}
-              <template v-if="lowStockItems.length > 5"> y {{ lowStockItems.length - 5 }} más…</template>
-            </span>
-          </div>
-          <router-link to="/inventory?tab=sugerido" class="low-stock-go">Sugerido</router-link>
-        </div>
-
-        <!-- Barra de búsqueda y toggle de vista -->
-        <div class="catalog-search-bar">
-          <input
-            v-model="catalogSearch"
-            class="catalog-search-input"
-            type="text"
-            placeholder="Buscar por nombre, código o SKU…"
-            autocomplete="off"
-            autocorrect="off"
-            spellcheck="false"
-          />
-          <div class="view-toggle">
-            <button type="button" :class="{ on: viewMode === 'grid' }" @click="viewMode = 'grid'" title="Vista cuadrícula">▦</button>
-            <button type="button" :class="{ on: viewMode === 'list' }" @click="viewMode = 'list'" title="Vista lista">☰</button>
-          </div>
-        </div>
-
-        <div class="manage-body">
-          <aside class="cats-rail">
-            <button
-              v-for="menu in menus"
-              :key="menu.id"
-              type="button"
-              class="cat"
-              :class="{ on: selectedMenuId === menu.id }"
-              @click="loadMenuProducts(menu.id)"
-            >{{ menu.name }}</button>
-            <button type="button" class="cat add" @click="showMenuForm = true">+ Categoría</button>
-          </aside>
-
-          <section class="grid-pane">
-            <button
-              v-if="aiEnabled"
-              type="button"
-              class="magic-open"
-              :disabled="cashBlocked"
-              @click="openMagic"
-            >
-              <span class="magic-title">Registrar compra y precios</span>
-              <span class="magic-sub">
-                {{ cashBlocked ? 'Bloqueado hasta el corte de caja' : 'Inventario Mágico · Precio Mágico' }}
-              </span>
-            </button>
-
-            <!-- Vista de cuadrícula (grid) -->
-            <div v-if="viewMode === 'grid'" class="products">
-              <button
-                v-for="producto in filteredProducts"
-                :key="producto.id"
-                type="button"
-                class="prod"
-                @click="editFood(producto)"
-              >
-                <div class="thumb" :class="{ empty: !producto.imgUrl }">
-                  <img v-if="producto.imgUrl" :src="producto.imgUrl" :alt="producto.name" loading="lazy" />
-                  <span v-else class="thumb-letter">{{ initial(producto.name) }}</span>
-                </div>
-                <div class="prod-meta">
-                  <span class="pname">{{ producto.name }}</span>
-                  <span class="psku">{{ producto.barcode || producto.sku || 'Sin código' }} · {{ producto.priceIncludesTax ? 'Bruto' : 'Neto' }}</span>
-                  <span v-if="inventoryOn" class="pstock" :class="{ low: Number(producto.stock || 0) <= Number(producto.lowStockThreshold || 5) }">
-                    Stock {{ Number(producto.stock) || 0 }}
-                    <template v-if="producto.tracksExpiry"> · caduca</template>
-                  </span>
-                  <span class="price">{{ money(producto.price) }}</span>
-                  <span v-if="Number(producto.cost)" class="pcost">
-                    Costo {{ money(producto.cost) }} · Margen {{ money(producto.price - producto.cost) }}
-                  </span>
-                </div>
+        <div class="cat-page">
+          <header class="cat-head">
+            <div class="cat-title">
+              <h1>Productos</h1>
+              <p>{{ pickFoods.length }} productos · {{ menus.length }} {{ menus.length === 1 ? 'categoría' : 'categorías' }}</p>
+            </div>
+            <div class="cat-head-acts">
+              <router-link to="/inventory" class="btn">Compras e inventario</router-link>
+              <button v-if="aiEnabled" type="button" class="btn" :disabled="cashBlocked" @click="openMagic">
+                Registrar compra
               </button>
-              <div v-if="!filteredProducts.length && catalogSearch" class="empty-box">
-                <p class="empty">No se encontraron productos con "{{ catalogSearch }}".</p>
-              </div>
-              <div v-if="!productos.length && !catalogSearch" class="empty-box">
-                <p class="empty">
-                  {{ menus.length ? "Esta categoría está vacía." : "Aún no hay catálogo." }}
-                  Crea una categoría o carga 8 productos de ejemplo para probar la caja.
-                </p>
-                <button
-                  v-if="!menus.length"
-                  type="button"
-                  class="add-food"
-                  :disabled="seeding || cashBlocked"
-                  @click="seedStarter"
-                >{{ seeding ? "Cargando…" : "Cargar 8 productos de ejemplo" }}</button>
-                <p v-if="seedErr" class="empty">{{ seedErr }}</p>
-              </div>
-              <button
-                v-if="selectedMenuId"
-                type="button"
-                class="add-food"
-                @click="openNewFood"
-              >+ Agregar a mano</button>
+              <button type="button" class="btn" :disabled="!pickFoods.length" @click="exportCatalog">
+                Exportar CSV
+              </button>
+              <button type="button" class="btn primary" @click="openNewFood">
+                <PosIcon name="plus" :size="18" /> Nuevo producto
+              </button>
             </div>
+          </header>
 
-            <!-- Vista de lista (tabla) -->
-            <div v-else class="products-list-wrap">
-              <table class="products-list-table">
-                <thead>
-                  <tr>
-                    <th>Nombre</th>
-                    <th>Precio</th>
-                    <th>Costo</th>
-                    <th>Margen</th>
-                    <th>Stock</th>
-                    <th>Categoría</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr
-                    v-for="producto in filteredProducts"
-                    :key="producto.id"
-                    class="list-row"
-                    @click="editFood(producto)"
-                  >
-                    <td class="list-name">{{ producto.name }}</td>
-                    <td>{{ money(producto.price) }}</td>
-                    <td>{{ Number(producto.cost) ? money(producto.cost) : '—' }}</td>
-                    <td>{{ Number(producto.cost) ? money(producto.price - producto.cost) : '—' }}</td>
-                    <td :class="{ 'low-text': Number(producto.stock || 0) <= Number(producto.lowStockThreshold || 5) }">
-                      {{ Number(producto.stock) || 0 }}
-                    </td>
-                    <td class="list-cat">{{ menus.find(m => m.id === producto.menuId)?.name || '—' }}</td>
-                  </tr>
-                </tbody>
-              </table>
-              <p v-if="!filteredProducts.length && catalogSearch" class="empty">No se encontraron productos con "{{ catalogSearch }}".</p>
-              <p v-if="!productos.length && !catalogSearch" class="empty">Sin productos en esta categoría.</p>
-              <button
-                v-if="selectedMenuId"
-                type="button"
-                class="add-food"
-                @click="openNewFood"
-              >+ Agregar a mano</button>
+          <div class="kpis">
+            <button type="button" class="kpi" :class="{ on: statusFilter === 'all' }" @click="statusFilter = 'all'">
+              <span>Productos</span><strong>{{ pickFoods.length }}</strong>
+            </button>
+            <div v-if="inventoryOn" class="kpi static">
+              <span>Valor del inventario</span><strong>{{ moneyShort(Math.round(catalogStats.value)) }}</strong>
+              <small>a costo</small>
             </div>
-          </section>
+            <button v-if="inventoryOn" type="button" class="kpi warn" :class="{ on: statusFilter === 'low' }" @click="statusFilter = 'low'">
+              <span>Stock bajo</span><strong>{{ catalogStats.low }}</strong>
+            </button>
+            <button v-if="inventoryOn" type="button" class="kpi danger" :class="{ on: statusFilter === 'out' }" @click="statusFilter = 'out'">
+              <span>Agotados</span><strong>{{ catalogStats.out }}</strong>
+            </button>
+            <button type="button" class="kpi" :class="{ on: statusFilter === 'nocode' }" @click="statusFilter = 'nocode'">
+              <span>Sin código</span><strong>{{ catalogStats.nocode }}</strong>
+            </button>
+            <button type="button" class="kpi" :class="{ on: statusFilter === 'nocost' }" @click="statusFilter = 'nocost'">
+              <span>Sin costo</span><strong>{{ catalogStats.nocost }}</strong>
+            </button>
+          </div>
+
+          <div class="cat-body">
+            <aside class="cat-rail" aria-label="Categorías">
+              <button type="button" class="rail-item" :class="{ on: !catFilter }" @click="catFilter = ''">
+                <span class="rail-name">Todas</span><em>{{ pickFoods.length }}</em>
+              </button>
+              <button
+                v-for="menu in menus"
+                :key="menu.id"
+                type="button"
+                class="rail-item"
+                :class="{ on: catFilter === menu.id }"
+                :style="{ '--hue': hueOf(menu.id) }"
+                @click="catFilter = menu.id"
+              >
+                <span class="chip-dot" aria-hidden="true"></span>
+                <span class="rail-name">{{ menu.name }}</span><em>{{ catCount(menu.id) }}</em>
+              </button>
+              <div class="rail-acts">
+                <button type="button" class="soft-btn" @click="showMenuForm = true">+ Categoría</button>
+                <button v-if="menus.length" type="button" class="link-btn" @click="openCats">Editar</button>
+              </div>
+            </aside>
+
+            <section class="cat-main">
+              <div class="cat-tools">
+                <div class="finder-box">
+                  <PosIcon name="search" class="finder-ico" />
+                  <input
+                    v-model="catalogSearch"
+                    class="scan-input cat-search"
+                    type="search"
+                    :placeholder="catalogPlaceholder"
+                    autocomplete="off"
+                    autocorrect="off"
+                    spellcheck="false"
+                    @keydown.enter.prevent="onCatalogEnter"
+                  />
+                </div>
+                <select v-model="sortBy" class="inp cat-sort" aria-label="Ordenar">
+                  <option value="name">Nombre A–Z</option>
+                  <option value="price-desc">Precio mayor</option>
+                  <option value="price-asc">Precio menor</option>
+                  <option v-if="inventoryOn" value="stock">Menos existencias</option>
+                  <option value="margin">Menor ganancia</option>
+                </select>
+                <div class="view-toggle">
+                  <button type="button" :class="{ on: viewMode === 'list' }" title="Lista" @click="viewMode = 'list'">☰</button>
+                  <button type="button" :class="{ on: viewMode === 'grid' }" title="Mosaico" @click="viewMode = 'grid'">▦</button>
+                </div>
+              </div>
+
+              <div class="cat-chips">
+                <button
+                  v-for="f in statusFilters"
+                  :key="f.id"
+                  type="button"
+                  class="chip"
+                  :class="{ on: statusFilter === f.id }"
+                  @click="statusFilter = f.id"
+                >
+                  {{ f.label }}
+                </button>
+                <span class="cat-count">{{ catalogRows.length }} {{ catalogRows.length === 1 ? 'producto' : 'productos' }}</span>
+              </div>
+
+              <div class="cat-list">
+                <table v-if="viewMode === 'list' && catalogRows.length" class="cat-table">
+                  <thead>
+                    <tr>
+                      <th>Producto</th>
+                      <th class="hide-mobile">Código</th>
+                      <th class="only-pc">Categoría</th>
+                      <th class="num">Precio</th>
+                      <th class="num hide-mobile">Costo</th>
+                      <th class="num hide-mobile">Ganancia</th>
+                      <th v-if="inventoryOn" class="num">Existencias</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="p in visibleRows" :key="p.id" @click="editFood(p)">
+                      <td>
+                        <div class="cell-prod">
+                          <span class="avatar sm" :style="{ '--hue': hueOf(p.menuId) }">
+                            <img v-if="hasImg(p)" :src="p.imgUrl" alt="" loading="lazy" @error="brokenImgs.add(p.id)" />
+                            <template v-else>{{ initial(p.name) }}</template>
+                          </span>
+                          <span class="cell-text">
+                            <strong>{{ p.name }}</strong>
+                            <small v-if="p.description">{{ p.description }}</small>
+                            <small class="only-mobile">{{ p.barcode || p.sku || 'Sin código' }}</small>
+                          </span>
+                        </div>
+                      </td>
+                      <td class="hide-mobile mono" :class="{ muted: !(p.barcode || p.sku) }">{{ p.barcode || p.sku || 'Sin código' }}</td>
+                      <td class="only-pc">
+                        <span class="cell-cat" :style="{ '--hue': hueOf(p.menuId) }">
+                          <span class="chip-dot"></span>{{ menuName(p.menuId) }}
+                        </span>
+                      </td>
+                      <td class="num strong">{{ money(p.price) }}</td>
+                      <td class="num hide-mobile" :class="{ muted: !Number(p.cost) }">{{ Number(p.cost) ? money(p.cost) : '—' }}</td>
+                      <td class="num hide-mobile">
+                        <template v-if="Number(p.cost)">
+                          <span :class="marginTone(p)">{{ marginPct(p) }}%</span>
+                          <small class="muted cell-sub">{{ money(p.price - p.cost) }}</small>
+                        </template>
+                        <span v-else class="muted">—</span>
+                      </td>
+                      <td v-if="inventoryOn" class="num">
+                        <span class="pill" :class="stockTone(p)">{{ stockLabel(p) }}</span>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+
+                <div v-else-if="catalogRows.length" class="tiles cat-tiles">
+                  <button v-for="p in visibleRows" :key="p.id" type="button" class="tile" @click="editFood(p)">
+                    <span class="avatar" :style="{ '--hue': hueOf(p.menuId) }">
+                      <img v-if="hasImg(p)" :src="p.imgUrl" alt="" loading="lazy" @error="brokenImgs.add(p.id)" />
+                      <template v-else>{{ initial(p.name) }}</template>
+                    </span>
+                    <span class="tile-name">{{ p.name }}</span>
+                    <span class="tile-foot">
+                      <strong class="tile-price">{{ money(p.price) }}</strong>
+                      <small v-if="inventoryOn" class="stock" :class="stockTone(p)">{{ stockLabel(p) }}</small>
+                    </span>
+                  </button>
+                </div>
+
+                <button v-if="catalogRows.length > visibleRows.length" type="button" class="soft-btn more-btn" @click="catLimit += 150">
+                  Mostrar más ({{ catalogRows.length - visibleRows.length }} restantes)
+                </button>
+
+                <div v-if="!catalogRows.length" class="empty-state">
+                  <PosIcon name="box" class="big-ico" :size="26" />
+                  <template v-if="!pickFoods.length">
+                    <p><strong>Aún no hay productos.</strong></p>
+                    <p>Agrégalos uno por uno o carga 8 de ejemplo para probar la caja.</p>
+                    <div class="empty-acts">
+                      <button type="button" class="soft-btn" @click="openNewFood">Nuevo producto</button>
+                      <button type="button" class="soft-btn" :disabled="seeding || cashBlocked" @click="seedStarter">
+                        {{ seeding ? 'Cargando…' : 'Cargar 8 de ejemplo' }}
+                      </button>
+                    </div>
+                    <p v-if="seedErr">{{ seedErr }}</p>
+                  </template>
+                  <template v-else>
+                    <p><strong>Nada coincide con los filtros.</strong></p>
+                    <div class="empty-acts">
+                      <button type="button" class="soft-btn" @click="resetCatalogFilters">Quitar filtros</button>
+                      <button v-if="catalogSearch.trim()" type="button" class="soft-btn" @click="newFromSearch">
+                        Crear “{{ catalogSearch.trim() }}”
+                      </button>
+                    </div>
+                  </template>
+                </div>
+              </div>
+            </section>
+          </div>
         </div>
+
+        <!-- Administrar categorías -->
+        <Teleport to="body">
+          <div v-if="showCats" class="dlg-bg">
+            <div class="dlg" role="dialog" aria-labelledby="cats-title">
+              <header class="dlg-head">
+                <span class="dlg-ico"><PosIcon name="box" /></span>
+                <div>
+                  <h3 id="cats-title">Categorías</h3>
+                  <p>Cambia el nombre o elimina. Al eliminar, sus productos se pasan a otra categoría.</p>
+                </div>
+                <button type="button" class="dlg-x" aria-label="Cerrar" @click="showCats = false"><PosIcon name="x" /></button>
+              </header>
+              <ul class="held-list">
+                <li v-for="menu in menus" :key="menu.id">
+                  <input v-model="catDrafts[menu.id]" class="inp" maxlength="40" @keydown.enter.prevent="renameMenu(menu)" @blur="renameMenu(menu)" />
+                  <span class="cat-count">{{ catCount(menu.id) }}</span>
+                  <button type="button" class="btn icon ghost" title="Eliminar" aria-label="Eliminar categoría" :disabled="catBusy" @click="askDeleteMenu(menu)">
+                    <PosIcon name="trash" :size="18" />
+                  </button>
+                </li>
+              </ul>
+              <template v-if="menuToDelete">
+                <div class="pay-open">
+                  <p>
+                    <strong>Eliminar “{{ menuToDelete.name }}”.</strong>
+                    <template v-if="catCount(menuToDelete.id)">
+                      Sus {{ catCount(menuToDelete.id) }} productos se moverán a:
+                    </template>
+                  </p>
+                  <select v-if="catCount(menuToDelete.id)" v-model="moveTarget" class="inp">
+                    <option v-for="m in menus.filter((x) => x.id !== menuToDelete.id)" :key="m.id" :value="m.id">{{ m.name }}</option>
+                  </select>
+                  <p v-if="catCount(menuToDelete.id) && menus.length < 2" class="dlg-note">
+                    Crea otra categoría primero para no perder los productos.
+                  </p>
+                </div>
+                <div class="dlg-acts">
+                  <button type="button" class="btn" :disabled="catBusy" @click="menuToDelete = null">Cancelar</button>
+                  <button
+                    type="button"
+                    class="btn primary"
+                    :disabled="catBusy || (catCount(menuToDelete.id) > 0 && !moveTarget)"
+                    @click="confirmDeleteMenu"
+                  >
+                    {{ catBusy ? 'Eliminando…' : 'Eliminar categoría' }}
+                  </button>
+                </div>
+              </template>
+              <p v-if="catErr" class="dlg-err">{{ catErr }}</p>
+            </div>
+          </div>
+        </Teleport>
       </template>
 
       <!-- Consulta de precio (F4) -->
@@ -958,49 +1054,60 @@
             <div class="product-body">
               <label class="field wide">
                 <span>Nombre</span>
-                <input v-model="foodForm.name" class="inp" placeholder="Coca-Cola 600 ml" required />
+                <input v-model="foodForm.name" class="inp" :placeholder="namePlaceholder" required />
               </label>
 
               <label class="field">
-                <span>Precio</span>
-                <input v-model.number="foodForm.price" class="inp" type="number" min="0" step="0.01" required />
+                <span>Categoría</span>
+                <select v-model="foodForm.menuId" class="inp" @change="onFormMenuChange">
+                  <option v-for="m in menus" :key="m.id" :value="m.id">{{ m.name }}</option>
+                  <option value="__new">+ Nueva categoría…</option>
+                </select>
               </label>
-              <label class="field">
-                <span>Costo</span>
-                <input v-model.number="foodForm.cost" class="inp" type="number" min="0" step="0.01" placeholder="0.00" />
-              </label>
-              <label v-if="inventoryOn" class="field">
-                <span>Existencias{{ cashBlocked ? ' (bloqueado: haz el corte)' : '' }}</span>
-                <input
-                  v-model.number="foodForm.stock"
-                  class="inp"
-                  type="number"
-                  min="0"
-                  step="1"
-                  :disabled="cashBlocked"
-                />
-              </label>
-              <label v-if="inventoryOn" class="field">
-                <span>Stock mínimo</span>
-                <input v-model.number="foodForm.lowStockThreshold" class="inp" type="number" min="0" step="1" placeholder="5" />
-              </label>
-              <label v-if="inventoryOn" class="check-wide wide">
-                <input v-model="foodForm.tracksExpiry" type="checkbox" />
-                <span>Este producto caduca (lotes y FEFO)</span>
-              </label>
-              <div v-if="inventoryOn && suppliers.length" class="field wide">
-                <span>Proveedores</span>
-                <div class="supplier-picks">
-                  <label v-for="s in suppliers" :key="s.id">
-                    <input v-model="foodForm.supplierIds" type="checkbox" :value="s.id" />
-                    {{ s.name }}
-                  </label>
+              <div class="field">
+                <span>Código de barras o clave</span>
+                <div class="code-row">
+                  <input
+                    v-model="foodForm.barcode"
+                    class="inp"
+                    placeholder="Escanea o escribe"
+                    autocomplete="off"
+                    data-scan="barcode"
+                    @keydown.enter.prevent
+                  />
+                  <button type="button" class="btn" title="Crear un código interno para imprimir en etiqueta" @click="generateCode">
+                    Generar
+                  </button>
                 </div>
               </div>
-              <label v-if="!inventoryOn" class="field">
-                <span>Código de barras</span>
-                <input v-model="foodForm.barcode" class="inp" placeholder="Escanea o escribe" autocomplete="off" data-scan="barcode" />
+
+              <label class="field wide">
+                <span>{{ descriptionLabel }} <em>(opcional, también se busca en la caja)</em></span>
+                <input v-model="foodForm.description" class="inp" :placeholder="descriptionPlaceholder" />
               </label>
+
+              <div class="price-trio wide">
+                <label class="field">
+                  <span>Costo</span>
+                  <input v-model.number="foodForm.cost" class="inp num" type="number" min="0" step="0.01" placeholder="0.00" />
+                </label>
+                <label class="field">
+                  <span>Ganancia %</span>
+                  <input
+                    v-model="foodMarkup"
+                    class="inp num"
+                    type="number"
+                    step="1"
+                    placeholder="—"
+                    :disabled="!(Number(foodForm.cost) > 0)"
+                    title="Sobre el costo. Al cambiarla se calcula el precio."
+                  />
+                </label>
+                <label class="field">
+                  <span>Precio de venta</span>
+                  <input v-model.number="foodForm.price" class="inp num strong" type="number" min="0" step="0.01" required />
+                </label>
+              </div>
 
               <div class="iva-choice wide">
                 <p class="iva-q">¿Este precio ya incluye IVA?</p>
@@ -1018,23 +1125,39 @@
                     <small>Al cobrar se agrega el {{ Math.round(TAX_RATE * 100) }}%</small>
                   </span>
                 </label>
-                <p class="price-preview">El cliente paga {{ money(foodPricePreview.gross) }}</p>
+                <p class="price-preview">
+                  El cliente paga {{ money(foodPricePreview.gross) }}
+                  <template v-if="Number(foodForm.cost) > 0"> · ganas {{ money(foodForm.price - foodForm.cost) }} por unidad</template>
+                </p>
               </div>
 
-              <label v-if="inventoryOn" class="field">
-                <span>Código de barras</span>
-                <input v-model="foodForm.barcode" class="inp" placeholder="Escanea o escribe" autocomplete="off" data-scan="barcode" />
-              </label>
+              <template v-if="inventoryOn">
+                <label class="field">
+                  <span>Existencias{{ cashBlocked ? ' (bloqueado: haz el corte)' : '' }}</span>
+                  <input v-model.number="foodForm.stock" class="inp" type="number" min="0" step="any" :disabled="cashBlocked" />
+                </label>
+                <label class="field">
+                  <span>Avisar cuando queden</span>
+                  <input v-model.number="foodForm.lowStockThreshold" class="inp" type="number" min="0" step="1" placeholder="5" />
+                </label>
+                <label class="check-wide wide">
+                  <input v-model="foodForm.tracksExpiry" type="checkbox" />
+                  <span>Este producto caduca (lotes y FEFO)</span>
+                </label>
+                <div v-if="suppliers.length" class="field wide">
+                  <span>Proveedores</span>
+                  <div class="supplier-picks">
+                    <label v-for="s in suppliers" :key="s.id">
+                      <input v-model="foodForm.supplierIds" type="checkbox" :value="s.id" />
+                      {{ s.name }}
+                    </label>
+                  </div>
+                </div>
+              </template>
 
-              <!-- Link de la foto: ahora arriba de Descripción -->
               <label class="field wide">
                 <span>Foto (link)</span>
                 <input v-model="foodForm.imgUrl" class="inp" type="url" placeholder="Pega aquí el link de la foto" />
-              </label>
-
-              <label class="field" :class="{ wide: !inventoryOn }">
-                <span>Descripción</span>
-                <input v-model="foodForm.description" class="inp" placeholder="Opcional" />
               </label>
               <p v-if="foodError" class="scan-msg err wide">{{ foodError }}</p>
             </div>
@@ -1044,6 +1167,9 @@
                 <button type="button" class="act" @click="closeFoodForm">Cancelar</button>
                 <button type="submit" class="act primary">Guardar producto</button>
               </div>
+              <button v-if="editingFood" type="button" class="delete-link dup-link" @click="duplicateFood">
+                Duplicar producto
+              </button>
               <button
                 v-if="editingFood"
                 type="button"
@@ -1274,11 +1400,22 @@ export default {
       lowStockThreshold: 5,
       tracksExpiry: false,
       supplierIds: [],
+      menuId: "",
     });
 
     // Búsqueda y vista de lista en modo catálogo
     const catalogSearch = ref("");
-    const viewMode = ref("grid"); // "grid" o "list"
+    const viewMode = ref("list"); // "grid" o "list"
+    const catFilter = ref("");
+    const statusFilter = ref("all");
+    const sortBy = ref("name");
+    const catLimit = ref(150);
+    const showCats = ref(false);
+    const catDrafts = reactive({});
+    const menuToDelete = ref(null);
+    const moveTarget = ref("");
+    const catBusy = ref(false);
+    const catErr = ref("");
     const lowStockItems = ref([]);
     const suppliers = ref([]);
 
@@ -1413,16 +1550,267 @@ export default {
       }
     }
 
-    // Productos filtrados por la barra de búsqueda del catálogo
-    const filteredProducts = computed(() => {
-      const q = catalogSearch.value.trim().toLowerCase();
-      if (!q) return productos.value;
-      return productos.value.filter((p) => {
-        const name = String(p.name || "").toLowerCase();
-        const code = String(p.barcode || p.sku || "").toLowerCase();
-        return name.includes(q) || code.includes(q);
-      });
+    // —— Catálogo ——
+    const statusFilters = computed(() => {
+      const list = [{ id: "all", label: "Todos" }];
+      if (inventoryOn.value) {
+        list.push({ id: "low", label: "Stock bajo" }, { id: "out", label: "Agotados" }, { id: "expiry", label: "Caducan" });
+      }
+      list.push({ id: "nocode", label: "Sin código" }, { id: "nocost", label: "Sin costo" });
+      return list;
     });
+    function codeOf(p) {
+      return String(p?.barcode || p?.sku || "").trim();
+    }
+    function marginPct(p) {
+      const cost = Number(p?.cost) || 0;
+      if (!(cost > 0)) return null;
+      return Math.round(((Number(p.price) - cost) / cost) * 100);
+    }
+    function marginTone(p) {
+      const m = marginPct(p);
+      if (m == null) return "";
+      return m < 0 ? "stock out" : m < 10 ? "stock low" : "stock ok";
+    }
+    function menuName(id) {
+      return menus.value.find((m) => String(m.id) === String(id))?.name || "Sin categoría";
+    }
+    function catCount(id) {
+      return pickFoods.value.filter((p) => String(p.menuId || "") === String(id)).length;
+    }
+    const catalogStats = computed(() => {
+      const out = { value: 0, low: 0, out: 0, nocode: 0, nocost: 0 };
+      for (const p of pickFoods.value) {
+        const stock = Number(p.stock) || 0;
+        if (stock > 0) out.value += stock * (Number(p.cost) || 0);
+        if (isOut(p)) out.out += 1;
+        else if (isLow(p)) out.low += 1;
+        if (!codeOf(p)) out.nocode += 1;
+        if (!(Number(p.cost) > 0)) out.nocost += 1;
+      }
+      return out;
+    });
+    const catalogRows = computed(() => {
+      const tokens = fold(catalogSearch.value).split(/\s+/).filter(Boolean);
+      let list = pickFoods.value.filter((p) => {
+        if (catFilter.value && String(p.menuId || "") !== String(catFilter.value)) return false;
+        switch (statusFilter.value) {
+          case "low":
+            if (!isLow(p)) return false;
+            break;
+          case "out":
+            if (!isOut(p)) return false;
+            break;
+          case "expiry":
+            if (!p.tracksExpiry) return false;
+            break;
+          case "nocode":
+            if (codeOf(p)) return false;
+            break;
+          case "nocost":
+            if (Number(p.cost) > 0) return false;
+            break;
+        }
+        if (!tokens.length) return true;
+        const hay = fold(`${p.name} ${codeOf(p)} ${p.description || ""}`);
+        return tokens.every((t) => hay.includes(t));
+      });
+      const byName = (x, y) => String(x.name).localeCompare(String(y.name), "es");
+      const sorters = {
+        name: byName,
+        "price-desc": (x, y) => Number(y.price) - Number(x.price) || byName(x, y),
+        "price-asc": (x, y) => Number(x.price) - Number(y.price) || byName(x, y),
+        stock: (x, y) => (Number(x.stock) || 0) - (Number(y.stock) || 0) || byName(x, y),
+        margin: (x, y) => (marginPct(x) ?? 1e9) - (marginPct(y) ?? 1e9) || byName(x, y),
+      };
+      return [...list].sort(sorters[sortBy.value] || byName);
+    });
+    const visibleRows = computed(() => catalogRows.value.slice(0, catLimit.value));
+    watch([catalogSearch, catFilter, statusFilter, sortBy], () => {
+      catLimit.value = 150;
+    });
+    watch(catFilter, (id) => {
+      if (id) selectedMenuId.value = id;
+    });
+    function resetCatalogFilters() {
+      catalogSearch.value = "";
+      catFilter.value = "";
+      statusFilter.value = "all";
+    }
+    const catalogPlaceholder = computed(() => {
+      const type = venueStore.businessType;
+      if (type === "pharmacy") return "Buscar por nombre, sustancia o código…";
+      if (type === "hardware") return "Buscar por nombre, medida o clave…";
+      return "Buscar por nombre, marca o código…";
+    });
+    const namePlaceholder = computed(() => {
+      const type = venueStore.businessType;
+      if (type === "pharmacy") return "Paracetamol 500 mg 10 tabletas";
+      if (type === "hardware") return "Tornillo para madera 1\" (pieza)";
+      return "Coca-Cola 600 ml";
+    });
+    const descriptionLabel = computed(() => {
+      const type = venueStore.businessType;
+      if (type === "pharmacy") return "Sustancia activa y laboratorio";
+      if (type === "hardware") return "Medida, material o marca";
+      return "Marca o descripción";
+    });
+    const descriptionPlaceholder = computed(() => {
+      const type = venueStore.businessType;
+      if (type === "pharmacy") return "Paracetamol · Genérico";
+      if (type === "hardware") return "Acero galvanizado · Truper";
+      return "Marca, sabor o presentación";
+    });
+
+    /** Enter en el buscador: un código exacto abre el producto; uno nuevo ofrece registrarlo. */
+    function onCatalogEnter() {
+      const q = catalogSearch.value.trim();
+      if (!q) return;
+      const exact = pickFoods.value.find((p) => fold(codeOf(p)) === fold(q));
+      if (exact) {
+        editFood(exact);
+        catalogSearch.value = "";
+        return;
+      }
+      if (catalogRows.value.length === 1) {
+        editFood(catalogRows.value[0]);
+        return;
+      }
+      if (!catalogRows.value.length) newFromSearch();
+    }
+    function newFromSearch() {
+      const q = catalogSearch.value.trim();
+      const looksLikeCode = /^[0-9A-Za-z-]+$/.test(q) && /\d/.test(q);
+      openNewFood();
+      nextTick(() => {
+        if (looksLikeCode) foodForm.barcode = q;
+        else foodForm.name = q;
+      });
+      catalogSearch.value = "";
+    }
+
+    // Código interno EAN-13 con prefijo 20 (reservado para uso dentro de la tienda)
+    function generateCode() {
+      let max = 0;
+      for (const p of pickFoods.value) {
+        const c = codeOf(p);
+        if (/^20\d{11}$/.test(c)) max = Math.max(max, Number(c.slice(2, 12)));
+      }
+      const base = "20" + String(max + 1).padStart(10, "0");
+      let sum = 0;
+      for (let i = 0; i < 12; i++) sum += Number(base[i]) * (i % 2 ? 3 : 1);
+      foodForm.barcode = base + ((10 - (sum % 10)) % 10);
+    }
+
+    // Ganancia sobre el costo; al escribirla se calcula el precio
+    const foodMarkup = computed({
+      get() {
+        const cost = Number(foodForm.cost) || 0;
+        if (!(cost > 0)) return "";
+        return Math.round(((Number(foodForm.price) - cost) / cost) * 100);
+      },
+      set(v) {
+        const cost = Number(foodForm.cost) || 0;
+        const pct = Number(v);
+        if (!(cost > 0) || v === "" || !Number.isFinite(pct)) return;
+        foodForm.price = round2(cost * (1 + pct / 100));
+      },
+    });
+
+    async function onFormMenuChange() {
+      if (foodForm.menuId !== "__new") return;
+      const name = String(window.prompt("Nombre de la nueva categoría") || "").trim();
+      if (!name) {
+        foodForm.menuId = selectedMenuId.value || menus.value[0]?.id || "";
+        return;
+      }
+      try {
+        const created = await apiService.createMenu({ name, description: "" });
+        menus.value.push(created);
+        foodForm.menuId = created.id;
+      } catch (e) {
+        foodError.value = (typeof e.response?.data === "string" && e.response.data) || "No se pudo crear la categoría.";
+        foodForm.menuId = selectedMenuId.value || menus.value[0]?.id || "";
+      }
+    }
+
+    function openCats() {
+      for (const m of menus.value) catDrafts[m.id] = m.name;
+      menuToDelete.value = null;
+      catErr.value = "";
+      showCats.value = true;
+    }
+    async function renameMenu(menu) {
+      const name = String(catDrafts[menu.id] || "").trim();
+      if (!name || name === menu.name) {
+        catDrafts[menu.id] = menu.name;
+        return;
+      }
+      catErr.value = "";
+      try {
+        await apiService.editMenu(menu.id, { name });
+        menu.name = name;
+      } catch (e) {
+        catDrafts[menu.id] = menu.name;
+        catErr.value = (typeof e.response?.data === "string" && e.response.data) || "No se pudo renombrar.";
+      }
+    }
+    function askDeleteMenu(menu) {
+      catErr.value = "";
+      menuToDelete.value = menu;
+      moveTarget.value = menus.value.find((m) => m.id !== menu.id)?.id || "";
+    }
+    async function confirmDeleteMenu() {
+      const menu = menuToDelete.value;
+      if (!menu) return;
+      const items = pickFoods.value.filter((p) => String(p.menuId || "") === String(menu.id));
+      if (items.length && !moveTarget.value) return;
+      catBusy.value = true;
+      catErr.value = "";
+      try {
+        // El servidor borra los productos de la categoría: primero muévelos
+        for (const p of items) {
+          await apiService.editFood(p.id, { menuId: moveTarget.value });
+          p.menuId = moveTarget.value;
+        }
+        await apiService.deleteMenu(menu.id);
+        menus.value = menus.value.filter((m) => m.id !== menu.id);
+        if (catFilter.value === menu.id) catFilter.value = "";
+        if (selectedMenuId.value === menu.id) selectedMenuId.value = menus.value[0]?.id || "";
+        menuToDelete.value = null;
+      } catch (e) {
+        catErr.value = (typeof e.response?.data === "string" && e.response.data) || "No se pudo eliminar la categoría.";
+      } finally {
+        catBusy.value = false;
+      }
+    }
+
+    function exportCatalog() {
+      const cell = (v) => {
+        const t = String(v ?? "");
+        return /[",\n;]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
+      };
+      const header = ["Producto", "Código", "Categoría", "Descripción", "Precio", "Costo", "Existencias", "Mínimo", "Incluye IVA"];
+      const rows = catalogRows.value.map((p) =>
+        [
+          p.name,
+          codeOf(p),
+          menuName(p.menuId),
+          p.description || "",
+          Number(p.price || 0).toFixed(2),
+          Number(p.cost || 0).toFixed(2),
+          Number(p.stock) || 0,
+          p.lowStockThreshold ?? 5,
+          p.priceIncludesTax ? "Sí" : "No",
+        ].map(cell).join(",")
+      );
+      const blob = new Blob(["\uFEFF" + [header.join(","), ...rows].join("\n")], { type: "text/csv;charset=utf-8;" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "productos.csv";
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    }
 
     let flashTimer = null;
     let bumpTimer = null;
@@ -2782,7 +3170,7 @@ export default {
         });
         return;
       }
-      loadMenuProducts(created.id);
+      catFilter.value = created.id;
     }
 
     async function ensureSuppliers() {
@@ -2807,8 +3195,18 @@ export default {
       foodForm.lowStockThreshold = producto.lowStockThreshold != null ? Number(producto.lowStockThreshold) : 5;
       foodForm.tracksExpiry = Boolean(producto.tracksExpiry);
       foodForm.supplierIds = Array.isArray(producto.supplierIds) ? [...producto.supplierIds] : [];
+      foodForm.menuId = producto.menuId || selectedMenuId.value || menus.value[0]?.id || "";
       showFoodForm.value = true;
       ensureSuppliers();
+    }
+
+    function duplicateFood() {
+      const src = editingFood.value;
+      if (!src) return;
+      const copy = { ...foodForm, supplierIds: [...foodForm.supplierIds] };
+      closeFoodForm();
+      Object.assign(foodForm, copy, { name: `${copy.name} (copia)`, barcode: "", stock: 0 });
+      showFoodForm.value = true;
     }
 
     function openNewFood() {
@@ -2820,6 +3218,7 @@ export default {
         showMenuForm.value = true;
         return;
       }
+      foodForm.menuId = catFilter.value || selectedMenuId.value;
       showFoodForm.value = true;
       ensureSuppliers();
     }
@@ -2856,6 +3255,7 @@ export default {
       foodForm.lowStockThreshold = 5;
       foodForm.tracksExpiry = false;
       foodForm.supplierIds = [];
+      foodForm.menuId = "";
       foodError.value = "";
       addAfterSave.value = false;
       pendingBarcode.value = "";
@@ -2883,7 +3283,7 @@ export default {
         barcode: (foodForm.barcode || "").trim(),
         sku: (foodForm.barcode || "").trim(),
         priceIncludesTax: foodForm.priceMode === "gross",
-        menuId: selectedMenuId.value,
+        menuId: foodForm.menuId && foodForm.menuId !== "__new" ? foodForm.menuId : selectedMenuId.value,
         stock: Number(foodForm.stock) || 0,
         lowStockThreshold: Number(foodForm.lowStockThreshold) || 5,
         tracksExpiry: Boolean(foodForm.tracksExpiry),
@@ -3032,7 +3432,40 @@ export default {
       viewMode,
       lowStockItems,
       suppliers,
-      filteredProducts,
+      catFilter,
+      statusFilter,
+      statusFilters,
+      sortBy,
+      catLimit,
+      catalogStats,
+      catalogRows,
+      visibleRows,
+      catalogPlaceholder,
+      namePlaceholder,
+      descriptionLabel,
+      descriptionPlaceholder,
+      onCatalogEnter,
+      newFromSearch,
+      resetCatalogFilters,
+      menuName,
+      catCount,
+      marginPct,
+      marginTone,
+      generateCode,
+      foodMarkup,
+      onFormMenuChange,
+      duplicateFood,
+      showCats,
+      catDrafts,
+      menuToDelete,
+      moveTarget,
+      catBusy,
+      catErr,
+      openCats,
+      renameMenu,
+      askDeleteMenu,
+      confirmDeleteMenu,
+      exportCatalog,
       goMode,
       loadMenuProducts,
       createMenu,
@@ -4710,49 +5143,331 @@ html[data-theme="dark"] .avatar {
   .keys-legend { padding: 0.4rem 0.9rem; }
 }
 
-/* —— Catálogo —— */
-.sell-toolbar {
+/* ═══════════ Productos ═══════════ */
+.cat-page {
+  flex: 1 1 auto;
+  min-height: 0;
   display: flex;
-  gap: 0.65rem;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  overflow: hidden;
+}
+.cat-head {
+  display: flex;
   align-items: center;
-  padding: 0.65rem 0.75rem;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.6rem 1rem;
+  flex-shrink: 0;
+}
+.cat-title h1 {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+.cat-title p {
+  margin: 0.1rem 0 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--timber-muted);
+}
+.cat-head-acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+.cat-head-acts .btn {
+  min-height: 2.6rem;
+  font-size: 0.88rem;
+}
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 0.55rem;
+  flex-shrink: 0;
+}
+.kpi {
+  display: grid;
+  gap: 0.1rem;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid var(--timber-line);
+  border-radius: 0.9rem;
   background: var(--timber-panel);
+  color: var(--timber-ink);
+  text-align: left;
+  cursor: pointer;
+  box-shadow: var(--timber-shadow);
+}
+.kpi.static { cursor: default; }
+.kpi span {
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: var(--timber-muted);
+}
+.kpi strong {
+  font-size: 1.45rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+.kpi small {
+  font-size: 0.72rem;
+  color: var(--timber-muted);
+}
+.kpi.warn strong { color: var(--timber-warning); }
+.kpi.danger strong { color: var(--timber-danger); }
+.kpi.on {
+  border-color: var(--timber-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--timber-primary) 16%, transparent);
+}
+.cat-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 13rem minmax(0, 1fr);
+  gap: 0.75rem;
+}
+.cat-rail {
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.6rem;
+  border: 1px solid var(--timber-line);
+  border-radius: 1rem;
+  background: var(--timber-panel);
+}
+.rail-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 2.5rem;
+  padding: 0 0.7rem;
+  border: none;
+  border-radius: 0.65rem;
+  background: transparent;
+  color: var(--timber-ink);
+  font-size: 0.9rem;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+.rail-item:hover { background: var(--timber-panel-elevated); }
+.rail-item.on {
+  background: var(--timber-primary-soft);
+  color: var(--timber-primary);
+}
+.rail-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rail-item em {
+  font-style: normal;
+  font-size: 0.76rem;
+  color: var(--timber-muted);
+  font-variant-numeric: tabular-nums;
+}
+.rail-acts {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--timber-line);
+}
+.rail-acts { flex-wrap: wrap; }
+.rail-acts .soft-btn { min-height: 2.3rem; padding: 0 0.75rem; white-space: nowrap; }
+.link-btn {
+  border: none;
+  background: none;
+  color: var(--timber-primary);
+  font-weight: 700;
+  font-size: 0.85rem;
+  cursor: pointer;
+  min-height: 2.3rem;
+}
+.cat-main {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--timber-line);
+  border-radius: 1rem;
+  background: var(--timber-panel);
+  box-shadow: var(--timber-shadow);
+  overflow: hidden;
+}
+.cat-tools {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.75rem 0.85rem 0.5rem;
+  flex-shrink: 0;
+}
+.cat-tools .finder-box { flex: 1 1 auto; }
+.cat-search { min-height: 2.75rem; font-size: 1rem; }
+.cat-tools .cat-sort { flex: 0 0 11.5rem; }
+.cat-sort {
+  width: auto;
+  min-height: 2.75rem;
+  padding: 0 0.7rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+.cat-chips {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0 0.85rem 0.65rem;
+  overflow-x: auto;
+  scrollbar-width: none;
   border-bottom: 1px solid var(--timber-line);
   flex-shrink: 0;
 }
-.toolbar-title {
-  margin: 0;
-  flex: 1;
-  font-family: var(--font-display);
-  font-size: 1.2rem;
-  font-weight: 700;
-}
-.toolbar-right {
-  display: flex;
-  background: var(--timber-surface);
-  border-radius: 0.7rem;
-  padding: 0.15rem;
-  border: 1px solid var(--timber-line);
-}
-.seg {
-  min-height: 2.6rem;
-  padding: 0 0.9rem;
-  border: none;
-  border-radius: 0.55rem;
-  background: transparent;
+.cat-chips .chip { min-height: 2.1rem; font-size: 0.8rem; }
+.cat-count {
+  margin-left: auto;
+  font-size: 0.8rem;
+  font-weight: 600;
   color: var(--timber-muted);
-  font-weight: 700;
-  cursor: pointer;
+  white-space: nowrap;
 }
-.seg.on {
-  background: var(--timber-primary);
-  color: var(--timber-on-primary);
+.cat-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
 }
-a.seg {
+.cat-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+  font-variant-numeric: tabular-nums;
+}
+.cat-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 0.55rem 0.75rem;
+  background: var(--timber-panel-elevated);
+  border-bottom: 1px solid var(--timber-line);
+  color: var(--timber-muted);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-align: left;
+  white-space: nowrap;
+}
+.cat-table td {
+  padding: 0.55rem 0.75rem;
+  border-bottom: 1px solid var(--timber-line);
+  vertical-align: middle;
+}
+.cat-table tbody tr { cursor: pointer; }
+.cat-table tbody tr:hover { background: color-mix(in srgb, var(--timber-primary) 5%, transparent); }
+.cat-table .num { text-align: right; white-space: nowrap; }
+.cat-table .strong { font-weight: 800; }
+.cat-table .mono { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.8rem; }
+.muted { color: var(--timber-muted); }
+.cell-sub { display: block; font-size: 0.74rem; }
+.cell-prod {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-width: 0;
+}
+.avatar.sm {
+  width: 2.2rem;
+  height: 2.2rem;
+  font-size: 0.9rem;
+  border-radius: 0.6rem;
+}
+.cell-text {
+  display: grid;
+  min-width: 0;
+}
+.cell-text strong { font-weight: 700; line-height: 1.25; }
+.cell-text small {
+  font-size: 0.76rem;
+  color: var(--timber-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cell-cat {
   display: inline-flex;
   align-items: center;
-  text-decoration: none;
+  gap: 0.4rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  white-space: nowrap;
 }
+.pill {
+  display: inline-block;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  background: var(--timber-success-soft);
+  color: var(--timber-success);
+  font-size: 0.74rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.pill.low { background: var(--timber-warning-soft); color: var(--timber-warning); }
+.pill.out { background: var(--timber-danger-soft); color: var(--timber-danger); }
+.cat-tiles { overflow: visible; }
+.more-btn {
+  display: flex;
+  margin: 0.75rem auto;
+}
+.code-row {
+  display: flex;
+  gap: 0.4rem;
+}
+.code-row .btn {
+  min-height: 2.65rem;
+  padding: 0 0.8rem;
+  font-size: 0.85rem;
+  flex-shrink: 0;
+}
+.price-trio {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+.price-trio .strong { font-weight: 800; }
+.dup-link { color: var(--timber-primary) !important; }
+
+@media (max-width: 767.98px) {
+  .cat-page { padding: 0.6rem; gap: 0.6rem; overflow-y: auto; }
+  .cat-head-acts .btn:not(.primary) { display: none; }
+  .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.4rem; }
+  .kpi { padding: 0.5rem 0.6rem; }
+  .kpi strong { font-size: 1.1rem; }
+  .cat-body { grid-template-columns: minmax(0, 1fr); flex: none; }
+  .cat-rail {
+    flex-direction: row;
+    overflow-x: auto;
+    padding: 0.4rem;
+  }
+  .rail-item { flex: 0 0 auto; }
+  .rail-acts { margin: 0; padding: 0 0 0 0.4rem; border-top: none; border-left: 1px solid var(--timber-line); flex-shrink: 0; }
+  .cat-main { min-height: 24rem; }
+  .cat-list { overflow: visible; }
+  .cat-tools { padding: 0.6rem; }
+  .cat-tools { flex-wrap: wrap; }
+  .cat-tools .finder-box { flex-basis: 100%; }
+  .cat-tools .cat-sort { flex: 1 1 auto; }
+  .price-trio { gap: 0.4rem; }
+}
+@media (min-width: 768px) and (max-width: 1099.98px) {
+  .cat-body { grid-template-columns: 10.5rem minmax(0, 1fr); }
+}
+
 .check-wide {
   display: flex;
   align-items: center;
@@ -4781,148 +5496,6 @@ a.seg {
   color: var(--timber-ink);
   cursor: pointer;
 }
-.manage-body {
-  flex: 1;
-  min-height: 0;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  overflow: hidden;
-}
-.cats-rail {
-  display: flex;
-  gap: 0.4rem;
-  overflow-x: auto;
-  padding: 0.55rem 0.65rem;
-  background: var(--timber-panel);
-  border-bottom: 1px solid var(--timber-line);
-}
-.cat {
-  flex: 0 0 auto;
-  min-height: 2.75rem;
-  padding: 0 0.95rem;
-  border: 1px solid var(--timber-line);
-  border-radius: 0.65rem;
-  background: var(--timber-panel-elevated);
-  color: var(--timber-ink);
-  font-weight: 700;
-  font-size: 0.92rem;
-  cursor: pointer;
-  white-space: nowrap;
-}
-.cat.on {
-  background: var(--timber-ink);
-  color: var(--timber-panel);
-  border-color: transparent;
-}
-.cat.add {
-  border-style: dashed;
-  color: var(--timber-primary);
-}
-.grid-pane {
-  min-height: 0;
-  overflow: auto;
-  padding: 0.55rem;
-}
-.magic-open {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  align-items: center;
-  justify-content: center;
-  gap: 0.05rem;
-  min-height: 3.15rem;
-  margin-bottom: 0.55rem;
-  padding: 0.4rem 0.7rem;
-  border: none;
-  border-radius: 0.85rem;
-  background: var(--timber-primary);
-  color: var(--timber-on-primary);
-  font: inherit;
-  cursor: pointer;
-}
-.magic-title { font-weight: 800; font-size: 0.98rem; }
-.magic-sub { font-weight: 700; font-size: 0.78rem; opacity: 0.88; }
-.products {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(7rem, 1fr));
-  gap: 0.45rem;
-}
-.prod {
-  border: 1px solid var(--timber-line);
-  border-radius: 0.85rem;
-  background: var(--timber-panel-elevated);
-  color: var(--timber-ink);
-  padding: 0.4rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-  cursor: pointer;
-  text-align: left;
-  min-height: 8.2rem;
-}
-.thumb {
-  width: 100%;
-  aspect-ratio: 1;
-  border-radius: 0.6rem;
-  overflow: hidden;
-  background: var(--timber-surface);
-  display: grid;
-  place-items: center;
-}
-.thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.thumb-letter {
-  font-family: var(--font-display);
-  font-size: 1.8rem;
-  font-weight: 700;
-  color: var(--timber-primary);
-  opacity: 0.55;
-}
-.prod-meta { display: grid; gap: 0.1rem; padding: 0 0.15rem 0.15rem; }
-.pname {
-  font-weight: 700;
-  font-size: 0.82rem;
-  line-height: 1.2;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-.psku {
-  font-size: 0.68rem;
-  color: var(--timber-muted);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.pstock {
-  font-size: 0.72rem;
-  font-weight: 800;
-  color: var(--timber-success);
-  font-variant-numeric: tabular-nums;
-}
-.pstock.low { color: var(--timber-warning); }
-.price {
-  font-size: 1.05rem;
-  font-weight: 800;
-  font-variant-numeric: tabular-nums;
-  color: var(--timber-primary);
-}
-.empty { color: var(--timber-muted); grid-column: 1 / -1; margin: 1.5rem 0; text-align: center; }
-.empty-box { grid-column: 1 / -1; display: grid; gap: 0.65rem; justify-items: center; padding: 0.5rem 0 1rem; }
-.empty-box .empty { margin: 0; max-width: 22rem; }
-.add-food {
-  grid-column: 1 / -1;
-  min-height: 3rem;
-  border: 1px dashed var(--timber-primary);
-  border-radius: 0.85rem;
-  background: transparent;
-  color: var(--timber-primary);
-  font-weight: 700;
-  cursor: pointer;
-}
-
 .sheet-bg {
   position: fixed; inset: 0; z-index: 200;
   background: rgba(10, 18, 32, 0.55);
@@ -5181,42 +5754,10 @@ a.seg {
 .act.primary { background: var(--timber-primary); color: var(--timber-on-primary); }
 .act.danger { background: var(--timber-danger-soft); color: var(--timber-danger); }
 
-/* ═══════════ Catálogo: ajustes por tamaño ═══════════ */
-@media (max-width: 767.98px) {
-  .toolbar-right { display: none; }
-}
-
-@media (min-width: 768px) and (max-width: 1099.98px) {
-  .manage-body {
-    grid-template-columns: 8.5rem 1fr;
-    grid-template-rows: 1fr;
-  }
-  .cats-rail {
-    flex-direction: column;
-    overflow: hidden;
-    border-bottom: none;
-    border-right: 1px solid var(--timber-line);
-  }
-  .cat { width: 100%; white-space: normal; text-align: left; }
+/* ═══════════ Formularios del catálogo: tamaño ═══════════ */
+@media (min-width: 768px) {
   .sheet-bg { align-items: center; padding: 1rem; }
   .sheet { border-radius: 1.15rem; }
-}
-
-@media (min-width: 1100px) {
-  .manage-body {
-    grid-template-columns: 10rem 1fr;
-    grid-template-rows: 1fr;
-  }
-  .cats-rail {
-    flex-direction: column;
-    overflow: hidden;
-    border-bottom: none;
-    border-right: 1px solid var(--timber-line);
-  }
-  .cat { width: 100%; white-space: normal; text-align: left; }
-  .sheet-bg { align-items: center; padding: 1rem; }
-  .sheet { border-radius: 1.15rem; }
-  .toolbar-right .seg:first-child { display: none; }
 }
 
 .magic-open:disabled,
@@ -5278,59 +5819,6 @@ a.seg {
   .iva-card { padding: 0.4rem 0.55rem; }
 }
 
-/* —— Alerta de stock bajo ——  */
-.low-stock-banner {
-  display: flex;
-  align-items: center;
-  gap: 0.65rem;
-  margin: 0 0.55rem;
-  padding: 0.65rem 0.85rem;
-  background: color-mix(in srgb, var(--timber-warning) 12%, var(--timber-panel));
-  border: 1px solid color-mix(in srgb, var(--timber-warning) 35%, var(--timber-line));
-  border-radius: 0.75rem;
-  font-size: 0.88rem;
-  color: var(--timber-ink);
-}
-.low-stock-icon { font-size: 1.3rem; flex-shrink: 0; }
-.low-stock-body { display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; }
-.low-stock-body strong { font-size: 0.82rem; color: var(--timber-warning); }
-.low-stock-list {
-  font-size: 0.8rem;
-  color: var(--timber-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.low-stock-go {
-  margin-left: auto;
-  flex-shrink: 0;
-  font-size: 0.8rem;
-  font-weight: 800;
-  color: var(--timber-primary);
-  text-decoration: none;
-}
-
-/* —— Barra de búsqueda del catálogo —— */
-.catalog-search-bar {
-  display: flex;
-  gap: 0.5rem;
-  align-items: center;
-  padding: 0.45rem 0.65rem;
-  border-bottom: 1px solid var(--timber-line);
-  background: var(--timber-panel);
-}
-.catalog-search-input {
-  flex: 1;
-  min-height: 2.5rem;
-  border: 1px solid var(--timber-line);
-  border-radius: 0.6rem;
-  padding: 0.35rem 0.7rem;
-  font: inherit;
-  font-size: 0.92rem;
-  background: var(--timber-panel-elevated);
-  color: var(--timber-ink);
-  box-sizing: border-box;
-}
 .view-toggle {
   display: flex;
   gap: 0.15rem;
@@ -5354,46 +5842,5 @@ a.seg {
   background: var(--timber-primary);
   color: var(--timber-on-primary);
 }
-
-/* —— Costo y margen en tarjeta de producto —— */
-.pcost {
-  font-size: 0.68rem;
-  color: var(--timber-muted);
-  font-variant-numeric: tabular-nums;
-}
-
-/* —— Vista de lista (tabla de productos) —— */
-.products-list-wrap {
-  overflow-x: auto;
-}
-.products-list-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.88rem;
-  font-variant-numeric: tabular-nums;
-}
-.products-list-table th {
-  background: var(--timber-panel-elevated);
-  border-bottom: 1px solid var(--timber-line);
-  padding: 0.5rem 0.6rem;
-  font-size: 0.68rem;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--timber-muted);
-  text-align: left;
-  white-space: nowrap;
-}
-.products-list-table td {
-  padding: 0.55rem 0.6rem;
-  border-bottom: 1px solid var(--timber-line);
-  vertical-align: middle;
-  white-space: nowrap;
-}
-.list-row { cursor: pointer; }
-.list-row:hover { background: color-mix(in srgb, var(--timber-primary) 6%, transparent); }
-.list-name { font-weight: 700; white-space: normal; max-width: 14rem; }
-.list-cat { color: var(--timber-muted); font-size: 0.82rem; }
-.low-text { color: var(--timber-warning); font-weight: 800; }
 
 </style>
