@@ -98,3 +98,64 @@ export function qtyFromGrams(grams, unit = "kg") {
   // kg; en litros la báscula manda mililitros
   return roundQty(g / 1000, unit === "l" ? "l" : "kg");
 }
+
+// —— Báscula conectada ——
+
+/**
+ * Lee el peso de lo que manda una báscula por puerto serie, en kg.
+ * Acepta los formatos comunes: «ST,GS,+  0.750kg», «  0.750 kg», «W 750 g», «0.750», «1.65 lb».
+ * Sin unidad se asume `assumeUnit` (kg). null si el texto no trae un peso.
+ */
+export function parseScaleWeight(text, assumeUnit = "kg") {
+  const s = String(text || "").replace(/[\x00-\x1f]/g, " ");
+  const m = s.match(/([-+]?)\s*(\d+(?:[.,]\d+)?)\s*(kg|g|lb|oz)?/i);
+  if (!m) return null;
+  let v = Number(m[2].replace(",", "."));
+  if (!Number.isFinite(v)) return null;
+  if (m[1] === "-") v = -v;
+  const unit = (m[3] || assumeUnit).toLowerCase();
+  if (unit === "g") v /= 1000;
+  else if (unit === "lb") v *= 0.45359237;
+  else if (unit === "oz") v *= 0.0283495;
+  return Math.round(v * 1000) / 1000;
+}
+
+/**
+ * Detecta cuándo el peso se queda quieto `holdMs` (2 s) para tomarlo solo.
+ * - Ignora lo que pese menos de `minKg` (báscula vacía).
+ * - Si al abrir ya había algo en la báscula (`baselineKg`), espera a que cambie o a que la vacíen:
+ *   así no se cobra el producto anterior que se quedó encima.
+ * feed(kg, ms) → { state: "empty" | "settling" | "stable", kg, heldMs, waitingClear }
+ */
+export function createStableWeigh({ holdMs = 2000, toleranceKg = 0.005, minKg = 0.01, baselineKg = 0 } = {}) {
+  let baseline = Number(baselineKg) >= minKg ? Number(baselineKg) : 0;
+  let anchor = null;
+  let since = 0;
+  let done = null;
+  return {
+    feed(kg, now) {
+      if (done) return done;
+      const w = Number(kg);
+      if (!Number.isFinite(w) || w < minKg) {
+        baseline = 0;
+        anchor = null;
+        return { state: "empty", kg: Number.isFinite(w) ? w : 0, heldMs: 0, waitingClear: false };
+      }
+      if (baseline && Math.abs(w - baseline) <= toleranceKg) {
+        anchor = null;
+        return { state: "empty", kg: w, heldMs: 0, waitingClear: true };
+      }
+      baseline = 0;
+      if (anchor == null || Math.abs(w - anchor) > toleranceKg) {
+        anchor = w;
+        since = now;
+      }
+      const heldMs = Math.max(0, now - since);
+      if (heldMs >= holdMs) {
+        done = { state: "stable", kg: w, heldMs, waitingClear: false };
+        return done;
+      }
+      return { state: "settling", kg: w, heldMs, waitingClear: false };
+    },
+  };
+}

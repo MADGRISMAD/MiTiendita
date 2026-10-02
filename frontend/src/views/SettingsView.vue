@@ -369,6 +369,72 @@
             </section>
           </template>
 
+          <!-- ======= Báscula ======= -->
+          <template v-else-if="section === 'bascula'">
+            <section class="adm-card cfg-card">
+              <div class="switch-head">
+                <div>
+                  <h3>Usar báscula conectada</h3>
+                  <p class="adm-hint">
+                    Al vender algo a granel (tomate, queso, semillas) eliges el producto, lo pones en la báscula y, cuando el
+                    peso se queda quieto 2 segundos, se agrega solo. Se guarda en este dispositivo. Requiere Chrome o Edge en PC
+                    y la báscula conectada por USB o puerto serie.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  class="adm-switch"
+                  :aria-checked="scaleStore.enabled"
+                  aria-label="Usar báscula conectada"
+                  :disabled="!scaleSupported()"
+                  @click="saveScaleSettings({ enabled: !scaleStore.enabled })"
+                ></button>
+              </div>
+              <p v-if="!scaleSupported()" class="adm-banner warn">Este navegador no puede leer la báscula. Usa Chrome o Edge en PC; aquí se captura el peso a mano.</p>
+              <p v-else class="state-line" :class="scaleStore.connected ? 'on' : 'off'">
+                <i></i>{{ scaleStore.connected ? 'Báscula conectada' : scaleStore.enabled ? 'Báscula sin conectar' : 'Apagada: el peso se escribe a mano' }}
+              </p>
+            </section>
+            <section v-if="scaleStore.enabled && scaleSupported()" class="adm-card cfg-card">
+              <h3>Conexión</h3>
+              <div class="scale-live" :class="{ on: scaleIsLive }">
+                <span>Peso en la báscula</span>
+                <strong>{{ scaleIsLive ? `${Number(scaleStore.kg).toFixed(3)} kg` : '— — —' }}</strong>
+                <small>{{ scaleIsLive ? 'Pon algo encima para probar' : scaleStore.connected ? 'Esperando lectura… revisa la velocidad y cómo pide el peso' : 'Conecta la báscula' }}</small>
+              </div>
+              <div class="adm-row2">
+                <label class="adm-field">
+                  <span>Cómo manda el peso</span>
+                  <select class="adm-inp" :value="scaleStore.command" @change="saveScaleSettings({ command: $event.target.value })">
+                    <option v-for="(c, id) in SCALE_COMMANDS" :key="id" :value="id">{{ c.label }}</option>
+                  </select>
+                </label>
+                <label class="adm-field">
+                  <span>Velocidad del puerto</span>
+                  <select class="adm-inp" :value="scaleStore.baudRate" @change="saveScaleSettings({ baudRate: Number($event.target.value) })">
+                    <option v-for="b in [1200, 2400, 4800, 9600, 19200, 38400, 115200]" :key="b" :value="b">{{ b }}</option>
+                  </select>
+                </label>
+              </div>
+              <label class="adm-field">
+                <span>Si la báscula no dice la unidad, el número viene en</span>
+                <select class="adm-inp" :value="scaleStore.unit" @change="saveScaleSettings({ unit: $event.target.value })">
+                  <option value="kg">Kilos</option>
+                  <option value="g">Gramos</option>
+                  <option value="lb">Libras</option>
+                </select>
+              </label>
+              <div class="printer-acts">
+                <button type="button" class="adm-btn primary" :disabled="scaleStore.connecting" @click="chooseScale">
+                  {{ scaleStore.connecting ? 'Conectando…' : scaleStore.connected ? 'Cambiar báscula' : 'Conectar báscula' }}
+                </button>
+                <button v-if="scaleStore.connected" type="button" class="adm-btn" @click="disconnectScale">Desconectar</button>
+              </div>
+              <p v-if="scaleStore.error" class="adm-banner warn">{{ scaleStore.error }}</p>
+            </section>
+          </template>
+
           <!-- ======= Apariencia ======= -->
           <template v-else-if="section === 'apariencia'">
             <section class="adm-card cfg-card">
@@ -511,6 +577,7 @@ import { authStore, clearSession } from "../authStore";
 import { closingLine } from "../ticketShell";
 import { prettyPhone } from "../phone";
 import { printerStore, printerSupport, printTestPage, savePrinterSettings, connectPrinter } from "../thermalPrinter";
+import { SCALE_COMMANDS, connectScale, disconnectScale, saveScaleSettings, scaleLive, scaleStore, scaleSupported } from "../scale";
 
 const PRINTER_MODES = [
   { id: "browser", label: "Navegador (actual)", hint: "Abre el ticket y el diálogo de imprimir de Chrome. Sirve con cualquier impresora." },
@@ -519,6 +586,15 @@ const PRINTER_MODES = [
   { id: "bluetooth", label: "Térmica Bluetooth", hint: "Sale directo, sin diálogo. Chrome en Android o PC con Bluetooth." },
 ];
 const printerErr = ref("");
+// Báscula: el reloj hace que «en vivo» se apague si deja de mandar peso
+const scaleTick = ref(Date.now());
+let scaleTimer = null;
+const scaleIsLive = computed(() => scaleTick.value && scaleLive(scaleTick.value));
+onBeforeUnmount(() => clearInterval(scaleTimer));
+async function chooseScale() {
+  if (scaleStore.connected) await disconnectScale();
+  if (await connectScale({ prompt: true })) say("Báscula conectada.");
+}
 function setPrinterMode(mode) {
   printerErr.value = "";
   savePrinterSettings({ mode, deviceName: mode === printerStore.mode ? printerStore.deviceName : "" });
@@ -546,6 +622,7 @@ const SECTIONS = {
   negocio: { label: "Mi negocio", icon: "store", desc: "Nombre, giro, dirección y logo", lead: "Así te ven tus clientes en el ticket y en la app.", tone: "info" },
   ventas: { label: "Ventas e IVA", icon: "percent", desc: "IVA y comisión por tarjeta", lead: "El impuesto de tus ventas y la comisión al pagar con tarjeta.", tone: "good" },
   inventario: { label: "Inventario", icon: "box", desc: "Existencias y costo de compras", lead: "Cómo se mueven tus existencias y tus costos.", tone: "warn" },
+  bascula: { label: "Báscula", icon: "hash", desc: "Pesar a granel y agregar solo", lead: "La báscula de esta caja.", tone: "good" },
   impresora: { label: "Impresora", icon: "printer", desc: "Ticket directo en térmica y cajón", lead: "Cómo sale el ticket en esta caja.", tone: "info" },
   apariencia: { label: "Apariencia", icon: "sun", desc: "Tema claro u oscuro", lead: "Cómo se ve la app en este dispositivo.", tone: "" },
   cuenta: { label: "Mi cuenta", icon: "lock", desc: "Contraseña y sesión", lead: "Tus datos de acceso.", tone: "" },
@@ -560,7 +637,7 @@ const NAV = [
       { id: "billing", to: "/billing", label: "Plan y facturación", icon: "card", desc: "Tu suscripción y pagos", tone: "warn" },
     ],
   },
-  { title: "Esta app", items: ["impresora", "apariencia", "cuenta", "soporte"].map((id) => ({ id, ...SECTIONS[id] })) },
+  { title: "Esta app", items: ["impresora", "bascula", "apariencia", "cuenta", "soporte"].map((id) => ({ id, ...SECTIONS[id] })) },
 ];
 const KINDS = [
   { id: "abarrotes", label: "Abarrotes", hint: "Minisúper, tiendita" },
@@ -602,6 +679,19 @@ const section = computed(() => {
   if (SECTIONS[s]) return s;
   return wide.value ? "negocio" : "";
 });
+// Mientras se ve la sección Báscula, conecta (si ya hay permiso) y muestra el peso en vivo
+watch(
+  () => section.value === "bascula",
+  (on) => {
+    clearInterval(scaleTimer);
+    scaleTimer = null;
+    if (!on) return;
+    connectScale().catch(() => {});
+    scaleTimer = setInterval(() => (scaleTick.value = Date.now()), 250);
+  },
+  { immediate: true }
+);
+
 const current = computed(() => SECTIONS[section.value] || SECTIONS.negocio);
 function open(id) {
   const to = { query: { ...route.query, s: id } };
@@ -1112,6 +1202,10 @@ onBeforeUnmount(() => {
 .state-line.off { color: var(--timber-muted); }
 .printer-modes { grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); }
 .printer-acts { display: flex; flex-wrap: wrap; gap: 0.6rem; }
+.scale-live { display: grid; justify-items: center; gap: 0.2rem; padding: 1rem; border-radius: 0.9rem; background: var(--timber-surface); color: var(--timber-muted); text-align: center; }
+.scale-live strong { font-size: 2.2rem; font-variant-numeric: tabular-nums; color: var(--timber-ink); letter-spacing: -0.02em; }
+.scale-live.on strong { color: var(--timber-success); }
+.scale-live span, .scale-live small { font-size: 0.82rem; }
 
 /* Apariencia */
 .themes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.65rem; max-width: 30rem; }
