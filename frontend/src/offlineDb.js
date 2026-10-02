@@ -133,6 +133,49 @@ export async function countPending(tenantId) {
   return rows.length;
 }
 
+/** Ventas de este dispositivo que aún no están en el servidor (pendientes y con error). */
+export async function listUnsynced(tenantId) {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction("sales", "readonly");
+    const req = tx.objectStore("sales").getAll();
+    req.onsuccess = () => {
+      const rows = (req.result || []).filter(
+        (row) => (row.status === "pending" || row.status === "failed") && (!tenantId || row.tenantId === tenantId)
+      );
+      rows.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+      resolve(rows);
+    };
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function patchSale(clientSaleId, patch) {
+  const row = await getSale(clientSaleId);
+  if (!row) return null;
+  const db = await openDb();
+  const tx = db.transaction("sales", "readwrite");
+  const next = { ...row, ...(typeof patch === "function" ? patch(row) : patch) };
+  tx.objectStore("sales").put(next);
+  await txDone(tx);
+  return next;
+}
+
+/** Falla pasajera: sigue pendiente y se vuelve a intentar después de una espera creciente. */
+export function markRetry(clientSaleId, error, waitMs) {
+  return patchSale(clientSaleId, (row) => ({
+    status: "pending",
+    attempts: (Number(row.attempts) || 0) + 1,
+    lastError: String(error || ""),
+    nextTryAt: Date.now() + Math.max(0, Number(waitMs) || 0),
+  }));
+}
+
+/** Regresa una venta a la cola (después de corregir lo que la rechazó). Nunca la borra. */
+export function requeueSale(clientSaleId) {
+  return patchSale(clientSaleId, { status: "pending", error: "", lastError: "", attempts: 0, nextTryAt: 0 });
+}
+
 export async function markSynced(clientSaleId, serverOrderId) {
   const row = await getSale(clientSaleId);
   if (!row) return;
@@ -143,22 +186,19 @@ export async function markSynced(clientSaleId, serverOrderId) {
     status: "synced",
     serverOrderId: serverOrderId || row.serverOrderId,
     error: "",
+    lastError: "",
     syncedAt: Date.now(),
   });
   await txDone(tx);
 }
 
 export async function markFailed(clientSaleId, error) {
-  const row = await getSale(clientSaleId);
-  if (!row) return;
-  const db = await openDb();
-  const tx = db.transaction("sales", "readwrite");
-  tx.objectStore("sales").put({
-    ...row,
+  await patchSale(clientSaleId, (row) => ({
     status: "failed",
     error: String(error || "No se pudo sincronizar"),
-  });
-  await txDone(tx);
+    attempts: (Number(row.attempts) || 0) + 1,
+    failedAt: Date.now(),
+  }));
 }
 
 export function lookupInCatalog(foods, code) {

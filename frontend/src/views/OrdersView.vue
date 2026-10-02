@@ -18,11 +18,47 @@
         <PosIcon name="alert" :size="18" />
         La caja lleva abierta más de 12 horas y la venta está bloqueada. Haz el corte para seguir cobrando.
       </p>
-      <p v-if="offlineStore.pending" class="banner warn">
-        <PosIcon name="alert" :size="18" />
-        {{ offlineStore.pending }} {{ offlineStore.pending === 1 ? 'venta sin sincronizar' : 'ventas sin sincronizar' }}.
-        Espera a que vuelva internet antes del corte.
-      </p>
+      <!-- Ventas hechas sin internet que aún no llegan al servidor -->
+      <section v-if="deviceSales.length" class="device" aria-labelledby="device-title">
+        <div class="device-head">
+          <div>
+            <h2 id="device-title"><PosIcon name="alert" :size="18" /> Ventas de este dispositivo sin subir</h2>
+            <p>{{ deviceSummary }}</p>
+          </div>
+          <button type="button" class="btn sm" :disabled="deviceBusy || !offlineStore.online" @click="retryDevice()">
+            <PosIcon name="history" :size="16" />
+            {{ deviceBusy ? 'Subiendo…' : offlineStore.online ? 'Reintentar todas' : 'Sin internet' }}
+          </button>
+        </div>
+        <ul class="device-list">
+          <li v-for="s in deviceSales" :key="s.clientSaleId" :class="s.status">
+            <span class="device-when">{{ when(s.payload?.soldAt || s.createdAt) }}</span>
+            <div class="device-main">
+              <strong>#{{ folio({ id: s.clientSaleId }) }} · {{ money(s.payload?.total) }}</strong>
+              <small>{{ itemsSummary(s.payload) }}</small>
+              <small v-if="s.status === 'failed'" class="device-err">El servidor la rechazó: {{ s.error }}</small>
+              <small v-else-if="s.lastError" class="device-wait">Se reintenta sola · {{ s.lastError }}</small>
+            </div>
+            <span class="pill" :class="s.status === 'failed' ? 'bad' : 'warn'">{{ s.status === 'failed' ? 'Con error' : 'Por subir' }}</span>
+            <div class="device-acts">
+              <a class="btn sm" :href="`/print/offline/${s.clientSaleId}`" target="_blank" rel="noopener">Ver ticket</a>
+              <button
+                v-if="s.status === 'failed'"
+                type="button"
+                class="btn sm"
+                :disabled="deviceBusy || !offlineStore.online"
+                @click="retryDevice([s.clientSaleId])"
+              >
+                Reintentar
+              </button>
+            </div>
+          </li>
+        </ul>
+        <p class="device-note">
+          Se quedan guardadas en este dispositivo hasta llegar al servidor; nunca se borran solas.
+          Las que están por subir entran al corte cuando se suban.
+        </p>
+      </section>
       <p v-if="cashMsg" class="banner ok">
         <PosIcon name="check" :size="18" /> {{ cashMsg }}
       </p>
@@ -370,7 +406,8 @@ import PosIcon from "../components/PosIcon.js";
 import { apiService } from "../apiService";
 import { venueStore } from "../venueStore";
 import { offlineStore } from "../offlineFlags";
-import { flushOfflineSales } from "../offlineSync";
+import { flushOfflineSales, listDeviceSales, retrySales } from "../offlineSync";
+import { isNetworkError } from "../net";
 import { lineBreakdown, rateOf } from "../tax";
 
 const vSelectOnFocus = {
@@ -607,7 +644,9 @@ async function loadCash() {
     sessionOrders.value = Array.isArray(data.orders) ? data.orders : [];
     totals.value = data.totals || { cash: 0, card: 0, transfer: 0, other: 0, total: 0 };
   } catch (e) {
-    cashErr.value = errText(e, "No se pudo consultar la caja.");
+    cashErr.value = isNetworkError(e)
+      ? "Sin internet: aquí solo ves las ventas de este dispositivo. El turno y el corte necesitan conexión."
+      : errText(e, "No se pudo consultar la caja.");
   }
 }
 
@@ -641,9 +680,56 @@ async function openCash() {
   }
 }
 
+// ---------- Ventas de este dispositivo sin subir ----------
+const deviceSales = ref([]);
+const deviceBusy = ref(false);
+const deviceSummary = computed(() => {
+  const pend = deviceSales.value.filter((s) => s.status === "pending").length;
+  const bad = deviceSales.value.length - pend;
+  const parts = [];
+  if (pend) parts.push(`${pend} por subir`);
+  if (bad) parts.push(`${bad} con error`);
+  const total = deviceSales.value.reduce((t, s) => t + Number(s.payload?.total || 0), 0);
+  return `${parts.join(" · ")} · ${money(total)}${offlineStore.online ? "" : " · esperando internet"}`;
+});
+async function loadDeviceSales() {
+  deviceSales.value = await listDeviceSales();
+}
+async function retryDevice(ids = null) {
+  deviceBusy.value = true;
+  cashErr.value = "";
+  try {
+    const before = deviceSales.value.length;
+    await retrySales(ids);
+    await loadDeviceSales();
+    const sent = before - deviceSales.value.length;
+    if (sent > 0) {
+      cashMsg.value = `${sent} ${sent === 1 ? "venta subida" : "ventas subidas"} al servidor.`;
+      await load();
+    } else if (deviceSales.value.some((s) => s.status === "failed")) {
+      cashErr.value = "El servidor sigue rechazando la venta. Revisa el motivo o escríbenos a soporte.";
+    }
+  } finally {
+    deviceBusy.value = false;
+  }
+}
+watch(
+  () => [offlineStore.pending, offlineStore.failed, offlineStore.syncing],
+  async () => {
+    if (offlineStore.syncing) return;
+    const before = deviceSales.value.length;
+    await loadDeviceSales();
+    // Se subieron ventas mientras se veía Caja: refresca la lista y los totales del turno
+    if (deviceSales.value.length < before && !deviceBusy.value) load();
+  }
+);
+
 function prepClose() {
   if (offlineStore.pending > 0) {
-    cashErr.value = `Hay ${offlineStore.pending} venta(s) sin sincronizar. Espera a que vuelva internet antes del corte.`;
+    cashErr.value = `Hay ${offlineStore.pending} ${offlineStore.pending === 1 ? "venta" : "ventas"} de este dispositivo por subir. Espera a que vuelva internet antes del corte.`;
+    return;
+  }
+  if (offlineStore.failed > 0 && !window.confirm(`Hay ${offlineStore.failed} ${offlineStore.failed === 1 ? "venta" : "ventas"} de este dispositivo con error que no entran en el corte. ¿Hacer el corte de todos modos?`)) {
     return;
   }
   cashErr.value = "";
@@ -656,7 +742,7 @@ function prepClose() {
 
 async function closeCash() {
   if (offlineStore.pending > 0) {
-    cashErr.value = `Hay ${offlineStore.pending} venta(s) sin sincronizar. No cierres caja todavía.`;
+    cashErr.value = `Hay ${offlineStore.pending} ${offlineStore.pending === 1 ? "venta" : "ventas"} de este dispositivo por subir. No cierres caja todavía.`;
     showClose.value = false;
     return;
   }
@@ -756,7 +842,7 @@ function onKey(e) {
 }
 
 onMounted(() => {
-  load();
+  load().finally(loadDeviceSales);
   clock = setInterval(() => {
     now.value = Date.now();
   }, 60000);
@@ -918,6 +1004,44 @@ onUnmounted(() => {
 .open-form { display: grid; gap: 0.55rem; }
 
 /* Resumen del turno */
+/* Ventas de este dispositivo sin subir */
+.device {
+  flex-shrink: 0;
+  padding: 0.85rem 0.95rem;
+  border: 1px solid color-mix(in srgb, var(--timber-warning) 45%, var(--timber-line));
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--timber-warning) 7%, var(--timber-panel));
+}
+.device-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.75rem; }
+.device-head h2 { display: flex; align-items: center; gap: 0.4rem; margin: 0; font-size: 1rem; font-weight: 800; }
+.device-head h2 svg { color: var(--timber-warning); }
+.device-head p { margin: 0.15rem 0 0; font-size: 0.82rem; font-weight: 600; color: var(--timber-muted); }
+.btn.sm { min-height: 2.3rem; padding: 0 0.75rem; font-size: 0.84rem; }
+.device-list { list-style: none; margin: 0.6rem 0 0; padding: 0; max-height: 15rem; overflow-y: auto; }
+.device-list li {
+  display: grid;
+  grid-template-columns: 4.6rem minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0;
+  border-top: 1px solid var(--timber-line);
+}
+.device-when { font-size: 0.82rem; font-weight: 700; color: var(--timber-muted); font-variant-numeric: tabular-nums; }
+.device-main { display: grid; min-width: 0; }
+.device-main strong { font-variant-numeric: tabular-nums; }
+.device-main small { overflow: hidden; font-size: 0.78rem; color: var(--timber-muted); text-overflow: ellipsis; white-space: nowrap; }
+.device-main .device-err { color: var(--timber-danger); font-weight: 700; white-space: normal; }
+.device-main .device-wait { white-space: normal; }
+.device-acts { display: flex; gap: 0.35rem; }
+.device-note { margin: 0.55rem 0 0; font-size: 0.78rem; color: var(--timber-muted); line-height: 1.4; }
+@media (max-width: 767.98px) {
+  .device-head { flex-wrap: wrap; }
+  .device-list li { grid-template-columns: minmax(0, 1fr) auto; }
+  .device-when { grid-column: 1 / -1; }
+  .device-acts { grid-column: 1 / -1; }
+  .device-acts .btn { flex: 1; }
+}
+
 .kpis {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));

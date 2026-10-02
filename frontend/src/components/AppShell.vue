@@ -53,8 +53,14 @@
         <span>{{ billingBanner.text }}</span>
         <router-link to="/billing">Facturación</router-link>
       </div>
-      <div v-if="offlineBanner" class="billing-banner" :class="offlineBanner.tone">
-        <span>{{ offlineBanner.text }}</span>
+      <div v-if="offlineBanner" class="billing-banner" :class="offlineBanner.tone" role="status">
+        <span>{{ offlineBanner.text }}<small v-if="offlineBanner.last" class="sync-last"> · {{ offlineBanner.last }}</small></span>
+        <span v-if="offlineBanner.upload || offlineBanner.review" class="banner-acts">
+          <button v-if="offlineBanner.upload" type="button" :disabled="offlineStore.syncing" @click="flushOfflineSales({ force: true })">
+            Subir ahora
+          </button>
+          <router-link v-if="offlineBanner.review && canAccessRoute('orders')" to="/orders">Revisar</router-link>
+        </span>
       </div>
 
       <div v-if="moreOpen" class="more-sheet" @click.self="moreOpen = false">
@@ -182,22 +188,38 @@ const billingBanner = computed(() => {
 
 const offlineBanner = computed(() => {
   if (ownerMode.value) return null;
+  const n = offlineStore.pending;
+  const f = offlineStore.failed;
+  const ventas = (k) => `${k} ${k === 1 ? "venta" : "ventas"}`;
+  const withErr = f ? ` · ${ventas(f)} con error` : "";
+  const last = lastSyncText.value;
   if (!offlineStore.online) {
-    const n = offlineStore.pending;
     return {
       tone: "warn",
       text: n
-        ? `Sin internet — la caja sigue. ${n} venta(s) se subirán al volver.`
-        : "Sin internet — puedes cobrar con el catálogo ya cargado.",
+        ? `Sin internet · la caja sigue. ${ventas(n)} por subir${withErr}.`
+        : `Sin internet · puedes cobrar con el catálogo guardado${withErr}.`,
+      review: f > 0,
     };
   }
-  if (offlineStore.syncing && offlineStore.pending) {
-    return { tone: "warn", text: `Sincronizando ${offlineStore.pending} venta(s)…` };
+  if (offlineStore.authNeeded && n) {
+    return { tone: "danger", text: `No se pudieron subir ${ventas(n)}: vuelve a iniciar sesión o revisa tu suscripción.`, review: true };
   }
-  if (offlineStore.pending) {
-    return { tone: "warn", text: `${offlineStore.pending} venta(s) pendientes de sincronizar.` };
-  }
+  if (offlineStore.syncing && n) return { tone: "warn", text: `Subiendo ${ventas(n)}…` };
+  if (n) return { tone: "warn", text: `${ventas(n)} de este dispositivo por subir${withErr}.`, upload: true, review: f > 0, last };
+  if (f) return { tone: "danger", text: `${ventas(f)} de este dispositivo ${f === 1 ? "no se pudo subir" : "no se pudieron subir"}.`, review: true, last };
   return null;
+});
+// "última subida 10:42" (o con fecha si no fue hoy)
+const lastSyncText = computed(() => {
+  const at = offlineStore.lastSyncAt;
+  if (!at) return "";
+  const d = new Date(at);
+  const today = new Date(now.value);
+  const hm = d.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
+  return d.toDateString() === today.toDateString()
+    ? `última subida ${hm}`
+    : `última subida ${d.toLocaleDateString("es-MX", { day: "numeric", month: "short" })} ${hm}`;
 });
 
 const ico = {
@@ -316,6 +338,20 @@ onUnmounted(() => clearInterval(timer));
   font-weight: 800;
   text-decoration: underline;
 }
+.billing-banner .sync-last { font-weight: 500; opacity: 0.8; }
+.banner-acts { display: inline-flex; align-items: center; gap: 0.75rem; flex-shrink: 0; }
+.banner-acts button {
+  min-height: 2rem;
+  padding: 0 0.7rem;
+  border: 1px solid currentColor;
+  border-radius: 0.55rem;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+.banner-acts button:disabled { opacity: 0.5; cursor: default; }
 
 .pos-top {
   grid-area: top;
