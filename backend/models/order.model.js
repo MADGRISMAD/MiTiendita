@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const { cartTotals, rateOf } = require('../utils/tax');
+const { roundQty, saleUnitOf } = require('../utils/units');
 
 const orderStatuses = ['pending', 'preparing', 'ready', 'served', 'cancelled'];
 const paymentMethods = ['cash', 'card', 'transfer', 'split', 'other'];
@@ -10,7 +11,8 @@ function normalizeOrder(body = {}) {
         foodId: item.foodId || item.food || item.id || null,
         name: item.name || 'Producto',
         price: Number(item.price || 0),
-        quantity: Number(item.quantity || 1),
+        quantity: roundQty(item.quantity || 1),
+        saleUnit: saleUnitOf(item.saleUnit),
         priceIncludesTax: Boolean(item.priceIncludesTax),
         notes: item.notes || '',
       }))

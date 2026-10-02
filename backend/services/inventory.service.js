@@ -1,4 +1,5 @@
 const { ObjectId } = require('mongodb');
+const { roundQty } = require('../utils/units');
 const db = require('../database/mongodb');
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -16,7 +17,7 @@ function httpError(status, message) {
 }
 
 function nextCost(food, incomingQty, unitCost, method) {
-  const qty = Math.max(0, Math.floor(Number(incomingQty) || 0));
+  const qty = Math.max(0, roundQty(incomingQty));
   const unit = roundMoney(unitCost);
   if (method === 'average') {
     const stock = Math.max(0, Number(food.stock) || 0);
@@ -166,7 +167,8 @@ async function confirmPurchase({ tenantId, user, body, options = {} }) {
     if (!ObjectId.isValid(foodId)) throw httpError(400, 'Producto inválido en la compra');
     const food = await db.GetFoodById(foodId, tenantId);
     if (!food) throw httpError(400, `Producto no encontrado: ${foodId}`);
-    const quantity = Math.max(0, Math.floor(Number(raw.quantity) || 0));
+    // Piezas o, en productos a granel, kilos/litros con 3 decimales
+    const quantity = Math.max(0, roundQty(raw.quantity));
     if (!quantity) throw httpError(400, `Cantidad inválida para ${food.name}`);
     const unitCost = roundMoney(raw.unitCost);
     let expiresAt = parseDay(raw.expiresAt) || fallbackExpiry;

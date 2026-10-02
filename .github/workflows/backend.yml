@@ -7,6 +7,7 @@ on:
       - "frontend/src/tax.ts"
       - "frontend/src/storeTime.js"
       - "frontend/src/escpos.js"
+      - "frontend/src/bulk.js"
       - "package.json"
       - "package-lock.json"
     branches:
@@ -17,6 +18,7 @@ on:
       - "frontend/src/tax.ts"
       - "frontend/src/storeTime.js"
       - "frontend/src/escpos.js"
+      - "frontend/src/bulk.js"
       - "package.json"
       - "package-lock.json"
     branches:

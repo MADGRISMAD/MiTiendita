@@ -172,7 +172,7 @@ export function buildReceipt(t, { cols = 48, openDrawer = false } = {}) {
   for (const item of t.items || []) {
     p.bold().wrapped(item.name).bold(false);
     if (item.notes) p.wrapped(`  ${item.notes}`);
-    p.lr(`  ${item.qtyText} x ${money(item.unit)}`, money(item.amount));
+    p.lr(`  ${item.qtyText} x ${money(item.unit)}${item.per || ""}`, money(item.amount));
   }
   p.rule();
 

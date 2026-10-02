@@ -224,6 +224,23 @@
               </template>
               <p v-else class="state-line off"><i></i>Apagada: con tarjeta se cobra lo mismo que en efectivo.</p>
             </section>
+            <section class="adm-card cfg-card">
+              <h3>Etiquetas de báscula</h3>
+              <p class="adm-hint">
+                Si tu báscula imprime etiquetas con código de barras (empiezan con 20 a 29), da de alta el producto a granel con la
+                clave de la báscula (PLU) como código. Al escanear la etiqueta se agrega con su peso o importe.
+              </p>
+              <div class="adm-choices">
+                <button type="button" class="adm-choice" :aria-pressed="form.scaleBarcodeMode === 'weight'" @click="form.scaleBarcodeMode = 'weight'">
+                  <strong>La etiqueta trae el peso</strong>
+                  <small>Ej. 2000123007502 = clave 00123, 0.750 kg</small>
+                </button>
+                <button type="button" class="adm-choice" :aria-pressed="form.scaleBarcodeMode === 'price'" @click="form.scaleBarcodeMode = 'price'">
+                  <strong>La etiqueta trae el importe</strong>
+                  <small>Ej. 2000123135007 = clave 00123, $135.00</small>
+                </button>
+              </div>
+            </section>
           </template>
 
           <!-- ======= Inventario ======= -->
@@ -613,13 +630,14 @@ function fromStore() {
     taxPercent: Number((Number(s.taxRate ?? 0.16) * 100).toFixed(2)),
     cardFeeEnabled: Boolean(s.cardFeeEnabled),
     cardFeePercent: Number(s.cardFeePercent ?? 4),
+    scaleBarcodeMode: s.scaleBarcodeMode === "price" ? "price" : "weight",
   };
 }
 const form = reactive(fromStore());
 const snapshot = ref(JSON.stringify(fromStore()));
 const FIELDS_BY_SECTION = {
   negocio: ["businessName", "businessType", "address", "phone", "logoUrl", "timezone"],
-  ventas: ["taxPercent", "cardFeeEnabled", "cardFeePercent"],
+  ventas: ["taxPercent", "cardFeeEnabled", "cardFeePercent", "scaleBarcodeMode"],
   inventario: ["inventoryEnabled", "allowNegativeStock", "costMethod"],
 };
 const dirty = computed(() => JSON.stringify({ ...form }) !== snapshot.value);
@@ -725,6 +743,7 @@ async function save() {
         taxRate: taxRate.value,
         cardFeeEnabled: Boolean(form.cardFeeEnabled),
         cardFeePercent: Math.min(30, Math.max(0, Number(form.cardFeePercent) || 0)),
+        scaleBarcodeMode: form.scaleBarcodeMode === "price" ? "price" : "weight",
       },
       { strict: true }
     );

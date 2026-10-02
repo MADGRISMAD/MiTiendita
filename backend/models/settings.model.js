@@ -27,6 +27,8 @@ const settingsSchema = Joi.object({
   /** Comisión que la tienda le suma al cliente cuando paga con tarjeta (compensa lo que cobra la terminal) */
   cardFeeEnabled: Joi.boolean().default(false),
   cardFeePercent: Joi.number().min(0).max(30).default(4),
+  /** Códigos de báscula (EAN-13 que empieza con 20–29): el número trae el peso en gramos o el importe en centavos */
+  scaleBarcodeMode: Joi.string().valid('weight', 'price').default('weight'),
   setupCompleted: Joi.boolean().default(true),
   updatedAt: Joi.date().optional(),
   createdAt: Joi.date().optional(),

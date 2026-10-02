@@ -465,7 +465,8 @@ async function IncrementFoodStock(id, quantity, tenantId) {
   if (!filter) return null;
   const food = await dbConnection.collection('foods').findOne(filter);
   if (!food) return null;
-  const qty = Math.max(0, Math.floor(Number(quantity) || 0));
+  // A 3 decimales: los productos a granel regresan kilos o litros con fracción
+  const qty = Math.max(0, Math.round((Number(quantity) || 0) * 1000) / 1000);
   if (!qty) return withId(food);
   // $inc: atómico y respeta un stock negativo (venta sin existencias) en lugar de saltarlo a 0
   await dbConnection.collection('foods').updateOne(filter, { $inc: { stock: qty } });
