@@ -1,5 +1,20 @@
 const db = require('../database/mongodb');
 const { normalizeOrder, orderStatuses, paymentMethods, newToken } = require('../models/order.model');
+const { storeDayRange } = require('../utils/store-time');
+
+/**
+ * Rango de un reporte. Un día «AAAA-MM-DD» se toma en la zona de la tienda
+ * (from = 00:00, to = 23:59:59.999); una fecha con hora se usa tal cual.
+ */
+async function resolveReportRange(tenantId, from, to) {
+  const dayOnly = /^\d{4}-\d{2}-\d{2}$/;
+  if (!dayOnly.test(from) && !dayOnly.test(to)) return { from, to };
+  const tz = (await db.GetSettings(tenantId))?.timezone;
+  return {
+    from: dayOnly.test(from) ? storeDayRange(from, tz).from : from,
+    to: dayOnly.test(to) ? storeDayRange(to, tz).to : to,
+  };
+}
 
 async function ensureInvoiceToken(order) {
   if (!order || order.invoiceToken) return order;
@@ -387,7 +402,11 @@ async function report(req, res) {
   try {
     const { from, to } = req.query;
     if (!from || !to) return res.status(400).send('Parámetros from y to son requeridos');
-    const orders = await db.GetOrdersByDateRange(req.tenantId, from, to);
+    const r = await resolveReportRange(req.tenantId, String(from), String(to));
+    if (Number.isNaN(new Date(r.from).getTime()) || Number.isNaN(new Date(r.to).getTime())) {
+      return res.status(400).send('Fechas inválidas');
+    }
+    const orders = await db.GetOrdersByDateRange(req.tenantId, r.from, r.to);
     return res.status(200).json(orders);
   } catch (err) {
     console.error(err);
@@ -399,7 +418,11 @@ async function reportSummary(req, res) {
   try {
     const { from, to } = req.query;
     if (!from || !to) return res.status(400).send('Parámetros from y to son requeridos');
-    const summary = await db.GetSalesReport(req.tenantId, from, to);
+    const r = await resolveReportRange(req.tenantId, String(from), String(to));
+    if (Number.isNaN(new Date(r.from).getTime()) || Number.isNaN(new Date(r.to).getTime())) {
+      return res.status(400).send('Fechas inválidas');
+    }
+    const summary = await db.GetSalesReport(req.tenantId, r.from, r.to);
     return res.status(200).json(summary);
   } catch (err) {
     console.error(err);

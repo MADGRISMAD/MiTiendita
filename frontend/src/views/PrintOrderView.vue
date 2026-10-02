@@ -152,6 +152,7 @@ import { onMounted, ref, computed, watch } from "vue";
 import { useRoute } from "vue-router";
 import QRCode from "qrcode";
 import "../ticket.css";
+import { storeClock, storeParts } from "../storeTime";
 import { apiService, appPublicOrigin } from "../apiService";
 import { venueStore, fetchVenueSettings } from "../venueStore";
 import { authStore } from "../authStore";
@@ -257,21 +258,16 @@ const taxBase = computed(() => {
 });
 const MONTHS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
 const DAYS = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
-function validDate(d) {
-  const dt = d ? new Date(d) : null;
-  return dt && !Number.isNaN(dt.getTime()) ? dt : null;
-}
 function shortDate(d) {
-  const dt = validDate(d);
-  return dt ? `${String(dt.getDate()).padStart(2, "0")} ${MONTHS[dt.getMonth()]} ${dt.getFullYear()}` : "";
+  const p = storeParts(d, venueStore.timezone);
+  return p ? `${String(p.day).padStart(2, "0")} ${MONTHS[p.month - 1]} ${p.year}` : "";
 }
 function clock(d) {
-  const dt = validDate(d);
-  return dt ? `${String(dt.getHours()).padStart(2, "0")}:${String(dt.getMinutes()).padStart(2, "0")}` : "";
+  return storeClock(d, venueStore.timezone);
 }
 function dayName(d) {
-  const dt = validDate(d);
-  return dt ? DAYS[dt.getDay()] : "Fecha";
+  const p = storeParts(d, venueStore.timezone);
+  return p ? DAYS[p.weekday] : "Fecha";
 }
 
 async function paintQr(token) {

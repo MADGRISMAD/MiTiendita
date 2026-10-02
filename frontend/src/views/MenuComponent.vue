@@ -1269,6 +1269,7 @@ import { store } from "../store";
 import { venueStore, fetchVenueSettings } from "../venueStore";
 import { billingStore } from "../billingStore";
 import { cardFeeRateOf, cartTotals, lineBreakdown, rateOf } from "../tax";
+import { storeClock } from "../storeTime";
 import { apiService as apiSvc } from "../apiService";
 import { authStore } from "../authStore";
 import { isNetworkError, newClientSaleId } from "../net";
@@ -2789,7 +2790,7 @@ export default {
     }
     function heldTime(at) {
       try {
-        return new Date(at).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
+        return storeClock(at, venueStore.timezone);
       } catch {
         return "";
       }
