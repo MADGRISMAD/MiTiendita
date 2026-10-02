@@ -78,7 +78,7 @@
               <strong><sup>$</sup>{{ num(order.total) }}</strong>
             </div>
             <p class="tk-taxnote">
-              IVA {{ pct((order.taxRate || 0.16) * 100) }} incluido en el total: {{ money(order.tax) }}
+              IVA {{ pct(rateOf(order.taxRate) * 100) }} incluido en el total: {{ money(order.tax) }}
             </p>
 
             <div v-if="paid" class="tk-pay" :class="{ single: !hasChangeBox }">
@@ -154,7 +154,7 @@ import "../ticket.css";
 import { apiService, appPublicOrigin } from "../apiService";
 import { venueStore, fetchVenueSettings } from "../venueStore";
 import { authStore } from "../authStore";
-import { lineBreakdown } from "../tax";
+import { lineBreakdown, rateOf } from "../tax";
 import { getSale, saleToPrintOrder } from "../offlineDb";
 import { useTicketShell, folioOf, closingLine, closingNote } from "../ticketShell";
 import PosIcon from "../components/PosIcon.js";
@@ -240,7 +240,7 @@ function pct(p) {
   return `${Number(Number(p || 0).toFixed(2))}%`;
 }
 function lineGross(item) {
-  const rate = order.value?.taxRate || 0.16;
+  const rate = rateOf(order.value?.taxRate);
   return lineBreakdown(item.price, item.quantity, item.priceIncludesTax, rate).gross;
 }
 const MONTHS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];

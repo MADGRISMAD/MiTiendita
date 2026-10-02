@@ -109,11 +109,11 @@ async function settlePayment(req, existing, body, { requireCash = true, paidAt }
     throw httpError(400, 'Debes abrir la caja antes de cobrar');
   }
 
-  const { cartTotals, DEFAULT_TAX_RATE } = require('../utils/tax');
+  const { cartTotals, rateOf } = require('../utils/tax');
   const cardExtraIva = method === 'card' && Boolean(body?.cardExtraIva);
   const totals = cartTotals(existing.items || [], {
     discountPercent: existing.discountPercent || 0,
-    taxRate: existing.taxRate || DEFAULT_TAX_RATE,
+    taxRate: rateOf(existing.taxRate),
     cardExtraIva,
   });
   const deliveryFee = Number(existing.deliveryFee || 0);

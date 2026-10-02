@@ -154,6 +154,13 @@ async function updateFood(req, res) {
       const code = String(body.barcode || body.sku || '').trim();
       body.sku = code;
       body.barcode = code;
+      if (code) {
+        // Mismo código en otro producto de la tienda: se cobraría el equivocado
+        const existing = await db.GetFoodByBarcode(code, req.tenantId).catch(() => null);
+        if (existing && String(existing.id) !== String(req.params.id)) {
+          return res.status(409).send(`Ya existe un producto con el código "${code}": ${existing.name}`);
+        }
+      }
     }
     if (body.priceIncludesTax != null) {
       body.priceIncludesTax = Boolean(body.priceIncludesTax);

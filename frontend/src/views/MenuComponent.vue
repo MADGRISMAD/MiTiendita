@@ -1116,6 +1116,11 @@
                     Generar
                   </button>
                 </div>
+                <p v-if="duplicateCode" class="dup-warn" role="alert">
+                  <PosIcon name="alert" :size="16" />
+                  <span>Este código ya es de <b>{{ duplicateCode.name }}</b>.</span>
+                  <button type="button" @click="editFood(duplicateCode)">Abrir ese producto</button>
+                </p>
               </div>
 
               <label class="field wide">
@@ -1159,7 +1164,7 @@
                   <input v-model="foodForm.priceMode" type="radio" value="net" />
                   <span>
                     <strong>No, hay que sumarle IVA</strong>
-                    <small>Al cobrar se agrega el {{ Math.round(TAX_RATE * 100) }}%</small>
+                    <small>Al cobrar se agrega el {{ taxPercent }}%</small>
                   </span>
                 </label>
                 <p class="price-preview">
@@ -1234,7 +1239,7 @@ import { apiService } from "../apiService";
 import { store } from "../store";
 import { venueStore, fetchVenueSettings } from "../venueStore";
 import { billingStore } from "../billingStore";
-import { cartTotals, lineBreakdown } from "../tax";
+import { cartTotals, lineBreakdown, rateOf } from "../tax";
 import { apiService as apiSvc } from "../apiService";
 import { authStore } from "../authStore";
 import { isNetworkError, newClientSaleId } from "../net";
@@ -1379,6 +1384,17 @@ export default {
       () => billingStore.loaded && billingStore.aiEnabled === true && !billingStore.isPerpetual
     );
     const editingFood = ref(null);
+    // Otro producto de la tienda con el mismo código (se cobraría el equivocado)
+    const duplicateCode = computed(() => {
+      const code = String(foodForm.barcode || "").trim();
+      if (!code) return null;
+      const own = editingFood.value ? String(editingFood.value.id) : "";
+      return (
+        pickFoods.value.find(
+          (p) => String(p.id) !== own && (String(p.barcode || "").trim() === code || String(p.sku || "").trim() === code)
+        ) || null
+      );
+    });
     const menuForm = reactive({ name: "", description: "" });
     const foodForm = reactive({
       name: "",
@@ -1412,7 +1428,8 @@ export default {
     const suppliers = ref([]);
 
     const inventoryOn = computed(() => Boolean(venueStore.inventoryEnabled));
-    const TAX_RATE = computed(() => Number(venueStore.taxRate) || 0.16);
+    const TAX_RATE = computed(() => rateOf(venueStore.taxRate));
+    const taxPercent = computed(() => Number((TAX_RATE.value * 100).toFixed(2)));
 
     // Estado del modal de pago
     const showPayment = ref(false);
@@ -3263,6 +3280,10 @@ export default {
 
     async function createFood() {
       foodError.value = "";
+      if (duplicateCode.value) {
+        foodError.value = `El código ${String(foodForm.barcode).trim()} ya es de ${duplicateCode.value.name}. Usa otro o deja el campo vacío.`;
+        return;
+      }
       if (cashBlocked.value && inventoryOn.value) {
         const prevStock = editingFood.value ? Number(editingFood.value.stock) || 0 : 0;
         if ((Number(foodForm.stock) || 0) !== prevStock) {
@@ -3427,6 +3448,8 @@ export default {
       editingFood,
       inventoryOn,
       TAX_RATE,
+      taxPercent,
+      duplicateCode,
       catalogSearch,
       viewMode,
       lowStockItems,
@@ -5423,6 +5446,31 @@ html[data-theme="dark"] .avatar {
 .more-btn {
   display: flex;
   margin: 0.75rem auto;
+}
+.dup-warn {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.5rem;
+  margin: 0.4rem 0 0;
+  padding: 0.5rem 0.7rem;
+  border-radius: 0.7rem;
+  background: var(--timber-danger-soft);
+  color: var(--timber-danger);
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+.dup-warn svg { flex-shrink: 0; }
+.dup-warn button {
+  margin-left: auto;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 800;
+  text-decoration: underline;
+  cursor: pointer;
 }
 .code-row {
   display: flex;
