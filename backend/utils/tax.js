@@ -1,5 +1,12 @@
 const DEFAULT_TAX_RATE = 0.16;
 
+/** Tasa de IVA válida (0 a 1). 0% es una tasa real; solo sin dato se usa 16%. */
+function rateOf(value, fallback = DEFAULT_TAX_RATE) {
+  if (value === null || value === undefined || value === '') return fallback;
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 0 && n <= 1 ? n : fallback;
+}
+
 /**
  * Desglosa una línea de venta.
  * - neto (priceIncludesTax=false): price es base; IVA se suma al cobrar
@@ -67,6 +74,7 @@ function cartTotals(items = [], { discountPercent = 0, taxRate = DEFAULT_TAX_RAT
 
 module.exports = {
   DEFAULT_TAX_RATE,
+  rateOf,
   lineBreakdown,
   cartTotals,
 };

@@ -371,7 +371,7 @@ import { apiService } from "../apiService";
 import { venueStore } from "../venueStore";
 import { offlineStore } from "../offlineFlags";
 import { flushOfflineSales } from "../offlineSync";
-import { lineBreakdown } from "../tax";
+import { lineBreakdown, rateOf } from "../tax";
 
 const vSelectOnFocus = {
   mounted(el) {
@@ -421,7 +421,7 @@ const payMethods = [
 const voidOrder = ref(null);
 const voidBusy = ref(false);
 
-const TAX_RATE = computed(() => Number(venueStore.taxRate) || 0.16);
+const TAX_RATE = computed(() => rateOf(venueStore.taxRate));
 
 const cardExtraAmount = computed(() => {
   if (!payOrder.value || payMethod.value !== "card" || !cardExtraIva.value) return 0;
@@ -556,7 +556,7 @@ function itemsSummary(o) {
   return items.length > 2 ? `${names} y ${items.length - 2} más` : names;
 }
 function lineGross(o, item) {
-  return lineBreakdown(item.price, item.quantity, item.priceIncludesTax, o.taxRate || TAX_RATE.value).gross;
+  return lineBreakdown(item.price, item.quantity, item.priceIncludesTax, rateOf(o.taxRate, TAX_RATE.value)).gross;
 }
 function methodLabel(m) {
   return { cash: "Efectivo", card: "Tarjeta", transfer: "Transferencia", split: "Mixto", other: "Otro" }[m] || "—";

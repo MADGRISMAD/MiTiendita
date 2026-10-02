@@ -1,5 +1,12 @@
 export const TAX_RATE = 0.16;
 
+/** Tasa de IVA válida (0 a 1). 0% es una tasa real; solo sin dato se usa 16%. */
+export function rateOf(value, fallback = TAX_RATE) {
+  if (value === null || value === undefined || value === "") return fallback;
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 0 && n <= 1 ? n : fallback;
+}
+
 export function lineBreakdown(price, quantity, priceIncludesTax, taxRate = TAX_RATE) {
   const qty = Number(quantity) || 0;
   const unit = Number(price) || 0;

@@ -396,7 +396,7 @@ import PosIcon from "../components/PosIcon.js";
 import { apiService } from "../apiService";
 import { venueStore } from "../venueStore";
 import { hasRole } from "../authStore";
-import { lineBreakdown } from "../tax";
+import { lineBreakdown, rateOf } from "../tax";
 
 const PERIOD_KEY = "timber_report_period";
 const PERIODS = [
@@ -684,7 +684,7 @@ function deltaText(a, b) {
 
 // Importe de cada renglón ya con el descuento del ticket repartido
 function lineAmounts(o) {
-  const rate = Number(o.taxRate) || 0.16;
+  const rate = rateOf(o.taxRate);
   const subtotal = Number(o.subtotal || 0);
   const factor = subtotal > 0 ? Math.max(0, subtotal - Number(o.discountAmount || 0)) / subtotal : 1;
   return (o.items || []).map((it) => ({

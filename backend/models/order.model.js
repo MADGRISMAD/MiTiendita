@@ -1,5 +1,5 @@
 const crypto = require('crypto');
-const { cartTotals, DEFAULT_TAX_RATE } = require('../utils/tax');
+const { cartTotals, rateOf } = require('../utils/tax');
 
 const orderStatuses = ['pending', 'preparing', 'ready', 'served', 'cancelled'];
 const paymentMethods = ['cash', 'card', 'transfer', 'split', 'other'];
@@ -25,7 +25,7 @@ function normalizeOrder(body = {}) {
   const deliveryFee =
     modality === 'takeaway' ? Number(body.deliveryFee ?? 0) : 0;
 
-  const taxRate = Number(body.taxRate) > 0 ? Number(body.taxRate) : DEFAULT_TAX_RATE;
+  const taxRate = rateOf(body.taxRate);
 
   const totals = cartTotals(items, {
     discountPercent: body.discountPercent,

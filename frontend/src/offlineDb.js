@@ -1,3 +1,4 @@
+import { rateOf } from "./tax";
 const DB_NAME = "mitiendita-offline";
 const DB_VER = 1;
 
@@ -204,7 +205,7 @@ export function saleToPrintOrder(sale) {
     id: sale.clientSaleId,
     items,
     discountPercent: Number(payload.discountPercent) || 0,
-    taxRate: Number(payload.taxRate) || 0.16,
+    taxRate: rateOf(payload.taxRate),
     subtotal: Number(payload.subtotal) || 0,
     subtotalNet: Number(payload.subtotalNet) || 0,
     discountAmount: Number(payload.discountAmount) || 0,
