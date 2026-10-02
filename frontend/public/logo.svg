@@ -1,13 +1,21 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" fill="none" role="img" aria-label="Timber">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" fill="none" role="img" aria-label="Mi Tiendita">
   <rect width="120" height="120" rx="28" fill="#1E5AA8"/>
-  <g fill="#FFFFFF">
-    <rect x="55" y="48" width="10" height="40" rx="2"/>
-    <rect x="46" y="84" width="28" height="8" rx="4"/>
-    <circle cx="60" cy="34" r="13"/>
-    <circle cx="44" cy="46" r="12"/>
-    <circle cx="76" cy="46" r="12"/>
-    <circle cx="60" cy="50" r="7"/>
-    <circle cx="52" cy="60" r="9"/>
-    <circle cx="68" cy="60" r="9"/>
-  </g>
+  <!-- Fachada -->
+  <rect x="27" y="58" width="66" height="34" rx="4" fill="#FFFFFF"/>
+  <!-- Ventanas y puerta -->
+  <rect x="34" y="66" width="14" height="12" rx="2.5" fill="#1E5AA8"/>
+  <rect x="72" y="66" width="14" height="12" rx="2.5" fill="#1E5AA8"/>
+  <rect x="52" y="66" width="16" height="26" rx="2.5" fill="#1E5AA8"/>
+  <circle cx="64" cy="80" r="1.8" fill="#F0A94A"/>
+  <!-- Toldo a rayas (ámbar / blanco) -->
+  <path d="M27 24h66l6 20H21l6-20z" fill="#FFFFFF"/>
+  <path d="M27 24h16.5l-3 20H21l6-20z" fill="#E08A1E"/>
+  <path d="M60 24h16.5l3 20H60V24z" fill="#E08A1E"/>
+  <!-- Orilla ondulada del toldo -->
+  <path d="M21 44a9.75 9.75 0 0019.5 0z" fill="#E08A1E"/>
+  <path d="M40.5 44a9.75 9.75 0 0019.5 0z" fill="#FFFFFF"/>
+  <path d="M60 44a9.75 9.75 0 0019.5 0z" fill="#E08A1E"/>
+  <path d="M79.5 44a9.75 9.75 0 0019.5 0z" fill="#FFFFFF"/>
+  <!-- Banqueta -->
+  <rect x="20" y="92" width="80" height="6" rx="3" fill="#F0A94A"/>
 </svg>
