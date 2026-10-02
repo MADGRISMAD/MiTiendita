@@ -19,6 +19,7 @@ const defaultSettings = {
   taxRate: 0.16,
   cardFeeEnabled: false,
   cardFeePercent: 4,
+  scaleBarcodeMode: "weight",
   setupCompleted: false,
 };
 
@@ -57,6 +58,7 @@ watch(
       taxRate: value.taxRate ?? 0.16,
       cardFeeEnabled: Boolean(value.cardFeeEnabled),
       cardFeePercent: value.cardFeePercent ?? 4,
+      scaleBarcodeMode: value.scaleBarcodeMode === "price" ? "price" : "weight",
       setupCompleted: value.setupCompleted,
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));

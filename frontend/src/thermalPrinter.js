@@ -7,6 +7,7 @@ import { reactive } from "vue";
 import { buildReceipt, buildTestPage, money } from "./escpos";
 import { lineBreakdown, rateOf, round2 } from "./tax";
 import { storeParts } from "./storeTime";
+import { formatQtyUnit, isBulk, perUnit, unitOf } from "./bulk";
 import { appPublicOrigin } from "./apiService";
 import { venueStore } from "./venueStore";
 import { authStore } from "./authStore";
@@ -290,12 +291,18 @@ export function receiptData(order) {
   const rate = rateOf(o.taxRate);
   const items = (Array.isArray(o.items) ? o.items : []).map((item) => {
     const b = lineBreakdown(item.price, item.quantity, item.priceIncludesTax, rate);
-    return { name: item.name || "Producto", notes: item.notes || "", qtyText: qtyText(item.quantity), unit: b.unitGross, amount: b.gross };
+    const u = unitOf(item);
+    return {
+      name: item.name || "Producto",
+      notes: item.notes || "",
+      qtyText: u === "pz" ? qtyText(item.quantity) : formatQtyUnit(item.quantity, u),
+      unit: b.unitGross,
+      per: perUnit(u),
+      amount: b.gross,
+      count: Number.isInteger(Number(item.quantity)) && !isBulk(item) ? Number(item.quantity) : 1,
+    };
   });
-  const units = items.reduce((s, i) => {
-    const q = Number(i.qtyText);
-    return s + (Number.isInteger(q) ? q : 1);
-  }, 0);
+  const units = items.reduce((s, i) => s + i.count, 0);
   const stamp = o.paidAt || o.createdAt;
   const p = storeParts(stamp, venueStore.timezone);
   const pad = (n) => String(n).padStart(2, "0");

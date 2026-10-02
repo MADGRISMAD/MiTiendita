@@ -124,7 +124,7 @@
                   </small>
                 </span>
                 <span class="result-side">
-                  <strong class="result-price">{{ money(lineUnit(p)) }}</strong>
+                  <strong class="result-price">{{ money(lineUnit(p)) }}{{ perUnit(unitOf(p)) }}</strong>
                   <small v-if="inventoryOn" class="stock" :class="stockTone(p)">{{ stockLabel(p) }}</small>
                   <em v-if="qtyInCart(p.id)" class="in-ticket">{{ formatQty(qtyInCart(p.id)) }} en ticket</em>
                 </span>
@@ -162,7 +162,7 @@
                 </span>
                 <span class="tile-name">{{ p.name }}</span>
                 <span class="tile-foot">
-                  <strong class="tile-price">{{ money(lineUnit(p)) }}</strong>
+                  <strong class="tile-price">{{ money(lineUnit(p)) }}{{ perUnit(unitOf(p)) }}</strong>
                   <small v-if="inventoryOn" class="stock" :class="stockTone(p)">{{ stockLabel(p) }}</small>
                 </span>
               </button>
@@ -238,7 +238,7 @@
                 <div class="line-main">
                   <span class="line-name">{{ line.name }}</span>
                   <span class="line-meta">
-                    {{ formatQty(line.quantity) }} × {{ money(lineUnit(line)) }}
+                    {{ formatQtyUnit(line.quantity, unitOf(line)) }} × {{ money(lineUnit(line)) }}{{ perUnit(unitOf(line)) }}
                     <template v-if="line.isMisc"> · Varios</template>
                     <template v-else-if="line.barcode || line.sku"> · {{ line.barcode || line.sku }}</template>
                   </span>
@@ -846,6 +846,59 @@
         </div>
       </Teleport>
 
+      <!-- Venta a granel: peso o importe -->
+      <Teleport to="body">
+        <div v-if="showWeigh" class="dlg-bg">
+          <form class="dlg dlg-qty" role="dialog" aria-labelledby="weigh-title" @submit.prevent="applyWeigh">
+            <header class="dlg-head">
+              <span class="dlg-ico"><PosIcon name="hash" /></span>
+              <div>
+                <h3 id="weigh-title">{{ weighItem?.name }}</h3>
+                <p>{{ money(lineUnit(weighItem)) }}{{ perUnit(weighUnit) }}</p>
+              </div>
+              <button type="button" class="dlg-x" aria-label="Cerrar" @click="closeWeigh"><PosIcon name="x" /></button>
+            </header>
+            <div class="methods two" role="radiogroup" aria-label="Capturar por">
+              <label class="method" :class="{ on: weighMode === 'qty' }">
+                <input v-model="weighMode" type="radio" name="weigh-mode" value="qty" @change="resetWeighDraft" />
+                <span>{{ weighUnit === 'l' ? 'Litros' : weighUnit === 'g' ? 'Gramos' : 'Peso (kg)' }}</span>
+              </label>
+              <label class="method" :class="{ on: weighMode === 'amount' }">
+                <input v-model="weighMode" type="radio" name="weigh-mode" value="amount" @change="resetWeighDraft" />
+                <span>Importe ($)</span>
+              </label>
+            </div>
+            <input
+              ref="weighInput"
+              v-model="weighDraft"
+              v-select-on-focus
+              class="inp big num"
+              type="text"
+              inputmode="decimal"
+              autocomplete="off"
+              :aria-label="weighMode === 'amount' ? 'Importe en pesos' : 'Cantidad'"
+              :placeholder="weighMode === 'amount' ? '$0.00' : weighUnit === 'g' ? '0' : '0.000'"
+              @input="weighErr = ''"
+            />
+            <p class="dlg-note">
+              <strong>{{ formatQtyUnit(weighQty, weighUnit) }}</strong> × {{ money(lineUnit(weighItem)) }}{{ perUnit(weighUnit) }}
+              = <strong>{{ money(weighAmount) }}</strong>
+            </p>
+            <div class="keypad hide-pc">
+              <button v-for="k in ['7', '8', '9', '4', '5', '6', '1', '2', '3', '.', '0']" :key="k" type="button" @click="weighKey(k)">
+                {{ k }}
+              </button>
+              <button type="button" aria-label="Borrar" @click="weighKey('del')">⌫</button>
+            </div>
+            <p v-if="weighErr" class="dlg-err">{{ weighErr }}</p>
+            <div class="dlg-acts">
+              <button type="button" class="btn" @click="closeWeigh">Cancelar</button>
+              <button type="submit" class="btn primary">Agregar</button>
+            </div>
+          </form>
+        </div>
+      </Teleport>
+
       <!-- Artículo varios (Ins) -->
       <Teleport to="body">
         <div v-if="showMisc" class="dlg-bg">
@@ -1194,10 +1247,19 @@
                   />
                 </label>
                 <label class="field">
-                  <span>Precio<span class="hide-mobile"> de venta</span></span>
+                  <span>Precio<span class="hide-mobile"> de venta</span>{{ foodForm.saleUnit !== 'pz' ? ` por ${foodForm.saleUnit}` : '' }}</span>
                   <input v-model.number="foodForm.price" class="inp num strong" type="number" min="0" step="0.01" required />
                 </label>
               </div>
+
+              <label class="field wide">
+                <span>Unidad de venta</span>
+                <select v-model="foodForm.saleUnit" class="inp">
+                  <option v-for="(u, id) in SALE_UNITS" :key="id" :value="id">
+                    {{ u.label }}{{ id === 'pz' ? '' : ` (${u.short}) · a granel: pide peso o importe al venderlo` }}
+                  </option>
+                </select>
+              </label>
 
               <div class="iva-choice wide">
                 <p class="iva-q">¿Este precio ya incluye IVA?</p>
@@ -1228,7 +1290,7 @@
                 </label>
                 <label class="field">
                   <span>Avisar cuando queden</span>
-                  <input v-model.number="foodForm.lowStockThreshold" class="inp" type="number" min="0" step="1" placeholder="5" />
+                  <input v-model.number="foodForm.lowStockThreshold" class="inp" type="number" min="0" step="any" placeholder="5" />
                 </label>
                 <label class="check-wide wide">
                   <input v-model="foodForm.tracksExpiry" type="checkbox" />
@@ -1289,6 +1351,18 @@ import { venueStore, fetchVenueSettings } from "../venueStore";
 import { billingStore } from "../billingStore";
 import { cardFeeRateOf, cartTotals, lineBreakdown, rateOf } from "../tax";
 import { storeClock } from "../storeTime";
+import {
+  SALE_UNITS,
+  formatQtyUnit,
+  isBulk,
+  parseScaleBarcode,
+  perUnit,
+  pluKeys,
+  qtyForAmount,
+  qtyFromGrams,
+  roundQty,
+  unitOf,
+} from "../bulk";
 import { apiService as apiSvc } from "../apiService";
 import { authStore } from "../authStore";
 import { isNetworkError, newClientSaleId } from "../net";
@@ -1460,6 +1534,7 @@ export default {
       tracksExpiry: false,
       supplierIds: [],
       menuId: "",
+      saleUnit: "pz",
     });
 
     // Búsqueda y vista de lista en modo catálogo
@@ -2062,10 +2137,12 @@ export default {
     }
     function stockLabel(p) {
       const n = stockNum(p);
-      if (n < 0) return `Agotado (${formatQty(n)})`;
+      const u = unitOf(p);
+      const q = (v) => (u === "pz" ? formatQty(v) : formatQtyUnit(v, u));
+      if (n < 0) return `Agotado (${q(n)})`;
       if (n <= 0) return "Agotado";
-      if (isLow(p)) return `Quedan ${formatQty(n)}`;
-      return `${formatQty(n)} disp.`;
+      if (isLow(p)) return `Quedan ${q(n)}`;
+      return `${q(n)} disp.`;
     }
 
     function qtyInCart(id) {
@@ -2174,7 +2251,7 @@ export default {
         if (stockGap(p, lastLineQty.value) > 0) {
           return { tone: "warn", text: `Agregado: ${p.name} · sin existencias suficientes; la venta quedará para revisar` };
         }
-        return { tone: "ok", text: `Agregado: ${p.name} · ${formatQty(lastLineQty.value)} × ${money(lineUnit(p))}` };
+        return { tone: "ok", text: `Agregado: ${p.name} · ${formatQtyUnit(lastLineQty.value, unitOf(p))} × ${money(lineUnit(p))}${perUnit(unitOf(p))}` };
       }
       if (!offlineStore.online) return { tone: "warn", text: "Sin internet · vendes con el catálogo guardado" };
       return {
@@ -2235,6 +2312,7 @@ export default {
           showMagic.value ||
           showPayment.value ||
           showQty.value ||
+          showWeigh.value ||
           showMisc.value ||
           showHeld.value ||
           missingCode.value;
@@ -2310,13 +2388,104 @@ export default {
       if (next === "pos") focusScan();
     }
 
-    function addProduct(producto, qty = 1) {
+    // —— Venta a granel: teclado de peso o importe ——
+    const showWeigh = ref(false);
+    const weighItem = ref(null);
+    const weighMode = ref("qty"); // 'qty' (kg, g, l) | 'amount' (pesos)
+    const weighDraft = ref("");
+    const weighErr = ref("");
+    const weighInput = ref(null);
+    const weighUnit = computed(() => unitOf(weighItem.value));
+    const weighQty = computed(() => {
+      const p = weighItem.value;
+      const v = Number(String(weighDraft.value || "").replace(",", ".")) || 0;
+      if (!p || v <= 0) return 0;
+      return weighMode.value === "amount" ? qtyForAmount(v, lineUnit(p), weighUnit.value) : roundQty(v, weighUnit.value);
+    });
+    const weighAmount = computed(() => {
+      const p = weighItem.value;
+      return p ? lineBreakdown(p.price, weighQty.value, p.priceIncludesTax, TAX_RATE.value).gross : 0;
+    });
+    function openWeigh(p) {
+      weighItem.value = p;
+      weighMode.value = "qty";
+      weighDraft.value = "";
+      weighErr.value = "";
+      nameHits.value = [];
+      clearScanField();
+      showWeigh.value = true;
+      nextTick(() => weighInput.value?.focus());
+    }
+    function closeWeigh() {
+      showWeigh.value = false;
+      weighItem.value = null;
+      weighErr.value = "";
+      focusScan();
+    }
+    function resetWeighDraft() {
+      weighDraft.value = "";
+      weighErr.value = "";
+      nextTick(() => weighInput.value?.focus());
+    }
+    function weighKey(key) {
+      let cur = String(weighDraft.value || "");
+      weighErr.value = "";
+      if (key === "del") cur = cur.slice(0, -1);
+      else if (key === ".") {
+        if (!cur.includes(".")) cur = (cur || "0") + ".";
+      } else if (cur.length < 9) {
+        cur = cur === "0" ? key : cur + key;
+      }
+      weighDraft.value = cur;
+    }
+    function applyWeigh() {
+      const p = weighItem.value;
+      if (!p) return closeWeigh();
+      const q = weighQty.value;
+      if (!(q > 0)) {
+        weighErr.value = weighMode.value === "amount" ? "Escribe el importe en pesos." : "Escribe cuánto se lleva.";
+        return;
+      }
+      if (q > 99999) {
+        weighErr.value = "La cantidad es demasiado grande.";
+        return;
+      }
+      showWeigh.value = false;
+      weighItem.value = null;
+      addProduct(p, q, { weighed: true });
+    }
+
+    /** Código de báscula (EAN-13 20–29): agrega el producto con su peso o importe. false si no aplica. */
+    function addFromScale(code) {
+      const parsed = parseScaleBarcode(code, venueStore.scaleBarcodeMode === "price" ? "price" : "weight");
+      if (!parsed) return false;
+      const keys = pluKeys(parsed.plu);
+      const product = pickFoods.value.find(
+        (f) => isBulk(f) && keys.some((k) => String(f.barcode || "") === k || String(f.sku || "") === k)
+      );
+      if (!product) return false;
+      const u = unitOf(product);
+      const qty = parsed.grams != null ? qtyFromGrams(parsed.grams, u) : qtyForAmount(parsed.amount, lineUnit(product), u);
+      if (!(qty > 0)) return false;
+      addProduct(product, qty, { weighed: true });
+      return true;
+    }
+
+    /**
+     * Agrega al ticket. Un producto a granel abre el teclado de peso o importe,
+     * salvo que la cantidad ya venga dada (báscula, «0.75*» en el buscador): opts.weighed.
+     */
+    function addProduct(producto, qty = 1, opts = {}) {
       if (cashBlocked.value) {
         scanError.value = BLOCK_MSG;
         nameHits.value = [];
         return;
       }
-      const amount = Number(qty) > 0 ? Number(qty) : 1;
+      if (isBulk(producto) && !opts.weighed) {
+        openWeigh(producto);
+        return;
+      }
+      const amount = Number(qty) > 0 ? roundQty(Number(qty), unitOf(producto)) : 1;
       const idx = store.platillosSeleccionados.findIndex((p) => p.id === producto.id);
       const inCart = idx >= 0 ? Number(store.platillosSeleccionados[idx].quantity) || 0 : 0;
       if (!allowNoStock.value && stockGap(producto, inCart + amount) > 0) {
@@ -2365,9 +2534,9 @@ export default {
 
     /** Agrega un producto elegido con el dedo o el ratón (respeta "3*" escrito en el buscador). */
     function pickResult(producto) {
-      const { qty } = parseQtyPrefix(scanCode.value);
+      const { qty, hasQty } = parseQtyPrefix(scanCode.value);
       clearScanField();
-      addProduct(producto, qty);
+      addProduct(producto, qty, { weighed: hasQty });
     }
 
     function clearSearch() {
@@ -2437,7 +2606,7 @@ export default {
 
     async function applyScannedCode(raw) {
       const text = String(raw || "").trim();
-      const { qty, rest: code } = parseQtyPrefix(text);
+      const { qty, rest: code, hasQty } = parseQtyPrefix(text);
       if (!code || mode.value !== "pos") return;
       if (cashBlocked.value) {
         scanError.value = BLOCK_MSG;
@@ -2451,6 +2620,7 @@ export default {
         showMagic.value ||
         showPayment.value ||
         showQty.value ||
+        showWeigh.value ||
         showMisc.value ||
         showHeld.value
       ) {
@@ -2470,14 +2640,15 @@ export default {
       const asCode = isCodeQuery(code) || isScannerPayload(code);
       if (asCode) clearScanField();
       try {
+        if (addFromScale(code)) return;
         const res = await lookupFoodSmart(code);
         if (res && res.id) {
-          addProduct(res, qty);
+          addProduct(res, qty, { weighed: hasQty });
           return;
         }
         const matches = Array.isArray(res?.matches) ? res.matches : [];
         if (matches.length === 1) {
-          addProduct(matches[0], qty);
+          addProduct(matches[0], qty, { weighed: hasQty });
           return;
         }
         if (matches.length > 1) {
@@ -2514,13 +2685,13 @@ export default {
 
     function onScanEnter() {
       const typed = String(scanInput.value?.value || scanCode.value || "").trim();
-      const { qty, rest } = parseQtyPrefix(typed);
+      const { qty, rest, hasQty } = parseQtyPrefix(typed);
       const codeLike = isCodeQuery(rest) || isScannerPayload(rest);
       const hit = results.value[activeHit.value];
       // Texto escrito a mano: Enter agrega el resultado marcado en la lista
       if (!codeLike && rest && rest === debouncedTerm.value && hit) {
         clearScanField();
-        addProduct(hit, qty);
+        addProduct(hit, qty, { weighed: hasQty });
         return;
       }
       scanCode.value = typed;
@@ -2746,7 +2917,7 @@ export default {
       };
       showMisc.value = false;
       clearScanField();
-      addProduct(item, Math.round(qty * 1000) / 1000);
+      addProduct(item, Math.round(qty * 1000) / 1000, { weighed: true });
     }
     function missingToMisc() {
       missingCode.value = "";
@@ -2961,6 +3132,7 @@ export default {
         name: p.name,
         price: p.price,
         quantity: p.quantity,
+        saleUnit: unitOf(p),
         priceIncludesTax: Boolean(p.priceIncludesTax),
       }));
       const payload = {
@@ -3075,6 +3247,7 @@ export default {
         showMagic.value ||
         showPayment.value ||
         showQty.value ||
+        showWeigh.value ||
         showMisc.value ||
         showHeld.value
       ) {
@@ -3161,6 +3334,7 @@ export default {
           showMagic.value ||
           showPayment.value ||
           showQty.value ||
+          showWeigh.value ||
           showMisc.value ||
           showHeld.value ||
           missingCode.value
@@ -3170,6 +3344,7 @@ export default {
     /** Esc: cierra lo que esté encima; si no hay nada, limpia la búsqueda. */
     function closeTopLayer() {
       if (missingCode.value) dismissMissing();
+      else if (showWeigh.value) closeWeigh();
       else if (showQty.value) closeQty();
       else if (showMisc.value) closeMisc();
       else if (showHeld.value) closeHeld();
@@ -3354,6 +3529,7 @@ export default {
       foodForm.stock = Number(producto.stock) || 0;
       foodForm.lowStockThreshold = producto.lowStockThreshold != null ? Number(producto.lowStockThreshold) : 5;
       foodForm.tracksExpiry = Boolean(producto.tracksExpiry);
+      foodForm.saleUnit = unitOf(producto);
       foodForm.supplierIds = Array.isArray(producto.supplierIds) ? [...producto.supplierIds] : [];
       foodForm.menuId = producto.menuId || selectedMenuId.value || menus.value[0]?.id || "";
       showFoodForm.value = true;
@@ -3415,6 +3591,7 @@ export default {
       foodForm.stock = 0;
       foodForm.lowStockThreshold = 5;
       foodForm.tracksExpiry = false;
+      foodForm.saleUnit = "pz";
       foodForm.supplierIds = [];
       foodForm.menuId = "";
       foodError.value = "";
@@ -3452,6 +3629,7 @@ export default {
         stock: Number(foodForm.stock) || 0,
         lowStockThreshold: Number(foodForm.lowStockThreshold) || 5,
         tracksExpiry: Boolean(foodForm.tracksExpiry),
+        saleUnit: foodForm.saleUnit,
         supplierIds: [...foodForm.supplierIds],
       };
       try {
@@ -3697,6 +3875,23 @@ export default {
       clearCart,
       lineGross,
       lineUnit,
+      SALE_UNITS,
+      formatQtyUnit,
+      perUnit,
+      unitOf,
+      showWeigh,
+      weighItem,
+      weighMode,
+      weighDraft,
+      weighErr,
+      weighInput,
+      weighUnit,
+      weighQty,
+      weighAmount,
+      closeWeigh,
+      resetWeighDraft,
+      weighKey,
+      applyWeigh,
       printIssue,
       printerStore,
       directPrinting,
@@ -5105,6 +5300,12 @@ html[data-theme="dark"] .avatar {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.4rem;
+}
+.methods.two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.methods.two .method {
+  min-height: 2.8rem;
 }
 .method {
   position: relative;

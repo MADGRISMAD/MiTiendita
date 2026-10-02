@@ -454,8 +454,16 @@
                 </div>
                 <div class="line-grid">
                   <label class="adm-field">
-                    <span>Cantidad</span>
-                    <input v-model.number="line.quantity" class="adm-inp num" type="number" min="1" step="1" inputmode="numeric" required />
+                    <span>Cantidad<template v-if="line.saleUnit && line.saleUnit !== 'pz'"> ({{ line.saleUnit }})</template></span>
+                    <input
+                      v-model.number="line.quantity"
+                      class="adm-inp num"
+                      type="number"
+                      :min="line.saleUnit && line.saleUnit !== 'pz' ? 0.001 : 1"
+                      :step="line.saleUnit && line.saleUnit !== 'pz' ? 'any' : 1"
+                      :inputmode="line.saleUnit && line.saleUnit !== 'pz' ? 'decimal' : 'numeric'"
+                      required
+                    />
                   </label>
                   <label class="adm-field">
                     <span>Costo c/u <em v-if="line.prevCost && Number(line.unitCost) !== line.prevCost">(antes {{ money(line.prevCost) }})</em></span>
@@ -610,6 +618,7 @@ import PosIcon from "../components/PosIcon.js";
 import { apiService } from "../apiService";
 import { venueStore, fetchVenueSettings } from "../venueStore";
 import { hasRole } from "../authStore";
+import { unitOf } from "../bulk";
 
 const WEEKDAYS = [
   { id: 1, short: "Lun", letter: "L", long: "lunes" },
@@ -986,6 +995,7 @@ function lineFrom(food, quantity = 1) {
     lot: "",
     expiresAt: "",
     tracksExpiry: Boolean(food.tracksExpiry),
+    saleUnit: unitOf(food),
   };
 }
 function openPurchase(prefill = null) {
@@ -1036,9 +1046,16 @@ function addLine(food) {
 }
 async function savePurchase() {
   if (!purchaseForm.items.length) return;
-  const bad = purchaseForm.items.find((l) => !(Number(l.quantity) >= 1) || !Number.isInteger(Number(l.quantity)));
+  // Piezas en enteros; a granel (kg, litros) con hasta 3 decimales
+  const bad = purchaseForm.items.find((l) => {
+    const q = Number(l.quantity);
+    return l.saleUnit && l.saleUnit !== "pz" ? !(q > 0) : !(q >= 1) || !Number.isInteger(q);
+  });
   if (bad) {
-    purchaseErr.value = `Revisa la cantidad de ${bad.name}: debe ser un número entero.`;
+    purchaseErr.value =
+      bad.saleUnit && bad.saleUnit !== "pz"
+        ? `Revisa la cantidad de ${bad.name}: debe ser mayor a 0.`
+        : `Revisa la cantidad de ${bad.name}: debe ser un número entero.`;
     return;
   }
   saving.value = true;

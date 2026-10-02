@@ -194,7 +194,7 @@
             <div v-if="expanded === o.id" class="sale-detail">
               <ul class="lines">
                 <li v-for="(item, i) in o.items || []" :key="i">
-                  <span class="q">{{ formatQty(item.quantity) }} ×</span>
+                  <span class="q">{{ unitOf(item) === "pz" ? formatQty(item.quantity) : formatQtyUnit(item.quantity, unitOf(item)) }} ×</span>
                   <span class="n">{{ item.name }}</span>
                   <span class="a">{{ money(lineGross(o, item)) }}</span>
                 </li>
@@ -408,6 +408,7 @@ import PosIcon from "../components/PosIcon.js";
 import { apiService } from "../apiService";
 import { venueStore } from "../venueStore";
 import { formatStoreDate, storeClock, storeDayKey } from "../storeTime";
+import { formatQtyUnit, unitOf } from "../bulk";
 import { offlineStore } from "../offlineFlags";
 import { flushOfflineSales, listDeviceSales, retrySales } from "../offlineSync";
 import { isNetworkError } from "../net";

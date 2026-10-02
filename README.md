@@ -28,6 +28,7 @@ Pensada para abarrotes, farmacia y ferretería. A la izquierda el buscador y el 
 
 - **Buscar**: por nombre, código o descripción, sin acentos y con varias palabras (`para 500` encuentra *Paracetamol 500 mg*). ↑ ↓ eligen y Enter agrega.
 - **Cantidad**: `3*` antes del código agrega 3 piezas; **F3** (o tocar la cantidad) acepta decimales para kilos o metros; `+` / `−` suman o quitan una pieza.
+- **A granel** (kg, g, litros): al dar de alta el producto elige su *Unidad de venta*. Al agregarlo se abre un teclado para capturar el peso **o** el importe en pesos (calcula el peso); la línea y el ticket dicen «0.750 kg × $180.00/kg». Las etiquetas de báscula (EAN-13 que empieza con 20–29) se leen solas: configura en *Ventas e IVA* si traen peso o importe y usa la clave de la báscula como código del producto.
 - **Artículo varios** (**Ins**): cobra algo sin código o que aún no está en el catálogo; no toca el inventario.
 - **En espera** (**F6**): aparta el ticket para atender a otro cliente y retómalo después. Se guarda en ese equipo.
 - **Cobrar** (**F12**): efectivo con billetes sugeridos y cambio, tarjeta, transferencia (con folio SPEI opcional), mixto u otro. Enter o F12 confirman.

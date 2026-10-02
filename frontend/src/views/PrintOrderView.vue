@@ -51,7 +51,7 @@
                   <p class="tk-item-name">{{ item.name }}</p>
                   <p v-if="item.notes" class="tk-item-note">{{ item.notes }}</p>
                   <div class="tk-line">
-                    <span>{{ qty(item.quantity) }} × {{ money(lineUnit(item)) }}</span>
+                    <span>{{ formatQtyUnit(item.quantity, unitOf(item)) }} × {{ money(lineUnit(item)) }}{{ perUnit(unitOf(item)) }}</span>
                     <i class="tk-dots"></i>
                     <span>{{ money(lineGross(item)) }}</span>
                   </div>
@@ -157,6 +157,7 @@ import { apiService, appPublicOrigin } from "../apiService";
 import { venueStore, fetchVenueSettings } from "../venueStore";
 import { authStore } from "../authStore";
 import { lineBreakdown, rateOf, round2 } from "../tax";
+import { formatQtyUnit, isBulk, perUnit, unitOf } from "../bulk";
 import { getSale, saleToPrintOrder } from "../offlineDb";
 import { useTicketShell, folioOf, closingLine, closingNote } from "../ticketShell";
 import PosIcon from "../components/PosIcon.js";
@@ -185,7 +186,7 @@ const countText = computed(() => {
   const lines = items.value.length;
   const units = items.value.reduce((s, i) => {
     const q = Number(i.quantity || 0);
-    return s + (Number.isInteger(q) ? q : 1);
+    return s + (Number.isInteger(q) && !isBulk(i) ? q : 1);
   }, 0);
   const a = `${units} ${units === 1 ? "artículo" : "artículos"}`;
   return units === lines ? a : `${a} · ${lines} ${lines === 1 ? "producto" : "productos"}`;
@@ -233,10 +234,6 @@ function num(n) {
 }
 function money(n) {
   return `$${num(n)}`;
-}
-function qty(q) {
-  const n = Number(q || 0);
-  return Number.isInteger(n) ? String(n) : String(Number(n.toFixed(3)));
 }
 function pct(p) {
   return `${Number(Number(p || 0).toFixed(2))}%`;

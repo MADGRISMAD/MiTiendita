@@ -1,4 +1,5 @@
 const db = require('../database/mongodb');
+const { roundQty, saleUnitOf } = require('../utils/units');
 const limits = require('../services/plan-limits.service');
 const { seedStarterCatalog, starterProductCount } = require('../services/starter-catalog.service');
 const { ObjectId } = require('mongodb');
@@ -104,6 +105,7 @@ async function createFood(req, res) {
       lowStockThreshold,
       tracksExpiry,
       supplierIds,
+      saleUnit,
     } = req.body || {};
     if (!name || price == null || !menuId) {
       return res.status(400).send('name, price y menuId son requeridos');
@@ -132,10 +134,11 @@ async function createFood(req, res) {
       barcode: code,
       menuId: String(menuId),
       tenantId: req.tenantId,
-      stock: stock == null || stock === '' ? 0 : Math.max(0, Number(stock) || 0),
+      stock: stock == null || stock === '' ? 0 : Math.max(0, roundQty(stock)),
       lowStockThreshold: lowStockThreshold == null || lowStockThreshold === '' ? 5 : Math.max(0, Number(lowStockThreshold) || 5),
       tracksExpiry: Boolean(tracksExpiry),
       supplierIds: sanitizeSupplierIds(supplierIds),
+      saleUnit: saleUnitOf(saleUnit),
     });
     return res.status(201).json(created);
   } catch (err) {
@@ -171,12 +174,13 @@ async function updateFood(req, res) {
     }
     delete body.trackStock;
     if (body.stock != null && body.stock !== '') {
-      body.stock = Math.max(0, Number(body.stock) || 0);
+      body.stock = Math.max(0, roundQty(body.stock));
     }
     if (body.lowStockThreshold != null && body.lowStockThreshold !== '') {
       body.lowStockThreshold = Math.max(0, Number(body.lowStockThreshold) || 5);
     }
     if (body.tracksExpiry != null) body.tracksExpiry = Boolean(body.tracksExpiry);
+    if (body.saleUnit != null) body.saleUnit = saleUnitOf(body.saleUnit);
     if (body.supplierIds != null) body.supplierIds = sanitizeSupplierIds(body.supplierIds);
     const updated = await db.UpdateFood(req.params.id, body, req.tenantId);
     if (!updated) return res.status(404).send('Producto no encontrado');
