@@ -33,6 +33,9 @@ Pensada para abarrotes, farmacia y ferretería. A la izquierda el buscador y el 
 - **Cobrar** (**F12**): efectivo con billetes sugeridos y cambio, tarjeta, transferencia o mixto. Enter o F12 confirman.
 - Otros atajos: **F2** quitar renglón, **F4** consultar precio, **F9** descuento, **Esc** cerrar o limpiar la búsqueda.
 
+### Sin internet
+La caja sigue cobrando sin conexión: las ventas se guardan en el dispositivo y se suben solas al volver la red, sin duplicarse. Las que el servidor rechace quedan en Caja → «Ventas de este dispositivo sin subir». Cómo funciona y cómo probarlo: [docs/modo-sin-internet.md](docs/modo-sin-internet.md).
+
 ## Configuración inicial
 Tras registrarte, el wizard pide nombre de tienda, tipo (abarrotes / conveniencia / farmacia / ferretería) y logo. Puedes cargar 8 productos de ejemplo para cobrar el mismo día. Términos: `/terminos` · Privacidad: `/privacidad`.
 
