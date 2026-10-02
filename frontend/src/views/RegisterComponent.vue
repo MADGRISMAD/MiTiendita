@@ -1,196 +1,356 @@
 <template>
-  <div class="auth-shell">
-    <div class="auth-atmosphere" aria-hidden="true"></div>
+  <AuthLayout>
+    <header class="auth-head">
+      <h1>Crea tu tienda</h1>
+      <p>14 días gratis. Toma menos de un minuto y puedes cobrar hoy mismo.</p>
+    </header>
 
-    <div class="auth-panel">
-      <div class="brand-block">
-        <img src="/logo.svg" alt="Mi Tiendita" class="brand-logo" />
-        <h1 class="brand-name"><BrandName /></h1>
-        <p class="brand-tagline">Crea la cuenta de administración</p>
-      </div>
+    <form class="auth-form" novalidate @submit.prevent="register">
+      <p v-if="serverError" class="auth-alert" role="alert">
+        <PosIcon name="alert" :size="18" />
+        <span>{{ serverError }}</span>
+      </p>
 
-      <h2 class="auth-heading">Registro</h2>
-      <form @submit.prevent="register" class="auth-form">
-        <div class="grid-2">
-          <label class="field">
-            <span>Nombre</span>
-            <input v-model="firstName" type="text" placeholder="Nombre" autocomplete="given-name" required />
-          </label>
-          <label class="field">
-            <span>Apellido</span>
-            <input v-model="lastName" type="text" placeholder="Apellido" autocomplete="family-name" required />
-          </label>
+      <fieldset class="auth-group">
+        <legend>Tu negocio</legend>
+        <div class="auth-field">
+          <label for="reg-shop">Nombre de la tienda <em>(opcional)</em></label>
+          <input
+            id="reg-shop"
+            v-model="businessName"
+            class="auth-input"
+            type="text"
+            maxlength="80"
+            placeholder="Ej. Abarrotes Doña Lupe"
+            autocomplete="organization"
+          />
         </div>
-
-        <label class="field">
-          <span>Número telefónico</span>
+        <div class="auth-row">
+          <div class="auth-field">
+            <label for="reg-name">Nombre</label>
+            <input
+              id="reg-name"
+              v-model="firstName"
+              class="auth-input"
+              type="text"
+              autocomplete="given-name"
+              :aria-invalid="Boolean(shown.firstName)"
+              aria-describedby="reg-name-err"
+              @blur="touch('firstName')"
+            />
+            <p v-if="shown.firstName" id="reg-name-err" class="auth-err">{{ shown.firstName }}</p>
+          </div>
+          <div class="auth-field">
+            <label for="reg-last">Apellido</label>
+            <input
+              id="reg-last"
+              v-model="lastName"
+              class="auth-input"
+              type="text"
+              autocomplete="family-name"
+              :aria-invalid="Boolean(shown.lastName)"
+              aria-describedby="reg-last-err"
+              @blur="touch('lastName')"
+            />
+            <p v-if="shown.lastName" id="reg-last-err" class="auth-err">{{ shown.lastName }}</p>
+          </div>
+        </div>
+        <div class="auth-field">
+          <label for="reg-phone">Celular</label>
           <input
-            id="cellphone"
-            v-model="cellphone"
+            id="reg-phone"
+            :value="phoneDisplay"
+            class="auth-input"
             type="tel"
-            maxlength="14"
-            placeholder="10 dígitos"
-            autocomplete="tel"
-            required
+            inputmode="numeric"
+            placeholder="(664) 123-4567"
+            autocomplete="tel-national"
+            :aria-invalid="Boolean(shown.phone)"
+            aria-describedby="reg-phone-err"
+            @input="onPhone"
+            @blur="touch('phone')"
           />
-          <span v-if="formatCellphoneError" class="error-inline">Formato de número incorrecto</span>
-        </label>
+          <p v-if="shown.phone" id="reg-phone-err" class="auth-err">{{ shown.phone }}</p>
+        </div>
+      </fieldset>
 
-        <label class="field">
-          <span>Usuario</span>
-          <input v-model="username" type="text" placeholder="Usuario" autocomplete="username" required />
-        </label>
-
-        <label class="field">
-          <span>Correo electrónico</span>
-          <input v-model="email" type="email" placeholder="tu@negocio.com" autocomplete="email" required />
-        </label>
-
-        <label class="field">
-          <span>Contraseña</span>
-          <input v-model="password" type="password" placeholder="••••••••" autocomplete="new-password" required />
-        </label>
-
-        <label class="field">
-          <span>Confirmar contraseña</span>
+      <fieldset class="auth-group">
+        <legend>Tu acceso</legend>
+        <div class="auth-field">
+          <label for="reg-email">Correo electrónico</label>
           <input
-            id="confirmPassword"
-            v-model="confirmPassword"
-            type="password"
-            placeholder="••••••••"
-            autocomplete="new-password"
-            required
+            id="reg-email"
+            v-model.trim="email"
+            class="auth-input"
+            type="email"
+            placeholder="tu@negocio.com"
+            autocomplete="email"
+            autocapitalize="none"
+            spellcheck="false"
+            :aria-invalid="Boolean(shown.email)"
+            aria-describedby="reg-email-err"
+            @blur="touch('email')"
           />
-          <span v-if="differentsPassword" class="error-inline">Las contraseñas no coinciden</span>
-        </label>
+          <p v-if="shown.email" id="reg-email-err" class="auth-err">{{ shown.email }}</p>
+        </div>
+        <div class="auth-field">
+          <label for="reg-user">Usuario</label>
+          <input
+            id="reg-user"
+            :value="username"
+            class="auth-input"
+            type="text"
+            placeholder="lupe"
+            autocomplete="username"
+            autocapitalize="none"
+            autocorrect="off"
+            spellcheck="false"
+            :aria-invalid="Boolean(shown.username)"
+            aria-describedby="reg-user-err reg-user-note"
+            @input="onUsername"
+            @blur="touch('username')"
+          />
+          <p v-if="shown.username" id="reg-user-err" class="auth-err">{{ shown.username }}</p>
+          <p v-else id="reg-user-note" class="auth-note">Con esto o con tu correo entras después.</p>
+        </div>
+        <div class="auth-field">
+          <label for="reg-pass">Contraseña</label>
+          <div class="auth-pass">
+            <input
+              id="reg-pass"
+              v-model="password"
+              class="auth-input"
+              :type="showPass ? 'text' : 'password'"
+              placeholder="Mínimo 6 caracteres"
+              autocomplete="new-password"
+              :aria-invalid="Boolean(shown.password)"
+              aria-describedby="reg-pass-err"
+              @blur="touch('password')"
+            />
+            <button
+              type="button"
+              class="auth-eye"
+              :aria-label="showPass ? 'Ocultar contraseñas' : 'Mostrar contraseñas'"
+              :aria-pressed="showPass"
+              @click="showPass = !showPass"
+            >
+              <PosIcon :name="showPass ? 'eye-off' : 'eye'" :size="20" />
+            </button>
+          </div>
+          <div v-if="password" class="auth-strength" :class="`s${strength.level}`" aria-live="polite">
+            <i></i><i></i><i></i><span>{{ strength.label }}</span>
+          </div>
+          <p v-if="shown.password" id="reg-pass-err" class="auth-err">{{ shown.password }}</p>
+        </div>
+        <div class="auth-field">
+          <label for="reg-pass2">Confirmar contraseña</label>
+          <input
+            id="reg-pass2"
+            v-model="confirmPassword"
+            class="auth-input"
+            :type="showPass ? 'text' : 'password'"
+            autocomplete="new-password"
+            :aria-invalid="Boolean(shown.confirm)"
+            aria-describedby="reg-pass2-err"
+            @blur="touch('confirm')"
+          />
+          <p v-if="shown.confirm" id="reg-pass2-err" class="auth-err">{{ shown.confirm }}</p>
+        </div>
+      </fieldset>
 
-        <label class="terms">
-          <input v-model="acceptedTerms" type="checkbox" required />
-          <span>
-            Acepto los
-            <router-link to="/terminos">términos</router-link>
-            y el
-            <router-link to="/privacidad">aviso de privacidad</router-link>.
-            Prueba de 14 días.
-          </span>
-        </label>
+      <label class="auth-check">
+        <input v-model="acceptedTerms" type="checkbox" @change="touch('terms')" />
+        <span>
+          Acepto los <router-link to="/terminos" target="_blank">términos</router-link> y el
+          <router-link to="/privacidad" target="_blank">aviso de privacidad</router-link>.
+        </span>
+      </label>
+      <p v-if="shown.terms" class="auth-err">{{ shown.terms }}</p>
 
-        <button type="submit" class="btn-primary" :disabled="loading || !acceptedTerms || password.length < 6 || password !== confirmPassword">
-          {{ loading ? 'Registrando…' : 'Registrar' }}
-        </button>
-        <p v-if="!acceptedTerms && password.length >= 1" class="hint-disabled">Acepta los términos para continuar.</p>
-        <p v-else-if="password.length > 0 && password.length < 6" class="hint-disabled">La contraseña debe tener al menos 6 caracteres.</p>
-        <p v-else-if="confirmPassword.length > 0 && password !== confirmPassword" class="hint-disabled">Las contraseñas no coinciden.</p>
+      <button type="submit" class="auth-btn" :disabled="loading">
+        <span v-if="loading" class="auth-spin" aria-hidden="true"></span>
+        {{ loading ? 'Creando tu tienda…' : 'Crear mi tienda' }}
+      </button>
+    </form>
 
-        <router-link v-if="confirmRequest" to="/setup" class="success-link">
-          Registro exitoso. Continúa con la configuración
-        </router-link>
-        <p v-if="onError" class="error-text">{{ Error }}</p>
-      </form>
-
-      <router-link to="/login" class="auth-link">¿Ya tienes cuenta? Iniciar sesión</router-link>
-      <router-link to="/" class="auth-link">← Volver al inicio</router-link>
+    <div class="auth-alt">
+      <span>¿Ya tienes cuenta? <router-link to="/login" class="inline">Inicia sesión</router-link></span>
     </div>
-  </div>
+    <router-link to="/" class="auth-back">← Volver al inicio</router-link>
+  </AuthLayout>
 </template>
 
 <script>
 import { apiService } from "../apiService";
 import { setSession } from "../authStore";
-import BrandName from "../components/BrandName.vue";
+import { fetchVenueSettings } from "../venueStore";
+import AuthLayout from "../components/AuthLayout.vue";
+import PosIcon from "../components/PosIcon.js";
+import { isNetworkError } from "../net";
+import "../auth.css";
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+const FIELD_ORDER = ["firstName", "lastName", "phone", "email", "username", "password", "confirm", "terms"];
+const FIELD_ID = {
+  firstName: "reg-name",
+  lastName: "reg-last",
+  phone: "reg-phone",
+  email: "reg-email",
+  username: "reg-user",
+  password: "reg-pass",
+  confirm: "reg-pass2",
+};
 
 export default {
-  components: { BrandName },
+  components: { AuthLayout, PosIcon },
   data() {
     return {
+      businessName: "",
       firstName: "",
       lastName: "",
-      cellphone: "",
-      username: "",
+      phone: "",
       email: "",
+      username: "",
+      usernameEdited: false,
       password: "",
-      formatCellphoneError: false,
       confirmPassword: "",
-      differentsPassword: false,
-      confirmRequest: false,
-      Error: "",
-      onError: false,
-      loading: false,
       acceptedTerms: false,
+      showPass: false,
+      touched: {},
+      submitted: false,
+      serverErrors: {},
+      serverError: "",
+      loading: false,
     };
   },
+  computed: {
+    phoneDisplay() {
+      const d = this.phone;
+      if (d.length <= 3) return d;
+      if (d.length <= 6) return `(${d.slice(0, 3)}) ${d.slice(3)}`;
+      return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`;
+    },
+    errors() {
+      const e = {};
+      if (!this.firstName.trim()) e.firstName = "Escribe tu nombre.";
+      if (!this.lastName.trim()) e.lastName = "Escribe tu apellido.";
+      if (this.phone.length !== 10) e.phone = "El celular debe tener 10 dígitos.";
+      if (!EMAIL_RE.test(this.email)) e.email = this.email ? "Ese correo no parece válido." : "Escribe tu correo.";
+      if (!this.username) e.username = "Elige un usuario.";
+      else if (this.username.length < 3) e.username = "Usa al menos 3 caracteres.";
+      if (this.password.length < 6) e.password = "La contraseña debe tener al menos 6 caracteres.";
+      if (this.confirmPassword !== this.password) e.confirm = "Las contraseñas no coinciden.";
+      if (!this.acceptedTerms) e.terms = "Acepta los términos para continuar.";
+      return { ...e, ...this.serverErrors };
+    },
+    shown() {
+      const out = {};
+      for (const key of FIELD_ORDER) {
+        if (this.errors[key] && (this.submitted || this.touched[key] || this.serverErrors[key])) out[key] = this.errors[key];
+      }
+      return out;
+    },
+    strength() {
+      const p = this.password;
+      let score = 0;
+      if (p.length >= 8) score += 1;
+      if (/[a-zA-Z]/.test(p) && /\d/.test(p)) score += 1;
+      if (/[^a-zA-Z0-9]/.test(p) || (/[a-z]/.test(p) && /[A-Z]/.test(p))) score += 1;
+      if (p.length < 6) return { level: 1, label: "Muy corta" };
+      if (score <= 1) return { level: 1, label: "Débil" };
+      if (score === 2) return { level: 2, label: "Aceptable" };
+      return { level: 3, label: "Fuerte" };
+    },
+  },
   watch: {
-    // Antes esto era una propiedad computed que nunca se usaba en el template,
-    // por eso no se ejecutaba. Como watcher sí se dispara al escribir.
-    cellphone(value) {
-      const num = value.replace(/[\s()\-]/g, "");
-      if (/\D/.test(num)) {
-        this.formatCellphoneError = true;
-        return;
-      }
-      this.formatCellphoneError = false;
-      if (num.length === 10) {
-        this.cellphone =
-          "(" + num.substring(0, 3) + ")-" + num.substring(3, 6) + "-" + num.substring(6, 10);
-      }
+    email(value) {
+      delete this.serverErrors.email;
+      // Sugiere el usuario a partir del correo mientras no lo hayan escrito
+      if (!this.usernameEdited) this.username = this.cleanUsername(String(value).split("@")[0]);
     },
-    confirmPassword() {
-      this.differentsPassword = false;
-    },
-    password() {
-      this.differentsPassword = false;
+    username() {
+      delete this.serverErrors.username;
     },
   },
   methods: {
+    touch(field) {
+      this.touched = { ...this.touched, [field]: true };
+    },
+    cleanUsername(value) {
+      return String(value || "")
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[̀-ͯ]/g, "")
+        .replace(/[^a-z0-9._-]/g, "")
+        .slice(0, 30);
+    },
+    onUsername(e) {
+      this.usernameEdited = true;
+      this.username = this.cleanUsername(e.target.value);
+      e.target.value = this.username;
+    },
+    onPhone(e) {
+      // Solo dígitos; acepta pegar "+52 664 123 4567"
+      let digits = String(e.target.value || "").replace(/\D/g, "");
+      if (digits.length > 10 && digits.startsWith("52")) digits = digits.slice(2);
+      this.phone = digits.slice(0, 10);
+      e.target.value = this.phoneDisplay;
+    },
+    focusFirstError() {
+      const first = FIELD_ORDER.find((key) => this.shown[key]);
+      const id = FIELD_ID[first];
+      if (id) document.getElementById(id)?.focus();
+    },
+    mapServerError(text) {
+      const msg = String(text || "");
+      if (/nombre de usuario/i.test(msg)) return { field: "username", text: "Ese usuario ya existe. Prueba con otro." };
+      if (/correo ya registrado/i.test(msg)) return { field: "email", text: "Ya hay una cuenta con ese correo. Inicia sesión o recupera tu contraseña." };
+      if (/"email"/.test(msg)) return { field: "email", text: "Ese correo no parece válido." };
+      if (/"cellphone"/.test(msg)) return { field: "phone", text: "El celular debe tener 10 dígitos." };
+      return { field: "", text: msg || "No se pudo crear la cuenta. Inténtalo de nuevo." };
+    },
     async register() {
-      this.onError = false;
-      this.Error = "";
+      this.submitted = true;
+      this.serverError = "";
+      if (Object.keys(this.errors).length) {
+        this.$nextTick(() => this.focusFirstError());
+        return;
+      }
+      this.loading = true;
       try {
-        if (this.formatCellphoneError) {
-          document.getElementById("cellphone").focus();
-          return;
-        }
-        if (this.password !== this.confirmPassword) {
-          this.differentsPassword = true;
-          document.getElementById("confirmPassword").focus();
-          return;
-        }
-        const num = this.cellphone.replace(/[\s()\-]/g, "");
-        if (num.length !== 10) {
-          document.getElementById("cellphone").focus();
-          this.formatCellphoneError = true;
-          return;
-        }
-
-        if (!this.acceptedTerms) {
-          this.onError = true;
-          this.Error = "Debes aceptar los términos y el aviso de privacidad.";
-          return;
-        }
-
-        this.loading = true;
-        const request = await apiService.register({
-          name: this.firstName,
-          lastName: this.lastName,
-          email: this.email,
+        const payload = {
+          name: this.firstName.trim(),
+          lastName: this.lastName.trim(),
+          email: this.email.toLowerCase(),
           username: this.username,
           password: this.password,
-          cellphone: num,
-        });
+          cellphone: this.phone,
+        };
+        if (this.businessName.trim()) payload.businessName = this.businessName.trim();
+        const res = await apiService.register(payload);
         setSession({
-          token: request.token,
-          role: request.role,
-          tenantId: request.tenantId,
-          username: request.username,
-          email: request.email || this.email,
+          token: res.token,
+          role: res.role,
+          tenantId: res.tenantId,
+          username: res.username,
+          email: res.email || payload.email,
         });
-        this.confirmRequest = true;
+        // Así el asistente de configuración ya trae el nombre de la tienda
+        if (payload.businessName) await fetchVenueSettings().catch(() => {});
         this.$router.push("/setup");
-      } catch (error) {
-        this.onError = true;
-        const data = error.response?.data;
-        this.Error = typeof data === "string" ? data : error.message;
-        console.error(error);
+      } catch (e) {
+        if (isNetworkError(e)) {
+          this.serverError = "No hay conexión con el servidor. Revisa tu internet e inténtalo de nuevo.";
+          return;
+        }
+        const data = e.response?.data;
+        const { field, text } = this.mapServerError(typeof data === "string" ? data : data?.message);
+        if (field) {
+          this.serverErrors = { ...this.serverErrors, [field]: text };
+          this.$nextTick(() => this.focusFirstError());
+        } else {
+          this.serverError = text;
+        }
       } finally {
         this.loading = false;
       }
@@ -198,141 +358,3 @@ export default {
   },
 };
 </script>
-
-<style scoped>
-.auth-shell {
-  position: relative;
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 1.5rem;
-  font-family: var(--font-sans);
-}
-.auth-atmosphere {
-  position: absolute;
-  inset: 0;
-  background:
-    radial-gradient(ellipse 70% 50% at 12% 18%, rgba(224, 138, 30, 0.22), transparent 55%),
-    radial-gradient(ellipse 55% 40% at 88% 78%, rgba(30, 90, 168, 0.4), transparent 50%),
-    linear-gradient(155deg, #0a1a30 0%, #123056 42%, #1e5aa8 100%);
-}
-.auth-panel {
-  position: relative;
-  z-index: 1;
-  width: 100%;
-  max-width: 28rem;
-  background: var(--timber-panel, #ffffff);
-  border-radius: 1.15rem;
-  padding: 1.75rem 1.5rem 1.4rem;
-  box-shadow: 0 28px 60px rgba(0, 0, 0, 0.28);
-}
-.brand-block { text-align: center; margin-bottom: 1.5rem; }
-.brand-logo {
-  width: 3.6rem; height: 3.6rem; border-radius: 0.95rem;
-  margin: 0 auto 0.85rem; display: block;
-}
-.brand-name {
-  font-family: var(--font-display);
-  font-size: 1.9rem;
-  letter-spacing: -0.03em;
-  margin: 0;
-  color: var(--timber-primary, #1e5aa8);
-  font-weight: 800;
-}
-.brand-tagline { margin: 0.4rem 0 0; color: var(--timber-muted, #64748b); font-size: 0.92rem; }
-.auth-heading { font-size: 1.05rem; font-weight: 600; margin: 0 0 1rem; }
-.auth-form { display: grid; gap: 0.9rem; }
-.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.9rem; }
-.field { display: grid; gap: 0.35rem; font-size: 0.85rem; font-weight: 500; }
-.field input {
-  border: 1px solid var(--timber-line, rgba(26, 35, 50, 0.18));
-  border-radius: 0.7rem;
-  padding: 0.75rem 0.85rem;
-  font: inherit;
-  background: transparent;
-  color: inherit;
-  caret-color: currentColor;
-  min-width: 0;
-}
-.field input:focus {
-  outline: none;
-  border-color: var(--timber-primary, #1e5aa8);
-  box-shadow: 0 0 0 3px rgba(30, 90, 168, 0.25);
-}
-.field input::placeholder {
-  color: var(--timber-muted, #94a3b8);
-  opacity: 1;
-}
-.field input:-webkit-autofill,
-.field input:-webkit-autofill:focus {
-  -webkit-text-fill-color: currentColor;
-  -webkit-box-shadow: 0 0 0 1000px var(--timber-panel, #fff) inset;
-  transition: background-color 9999s ease-out 0s;
-}
-
-.terms {
-  display: flex;
-  gap: 0.6rem;
-  align-items: flex-start;
-  font-size: 0.82rem;
-  font-weight: 500;
-  color: var(--timber-muted, #64748b);
-  line-height: 1.4;
-}
-.terms input { margin-top: 0.2rem; }
-.terms a { color: var(--timber-primary, #1e5aa8); font-weight: 700; }
-
-.btn-primary {
-  margin-top: 0.25rem;
-  border: none;
-  border-radius: 0.7rem;
-  padding: 0.8rem;
-  background: var(--timber-primary, #1e5aa8);
-  color: #fff;
-  font: inherit;
-  font-weight: 600;
-  cursor: pointer;
-  transition: filter 0.15s ease;
-}
-.btn-primary:hover:not(:disabled) { filter: brightness(0.82); }
-.btn-primary:active:not(:disabled) { filter: brightness(0.72); }
-.btn-primary:focus-visible {
-  outline: 2px solid var(--timber-primary, #1e5aa8);
-  outline-offset: 2px;
-}
-.btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
-
-.error-inline { color: #b42318; font-size: 0.8rem; font-weight: 500; }
-.hint-disabled { margin: -0.25rem 0 0; text-align: center; color: var(--timber-muted, #94a3b8); font-size: 0.8rem; font-weight: 500; }
-.error-text { margin: 0; text-align: center; color: #b42318; font-size: 0.85rem; }
-.success-link {
-  display: block;
-  text-align: center;
-  color: var(--timber-primary, #1e5aa8);
-  font-weight: 600;
-  font-size: 0.9rem;
-  text-decoration: none;
-}
-.auth-link {
-  display: block;
-  text-align: center;
-  margin-top: 0.75rem;
-  color: var(--timber-primary, #1e5aa8);
-  font-weight: 600;
-  font-size: 0.9rem;
-  text-decoration: none;
-}
-.auth-link:hover,
-.auth-link:focus-visible {
-  text-decoration: underline;
-}
-.auth-link:focus-visible {
-  outline: 2px solid var(--timber-primary, #1e5aa8);
-  outline-offset: 3px;
-  border-radius: 0.3rem;
-}
-@media (max-width: 480px) {
-  .grid-2 { grid-template-columns: 1fr; }
-}
-</style>
