@@ -96,7 +96,7 @@
             <div class="adm-row2">
               <label class="adm-field">
                 <span>Teléfono <em>(opcional)</em></span>
-                <input v-model="form.phone" class="adm-inp" type="tel" inputmode="tel" maxlength="20" autocomplete="off" placeholder="10 dígitos" />
+                <input v-model="form.phone" class="adm-inp" type="tel" inputmode="tel" maxlength="20" autocomplete="off" placeholder="55 1234 5678" @blur="form.phone = prettyPhone(form.phone)" />
               </label>
               <label class="adm-field">
                 <span>Correo <em>(opcional)</em></span>
@@ -129,6 +129,7 @@ import "../admin.css";
 import AppShell from "../components/AppShell.vue";
 import PosIcon from "../components/PosIcon.js";
 import { apiService } from "../apiService";
+import { prettyPhone } from "../phone";
 
 const SORT_KEY = "timber_customers_sort";
 
@@ -172,10 +173,7 @@ function hueStyle(name) {
   for (const ch of String(name || "")) h = (h * 31 + ch.charCodeAt(0)) % 360;
   return { "--h": h };
 }
-function prettyPhone(p) {
-  const d = digits(p);
-  return d.length === 10 ? `${d.slice(0, 3)} ${d.slice(3, 6)} ${d.slice(6)}` : p;
-}
+
 function waLink(p) {
   const d = digits(p);
   if (d.length < 10) return "";
