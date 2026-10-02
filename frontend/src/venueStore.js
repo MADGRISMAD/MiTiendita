@@ -77,7 +77,18 @@ export async function fetchVenueSettings() {
   }
 }
 
-export async function saveVenueSettings(payload) {
+/** Datos actuales de la tienda tal como se guardan en el servidor. */
+export function currentVenueSettings() {
+  const out = {};
+  for (const key of Object.keys(defaultSettings)) out[key] = venueStore[key] ?? defaultSettings[key];
+  return out;
+}
+
+/**
+ * Guarda la configuración. Con { strict: true } avisa si el servidor no la aceptó
+ * (sin tocar lo local); sin strict la guarda solo en este dispositivo, como el asistente inicial.
+ */
+export async function saveVenueSettings(payload, { strict = false } = {}) {
   const next = {
     ...defaultSettings,
     ...payload,
@@ -87,7 +98,8 @@ export async function saveVenueSettings(payload) {
   try {
     const { data } = await apiClient.post("/settings", next);
     Object.assign(venueStore, { ...next, ...data, ready: true });
-  } catch {
+  } catch (err) {
+    if (strict) throw err;
     Object.assign(venueStore, { ...next, ready: true });
   }
 
