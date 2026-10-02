@@ -1,0 +1,31 @@
+name: docker compose check
+
+on:
+  push:
+    paths:
+      - "Dockerfile.*"
+      - "docker-compose.yml"
+      - "deploy/**"
+      - "backend/**"
+      - "frontend/**"
+    branches:
+      - main
+  pull_request:
+    paths:
+      - "Dockerfile.*"
+      - "docker-compose.yml"
+      - "deploy/**"
+      - "backend/**"
+      - "frontend/**"
+    branches:
+      - main
+
+jobs:
+  compose-config:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate compose file
+        run: docker compose config
+      - name: Build images
+        run: docker compose build

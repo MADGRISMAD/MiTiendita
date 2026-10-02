@@ -1,0 +1,83 @@
+name: Deploy to Vercel
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  VERCEL_ORG_ID: team_zTGwYKWZiYNP6cXzPReKRjpF
+  VERCEL_PROJECT_ID: prj_XVLZ2dFgbOazGUs3apblIYLYzkgx
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20.x"
+          cache: npm
+
+      - name: Install Vercel CLI
+        run: npm install -g vercel
+
+      - name: Link Vercel project
+        run: |
+          mkdir -p .vercel
+          printf '%s\n' '{"orgId":"team_zTGwYKWZiYNP6cXzPReKRjpF","projectId":"prj_XVLZ2dFgbOazGUs3apblIYLYzkgx"}' > .vercel/project.json
+
+      - name: Deploy to production
+        run: vercel deploy --prod --yes --token="${{ secrets.VERCEL_TOKEN }}"
+
+  # Correo de estado. Corre después del deploy, en éxito y en fallo.
+  # continue-on-error: un fallo al armar o enviar el correo no cambia
+  # el resultado del workflow; ese resultado lo marca el job deploy.
+  notify:
+    name: Notificar resultado del deploy
+    needs: deploy
+    if: always()
+    runs-on: ubuntu-latest
+    environment: production
+    continue-on-error: true
+    env:
+      DEFAULT_MAIL_TO: mayra.bamaca09@gmail.com,madgrismad@gmail.com,luispantoja1102@gmail.com
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Preparar notificación
+        id: mail
+        env:
+          DEPLOY_RESULT: ${{ needs.deploy.result }}
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+          COMMIT_AUTHOR: ${{ github.event.head_commit.author.name }}
+          PUSHER: ${{ github.actor }}
+          BRANCH: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
+          REPOSITORY: ${{ github.repository }}
+          COMMIT_URL: ${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          PROD_URL: https://www.mitiendita.software/
+          SERVICE_NAME: Mi Tiendita
+          MAIL_USER_SET: ${{ secrets.MAIL_USERNAME != '' }}
+          MAIL_PASS_SET: ${{ secrets.MAIL_PASSWORD != '' }}
+        run: node backend/scripts/render-deploy-mail.js
+
+      - name: Enviar correo de estado
+        if: steps.mail.outputs.ready == 'true'
+        continue-on-error: true
+        uses: dawidd6/action-send-mail@67ce3558d613188179559c61d3565140cf389968 # v22
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          secure: true
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          from: "minegocio <${{ secrets.MAIL_USERNAME }}>"
+          to: ${{ secrets.MAIL_TO || env.DEFAULT_MAIL_TO }}
+          subject: ${{ steps.mail.outputs.subject }}
+          body: file://deploy-status.txt
+          html_body: file://deploy-status.html
+          priority: ${{ needs.deploy.result == 'success' && 'normal' || 'high' }}

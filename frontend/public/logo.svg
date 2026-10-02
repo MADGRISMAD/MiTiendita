@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" fill="none" role="img" aria-label="Timber">
+  <rect width="120" height="120" rx="28" fill="#1E5AA8"/>
+  <g fill="#FFFFFF">
+    <rect x="55" y="48" width="10" height="40" rx="2"/>
+    <rect x="46" y="84" width="28" height="8" rx="4"/>
+    <circle cx="60" cy="34" r="13"/>
+    <circle cx="44" cy="46" r="12"/>
+    <circle cx="76" cy="46" r="12"/>
+    <circle cx="60" cy="50" r="7"/>
+    <circle cx="52" cy="60" r="9"/>
+    <circle cx="68" cy="60" r="9"/>
+  </g>
+</svg>

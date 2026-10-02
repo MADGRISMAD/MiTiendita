@@ -1,0 +1,23 @@
+//POST LOGIN DE USUARIO TEST
+POST http://localhost:3001/clientes/login HTTP/1.1
+content-type: application/json
+
+{
+    "email":"6@gmail.com",
+    "password":"prueba123"
+}
+###
+//POST REGISTRO DE USUARIO TEST
+POST http://localhost:3001/clientes/register HTTP/1.1
+content-type:application/json
+
+{
+  "name":"prueba2",
+  "email":"6@gmail.com",
+  "password":"prueba123",
+  "cellphone":"6645861400",
+  "role":"waiter"
+}
+###
+//GET MESAS
+GET http://3.85.19.73:3001/mesas/ HTTP/1.1

@@ -1,0 +1,291 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Retail POS palette — azul + ámbar (estilo Mr Tienda, sin WinForms) */
+:root,
+html[data-theme="light"] {
+  --timber-primary: #1e5aa8;
+  --timber-primary-soft: #e7f0fb;
+  --timber-accent: #e08a1e;
+  --timber-ink: #1a2332;
+  --timber-muted: #64748b;
+  --timber-line: rgba(26, 35, 50, 0.1);
+  --timber-surface: #eef1f6;
+  --timber-panel: #ffffff;
+  --timber-panel-elevated: #f7f9fc;
+  --timber-topbar: #123056;
+  --timber-topbar-text: #f0f4fa;
+  --timber-dock: #ffffff;
+  --timber-dock-text: #5b6b7c;
+  --timber-danger: #c62828;
+  --timber-danger-soft: #fdecea;
+  --timber-success: #2e7d32;
+  --timber-success-soft: #e8f5e9;
+  --timber-warning: #e65100;
+  --timber-warning-soft: #fff3e0;
+  --timber-free: #1e5aa8;
+  --timber-busy: #c62828;
+  --timber-on-primary: #ffffff;
+  --timber-shadow: 0 1px 2px rgba(18, 32, 56, 0.05), 0 12px 28px rgba(18, 32, 56, 0.08);
+  --timber-radius: 1rem;
+  --font-sans: "Figtree", "Segoe UI", system-ui, sans-serif;
+  --font-display: "Figtree", "Segoe UI", system-ui, sans-serif;
+  color-scheme: light;
+}
+
+html[data-theme="dark"] {
+  --timber-primary: #5b9ae8;
+  --timber-primary-soft: rgba(91, 154, 232, 0.16);
+  --timber-accent: #f0a94a;
+  --timber-ink: #e8eef6;
+  --timber-muted: #9aabbf;
+  --timber-line: rgba(232, 238, 246, 0.12);
+  --timber-surface: #0c121c;
+  --timber-panel: #151d2a;
+  --timber-panel-elevated: #1c2636;
+  --timber-topbar: #0a1220;
+  --timber-topbar-text: #e8eef6;
+  --timber-dock: #121a27;
+  --timber-dock-text: #9aabbf;
+  --timber-danger: #f97066;
+  --timber-danger-soft: rgba(249, 112, 102, 0.16);
+  --timber-success: #6ce9a6;
+  --timber-success-soft: rgba(108, 233, 166, 0.14);
+  --timber-warning: #fdb022;
+  --timber-warning-soft: rgba(253, 176, 34, 0.16);
+  --timber-free: #5b9ae8;
+  --timber-busy: #e4574d;
+  --timber-on-primary: #0a1220;
+  --timber-shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 16px 40px rgba(0, 0, 0, 0.4);
+  color-scheme: dark;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
+  margin: 0;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+}
+
+#app > * {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.45;
+  letter-spacing: 0.01em;
+  color: var(--timber-ink);
+  background: var(--timber-surface);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  transition: background 0.2s ease, color 0.2s ease;
+  overscroll-behavior: none;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+.remove-arrow::-webkit-inner-spin-button,
+.remove-arrow::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.remove-arrow {
+  -moz-appearance: textfield;
+}
+
+.timber-waitlist-bg {
+  background:
+    radial-gradient(ellipse 70% 50% at 20% 20%, rgba(224, 138, 30, 0.18), transparent 55%),
+    linear-gradient(155deg, var(--timber-topbar) 0%, #1a4578 55%, #1e5aa8 100%);
+}
+
+.t-page {
+  animation: t-fade-up 0.45s ease both;
+}
+
+@keyframes t-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.t-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.t-toolbar p {
+  margin: 0;
+  color: var(--timber-muted);
+  font-size: 0.95rem;
+  max-width: 36rem;
+  line-height: 1.45;
+}
+
+.t-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  border: none;
+  border-radius: 0.7rem;
+  padding: 0.65rem 1.05rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  text-decoration: none;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.t-btn:hover {
+  transform: translateY(-1px);
+}
+
+.t-btn-primary {
+  background: var(--timber-primary);
+  color: var(--timber-on-primary);
+  box-shadow: 0 8px 20px rgba(30, 90, 168, 0.22);
+}
+
+.t-btn-ghost {
+  background: transparent;
+  color: var(--timber-ink);
+  border: 1px solid var(--timber-line);
+}
+
+.t-card {
+  background: var(--timber-panel);
+  border: 1px solid var(--timber-line);
+  border-radius: var(--timber-radius);
+  box-shadow: var(--timber-shadow);
+}
+
+.t-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 1.7rem;
+  padding: 0 0.75rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  line-height: 1;
+  white-space: nowrap;
+  background: var(--timber-primary-soft);
+  color: var(--timber-primary);
+}
+
+.t-badge.st-pending { background: var(--timber-warning-soft); color: var(--timber-warning); }
+.t-badge.st-preparing { background: color-mix(in srgb, var(--timber-accent) 22%, transparent); color: var(--timber-accent); }
+.t-badge.st-ready { background: var(--timber-primary-soft); color: var(--timber-primary); }
+.t-badge.st-served { background: var(--timber-success-soft); color: var(--timber-success); }
+.t-badge.st-cancelled { background: var(--timber-danger-soft); color: var(--timber-danger); }
+.t-badge.paid { background: var(--timber-success-soft); color: var(--timber-success); }
+.t-badge.unpaid { background: var(--timber-warning-soft); color: var(--timber-warning); }
+
+.t-input,
+.t-select {
+  width: 100%;
+  border: 1px solid var(--timber-line);
+  border-radius: 0.65rem;
+  padding: 0.7rem 0.85rem;
+  background: var(--timber-panel-elevated);
+  color: var(--timber-ink);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.t-input:focus,
+.t-select:focus {
+  outline: none;
+  border-color: var(--timber-primary);
+  box-shadow: 0 0 0 3px rgba(30, 90, 168, 0.16);
+}
+
+.t-modal-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(10, 18, 32, 0.5);
+  backdrop-filter: blur(6px);
+  animation: t-fade-up 0.2s ease;
+}
+
+.t-modal {
+  width: min(26rem, 94vw);
+  background: var(--timber-panel);
+  color: var(--timber-ink);
+  border-radius: 1.15rem;
+  padding: 1.35rem;
+  border: 1px solid var(--timber-line);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.22);
+  display: grid;
+  gap: 0.75rem;
+}
+
+.t-modal h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.t-empty {
+  color: var(--timber-muted);
+  font-size: 0.95rem;
+}
+
+button,
+.t-btn,
+a.dock-item {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+@media (pointer: coarse) {
+  button,
+  .t-btn,
+  select,
+  input {
+    min-height: 2.75rem;
+  }
+}

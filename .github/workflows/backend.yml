@@ -1,0 +1,31 @@
+name: backend build
+
+on:
+  push:
+    paths:
+      - "backend/**"
+      - "package.json"
+      - "package-lock.json"
+    branches:
+      - main
+  pull_request:
+    paths:
+      - "backend/**"
+      - "package.json"
+      - "package-lock.json"
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20.x"
+          cache: npm
+      - name: Install and build backend
+        run: |
+          npm install
+          npm run back:prod
