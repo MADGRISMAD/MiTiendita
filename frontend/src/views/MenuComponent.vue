@@ -371,9 +371,6 @@
             </div>
             <div class="cat-head-acts">
               <router-link to="/inventory" class="btn">Compras e inventario</router-link>
-              <button v-if="aiEnabled" type="button" class="btn" :disabled="cashBlocked" @click="openMagic">
-                Registrar compra
-              </button>
               <button type="button" class="btn" :disabled="!pickFoods.length" @click="exportCatalog">
                 Exportar CSV
               </button>
@@ -382,6 +379,21 @@
               </button>
             </div>
           </header>
+
+          <button v-if="aiEnabled" type="button" class="magic-card" :disabled="cashBlocked" @click="openMagic">
+            <span class="magic-ico" aria-hidden="true">✨</span>
+            <span class="magic-copy">
+              <strong>Registrar compra y precios</strong>
+              <span>
+                {{
+                  cashBlocked
+                    ? 'Bloqueado hasta el corte de caja'
+                    : 'Inventario Mágico · Precio Mágico — foto o texto de la nota del proveedor: suma existencias y te avisa si subió el costo.'
+                }}
+              </span>
+            </span>
+            <span class="magic-go">Abrir</span>
+          </button>
 
           <div class="kpis hide-mobile">
             <button type="button" class="kpi" :class="{ on: statusFilter === 'all' }" @click="statusFilter = 'all'">
@@ -3271,7 +3283,8 @@ export default {
       await fetchVenueSettings().catch(() => {});
       suppliers.value = [];
       await ensureSuppliers();
-      if (selectedMenuId.value) await loadMenuProducts(selectedMenuId.value);
+      // Recarga todo el catálogo: precios, costos y existencias cambiaron
+      await fetchMenus();
     }
 
     function closeFoodForm() {
@@ -5475,6 +5488,54 @@ html[data-theme="dark"] .avatar {
 }
 .price-trio .strong { font-weight: 800; }
 .dup-link { color: var(--timber-primary) !important; }
+.magic-card {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  width: 100%;
+  padding: 0.8rem 1rem;
+  border: none;
+  border-radius: 1rem;
+  background: linear-gradient(120deg, var(--timber-primary), color-mix(in srgb, var(--timber-primary) 55%, var(--timber-accent)));
+  color: #fff;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--timber-primary) 30%, transparent);
+}
+.magic-card:disabled { opacity: 0.55; cursor: not-allowed; }
+.magic-ico {
+  width: 2.6rem;
+  height: 2.6rem;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 0.8rem;
+  background: rgba(255, 255, 255, 0.18);
+  font-size: 1.3rem;
+}
+.magic-copy {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 0.1rem;
+}
+.magic-copy strong { font-size: 1rem; font-weight: 800; }
+.magic-copy span { font-size: 0.82rem; opacity: 0.92; line-height: 1.35; }
+.magic-go {
+  flex-shrink: 0;
+  padding: 0.5rem 0.95rem;
+  border-radius: 0.7rem;
+  background: #fff;
+  color: var(--timber-primary);
+  font-weight: 800;
+  font-size: 0.88rem;
+}
+@media (max-width: 767.98px) {
+  .magic-card { width: auto; margin: 0.25rem 0.85rem 0.5rem; padding: 0.7rem 0.8rem; }
+  .magic-go { display: none; }
+  .magic-copy span { font-size: 0.76rem; }
+}
 .chip-count {
   margin-left: 0.35rem;
   font-style: normal;

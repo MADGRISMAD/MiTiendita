@@ -7,7 +7,7 @@
             <p class="kicker">Inventario Mágico · Precio Mágico</p>
             <h3>Registrar compra y precios</h3>
           </div>
-          <button type="button" class="x" aria-label="Cerrar" @click="close">×</button>
+          <button type="button" class="x" aria-label="Cerrar" :disabled="busy" @click="close">×</button>
         </header>
 
         <p v-if="quota" class="quota">
@@ -15,6 +15,9 @@
         </p>
         <p v-else class="quota">Revisando cuántas veces puedes usarlo…</p>
 
+        <p v-if="restored" class="msg ok">
+          Recuperamos tu última lectura sin guardar; no se volvió a cobrar el uso.
+        </p>
         <p v-if="error" class="msg err">{{ error }}</p>
         <p v-if="notice" class="msg ok">{{ notice }}</p>
 
@@ -150,6 +153,10 @@
                   <input v-model="row.checked" type="checkbox" />
                   <span class="pick-body">
                     <strong>{{ row.name }}</strong>
+                    <span v-if="row.checked && !(Number(row.price) > 0)" class="cost-alert">Falta el precio de venta.</span>
+                    <span v-else-if="row.checked && Number(row.cost) > 0 && Number(row.price) < Number(row.cost)" class="cost-alert">
+                      Lo vendes por debajo del costo.
+                    </span>
                     <span v-if="row.isPack || row.packSize > 1" class="pack-tag">
                       Pack · {{ row.packs || 1 }} × {{ row.packSize || '?' }} pzas
                     </span>
@@ -265,6 +272,9 @@
                 <p v-if="row.isPack && !(row.packSize > 0)" class="msg err">
                   Este es un pack: escribe cuántas piezas trae para sumar el inventario.
                 </p>
+                <p v-if="row.price > 0 && row.cost > 0 && row.price < row.cost" class="msg err">
+                  Lo vendes por debajo del costo.
+                </p>
                 <p v-if="row.price > 0 && row.cost > 0" class="margin">
                   Ganancia aprox. {{ money(row.price - row.cost) }}
                   ({{ Math.round(((row.price - row.cost) / row.price) * 100) }}%)
@@ -280,15 +290,16 @@
           <button type="button" class="act" @click="resetReview">Revisar otra lista</button>
         </template>
 
-        <button type="button" class="act" @click="close">Cerrar</button>
+        <button type="button" class="act" :disabled="busy" @click="close">Cerrar</button>
       </div>
     </div>
   </Teleport>
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { apiService } from "../apiService";
+import { authStore } from "../authStore";
 
 const props = defineProps({
   menus: { type: Array, default: () => [] },
@@ -315,6 +326,43 @@ const news = ref([]);
 const supplierOptions = ref([]);
 const menuOptions = ref([]);
 const purchase = ref(emptyPurchase());
+const restored = ref(false);
+
+// Borrador: la lectura ya gastó un uso; si se cierra o se recarga la página no se pierde
+const DRAFT_KEY = `timber_magic_draft_${authStore.tenantId || "local"}`;
+function saveDraft() {
+  if (!result.value) return;
+  try {
+    localStorage.setItem(
+      DRAFT_KEY,
+      JSON.stringify({ at: Date.now(), result: result.value, picks: picks.value, news: news.value, purchase: purchase.value })
+    );
+  } catch {
+    /* sin espacio: seguimos sin borrador */
+  }
+}
+function clearDraft() {
+  try {
+    localStorage.removeItem(DRAFT_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+function loadDraft() {
+  try {
+    const d = JSON.parse(localStorage.getItem(DRAFT_KEY) || "null");
+    // Solo borradores de los últimos 3 días
+    if (!d || !d.result || Date.now() - Number(d.at || 0) > 3 * 864e5) return false;
+    result.value = d.result;
+    picks.value = Array.isArray(d.picks) ? d.picks : [];
+    news.value = Array.isArray(d.news) ? d.news : [];
+    purchase.value = { ...emptyPurchase(), ...(d.purchase || {}) };
+    return true;
+  } catch {
+    return false;
+  }
+}
+watch([picks, news, purchase], saveDraft, { deep: true });
 
 function todayYmd() {
   const d = new Date();
@@ -388,7 +436,8 @@ function defaultMenu() {
 async function ensureMenus() {
   if (catalogMenus.value.length) return catalogMenus.value;
   try {
-    menuOptions.value = (await apiService.getAllMenus()) || [];
+    const list = await apiService.getAllMenus();
+    menuOptions.value = Array.isArray(list) ? list : [];
   } catch {
     menuOptions.value = [];
   }
@@ -540,7 +589,7 @@ function fillPurchase(data) {
   const s = data?.supplier || {};
   const date = String(s.date || "").slice(0, 10) || todayYmd();
   const name = String(s.name || "").trim();
-  const listed = supplierOptions.value.length ? supplierOptions.value : props.suppliers || [];
+  const listed = supplierOptions.value.length ? supplierOptions.value : Array.isArray(props.suppliers) ? props.suppliers : [];
   const match =
     (s.id && listed.find((item) => item.id === s.id)) ||
     listed.find((item) => String(item.name || "").toLowerCase() === name.toLowerCase());
@@ -704,6 +753,9 @@ function toggleNews(on) {
 }
 
 function resetReview() {
+  if (result.value && saveCount.value && !window.confirm("¿Descartar esta lectura? Ya se usó 1 intento.")) return;
+  clearDraft();
+  restored.value = false;
   result.value = null;
   picks.value = [];
   news.value = [];
@@ -741,8 +793,18 @@ async function review() {
     if (data.message) notice.value = data.message;
     if (data.charged) {
       result.value = data;
-      fillPurchase(data);
-      fillPicks(data);
+      // La lectura ya se cobró: si algo falla al acomodarla, se queda lo que sí se pudo
+      try {
+        fillPurchase(data);
+      } catch {
+        purchase.value = emptyPurchase();
+      }
+      try {
+        fillPicks(data);
+      } catch {
+        notice.value = "Leí la nota pero no pude acomodar todo; revisa y agrega lo que falte.";
+      }
+      saveDraft();
     }
   } catch (e) {
     if (e?.response?.data?.quota) quota.value = e.response.data.quota;
@@ -787,6 +849,11 @@ async function save() {
     error.value = "En los productos nuevos, escribe a cuánto los vas a vender.";
     return;
   }
+  const noPrice = picks.value.some((row) => row.checked && row.id && !(Number(row.price) > 0));
+  if (noPrice) {
+    error.value = "Hay productos marcados sin precio de venta. Escríbelo o desmárcalos.";
+    return;
+  }
   const missingPack = news.value.some(
     (row) => activeNew(row) && row.isPack && !(Number(row.stockIn) > 0)
   );
@@ -795,7 +862,6 @@ async function save() {
     return;
   }
 
-  busy.value = true;
   busy.value = true;
   try {
     const lineLot = (row) => String(row.lot || purchase.value.lot || "").trim();
@@ -834,6 +900,8 @@ async function save() {
       notes: "Inventario Mágico",
     });
     notice.value = data.message || "Cambios guardados.";
+    clearDraft();
+    restored.value = false;
     emit("applied");
     result.value = null;
     picks.value = [];
@@ -849,7 +917,7 @@ async function save() {
 }
 
 function close() {
-  busy.value = false;
+  if (busy.value) return;
   emit("close");
 }
 
@@ -859,18 +927,21 @@ onMounted(async () => {
   supplierOptions.value = Array.isArray(props.suppliers) ? [...props.suppliers] : [];
   if (!menuOptions.value.length) {
     try {
-      menuOptions.value = (await apiService.getAllMenus()) || [];
+      const list = await apiService.getAllMenus();
+      menuOptions.value = Array.isArray(list) ? list : [];
     } catch {
       menuOptions.value = [];
     }
   }
   if (!supplierOptions.value.length) {
     try {
-      supplierOptions.value = (await apiService.getSuppliers()) || [];
+      const list = await apiService.getSuppliers();
+      supplierOptions.value = Array.isArray(list) ? list : [];
     } catch {
       supplierOptions.value = [];
     }
   }
+  restored.value = loadDraft();
   await loadQuota();
 });
 </script>
