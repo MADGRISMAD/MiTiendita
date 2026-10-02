@@ -1,101 +1,147 @@
 <template>
-  <div class="wrap">
-    <div class="no-print bar">
-      <button type="button" class="btn" @click="print">Imprimir</button>
-      <button type="button" class="btn ghost" @click="closeWin">Cerrar</button>
+  <div class="tk-view">
+    <div class="tk-bar">
+      <button type="button" class="tk-btn" @click="close" title="Cerrar (Esc)">
+        <PosIcon name="back" :size="18" />
+        Cerrar
+      </button>
+      <div class="tk-bar-title">
+        <strong>{{ order ? `Ticket #${folio}` : 'Ticket' }}</strong>
+        <small v-if="order">{{ statusText }} · {{ money(order.total) }}</small>
+      </div>
+      <div class="tk-seg" role="group" aria-label="Ancho del papel">
+        <button type="button" :aria-pressed="paper === '80'" @click="setPaper('80')">80<span class="tk-mm"> mm</span></button>
+        <button type="button" :aria-pressed="paper === '58'" @click="setPaper('58')">58<span class="tk-mm"> mm</span></button>
+      </div>
+      <button type="button" class="tk-btn primary tk-print" :disabled="!order" @click="print">
+        <PosIcon name="printer" :size="18" />
+        Imprimir
+      </button>
     </div>
 
-    <div class="ticket">
-      <p v-if="loading" class="center">Cargando…</p>
-      <p v-else-if="err" class="center err">{{ err }}</p>
+    <div class="tk-stage">
+      <div class="tk-sheet">
+        <article class="tk-paper" :class="{ w58: paper === '58' }">
+          <p v-if="loading" class="tk-state">Cargando ticket…</p>
+          <p v-else-if="err" class="tk-state err">{{ err }}</p>
 
-      <template v-else-if="order">
-        <div class="center head">
-          <p class="shop">{{ businessName }}</p>
-          <p class="subtype">{{ typeLabel }}</p>
-          <p v-if="address" class="muted">{{ address }}</p>
-          <p v-if="phone" class="muted">Tel. {{ phone }}</p>
-        </div>
+          <template v-else-if="order">
+            <TicketHeader />
 
-        <div class="rule"></div>
-        <p class="center title">COMPROBANTE DE VENTA</p>
-        <div class="rule"></div>
+            <div class="tk-stub">
+              <div>
+                <span>Ticket</span>
+                <strong class="tk-mono">Nº {{ folio }}</strong>
+              </div>
+              <div>
+                <span>{{ dayName(stamp) }}</span>
+                <p class="tk-stub-date">{{ shortDate(stamp) }}<br />{{ clock(stamp) }}</p>
+              </div>
+            </div>
+            <div class="tk-meta">
+              <span>Atendió <b>{{ cashier || '—' }}</b></span>
+              <span>{{ countText }}</span>
+            </div>
 
-        <div class="meta-block">
-          <div class="meta-row"><span>Folio</span><strong>{{ shortId(order.id) }}</strong></div>
-          <div class="meta-row"><span>Fecha</span><strong>{{ formatDate(order.createdAt) }}</strong></div>
-          <div v-if="order.paidAt" class="meta-row"><span>Cobro</span><strong>{{ formatDate(order.paidAt) }}</strong></div>
-          <div class="meta-row"><span>Cajero</span><strong>{{ (cashier || '—').toUpperCase() }}</strong></div>
-          <div class="meta-row"><span>Arts.</span><strong>{{ itemCount }}</strong></div>
-        </div>
+            <p class="tk-sec">Lo que llevas</p>
+            <div class="tk-items">
+              <div v-for="(item, i) in items" :key="i" class="tk-item">
+                <span class="tk-item-n tk-mono">{{ String(i + 1).padStart(2, '0') }}</span>
+                <div>
+                  <p class="tk-item-name">{{ item.name }}</p>
+                  <p v-if="item.notes" class="tk-item-note">{{ item.notes }}</p>
+                  <div class="tk-line">
+                    <span>{{ qty(item.quantity) }} × {{ money(item.price) }}</span>
+                    <i class="tk-dots"></i>
+                    <span>{{ money(lineGross(item)) }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
 
-        <div class="rule dashed"></div>
+            <hr class="tk-rule" />
+            <div class="tk-line">
+              <span>Subtotal</span><i class="tk-dots"></i><span>{{ money(order.subtotal) }}</span>
+            </div>
+            <div v-if="order.discountAmount" class="tk-line strong">
+              <span>Descuento {{ pct(order.discountPercent) }}</span><i class="tk-dots"></i><span>−{{ money(order.discountAmount) }}</span>
+            </div>
+            <div v-if="order.cardExtraTax" class="tk-line">
+              <span>IVA por pago con tarjeta</span><i class="tk-dots"></i><span>+{{ money(order.cardExtraTax) }}</span>
+            </div>
+            <div v-if="order.deliveryFee" class="tk-line">
+              <span>Envío</span><i class="tk-dots"></i><span>+{{ money(order.deliveryFee) }}</span>
+            </div>
 
-        <div class="cols hdr">
-          <span class="c-qty">Cant</span>
-          <span class="c-name">Descripción</span>
-          <span class="c-imp">Importe</span>
-        </div>
-        <div class="rule thin"></div>
+            <div class="tk-total">
+              <span>Total</span>
+              <strong><sup>$</sup>{{ num(order.total) }}</strong>
+            </div>
+            <p class="tk-taxnote">
+              IVA {{ pct((order.taxRate || 0.16) * 100) }} incluido en el total: {{ money(order.tax) }}
+            </p>
 
-        <div v-for="(item, i) in order.items || []" :key="i" class="item">
-          <div class="cols">
-            <span class="c-qty">{{ formatQty(item.quantity) }}</span>
-            <span class="c-name">
-              {{ item.name }}
-              <small>{{ moneyPlain(item.price) }} c/u{{ item.priceIncludesTax ? ' · bruto' : '' }}</small>
-            </span>
-            <span class="c-imp">{{ moneyPlain(lineGross(item)) }}</span>
-          </div>
-        </div>
+            <div v-if="paid" class="tk-pay" :class="{ single: !hasChangeBox }">
+              <div>
+                <span>Pagó con</span>
+                <strong>{{ methodText }}</strong>
+                <em v-if="order.paymentMethod === 'split'">
+                  Tarjeta {{ money(order.cardAmount) }}<br />Efectivo {{ money(order.cashReceived) }}
+                </em>
+                <em v-else-if="order.cashReceived">{{ money(order.cashReceived) }}</em>
+              </div>
+              <div v-if="hasChangeBox" class="tk-change">
+                <span>Su cambio</span>
+                <strong>{{ money(order.change) }}</strong>
+              </div>
+            </div>
 
-        <div class="rule dashed"></div>
+            <p v-if="order.discountAmount && paid" class="tk-flag">★ Hoy ahorraste {{ money(order.discountAmount) }} ★</p>
 
-        <div class="totals">
-          <div class="row"><span>Subtotal</span><span>{{ moneyPlain(order.subtotalNet != null ? order.subtotalNet : order.subtotal) }}</span></div>
-          <div v-if="order.discountAmount" class="row">
-            <span>Descuento {{ order.discountPercent || 0 }}%</span>
-            <span>-{{ moneyPlain(order.discountAmount) }}</span>
-          </div>
-          <div class="row"><span>IVA ({{ Math.round((order.taxRate || 0.16) * 100) }}%)</span><span>{{ moneyPlain(order.tax) }}</span></div>
-          <div v-if="order.cardExtraTax" class="row">
-            <span>IVA extra tarjeta</span>
-            <span>{{ moneyPlain(order.cardExtraTax) }}</span>
-          </div>
-        </div>
+            <div class="tk-stamp-row">
+              <div class="tk-stamp" :class="{ solid: status === 'pending' }">
+                <b>{{ stampWord }}</b>
+                <small>{{ stampSub }}</small>
+              </div>
+            </div>
 
-        <div class="rule"></div>
-        <div class="row grand">
-          <span>TOTAL</span>
-          <span>$ {{ moneyPlain(order.total) }}</span>
-        </div>
-        <div class="rule"></div>
+            <p v-if="order.offlinePending" class="tk-flag">
+              Venta guardada sin internet. Se sube sola al volver la conexión; el QR para facturar sale en la reimpresión.
+            </p>
 
-        <template v-if="order.paymentStatus === 'paid'">
-          <p class="center pay-label">{{ payMethodLabel(order.paymentMethod) }}</p>
-          <p class="center paid">PAGADO</p>
-        </template>
-        <p v-else class="center unpaid">PENDIENTE DE PAGO</p>
+            <p class="tk-hand">{{ thanks }}</p>
+            <p class="tk-note">{{ note }}</p>
 
-        <div class="rule dashed"></div>
-        <p class="center thanks">¡Gracias por su compra!</p>
-        <div v-if="qrDataUrl" class="qr-block">
-          <img :src="qrDataUrl" alt="Código QR para facturar" class="qr" />
-          <p class="center thanks">Factura tú mismo</p>
-          <p class="center legal">
-            Escanea el QR y captura tu RFC.
-            No hace falta pedirlo en caja. Vigente el mes de la compra.
-          </p>
-        </div>
-        <p v-if="order.offlinePending" class="center legal">
-          Venta en este dispositivo. El QR de factura aparece cuando se sincronice.
-        </p>
-        <p v-else-if="!qrDataUrl" class="center legal">
-          Documento informativo. Solicite factura en caja si la requiere.
-        </p>
-        <p class="center folio-bar">*{{ shortId(order.id) }}*</p>
-        <p class="center tiny brand-print"><span class="mi">Mi</span><span class="rest"> Tiendita</span></p>
-      </template>
+            <template v-if="qrDataUrl && paid">
+              <div class="tk-cut" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round">
+                  <circle cx="6" cy="6" r="3" /><circle cx="6" cy="18" r="3" />
+                  <path d="M8.1 8.1L20 20M8.1 15.9L20 4" />
+                </svg>
+                <span>Recorte para facturar</span>
+              </div>
+              <div class="tk-invoice">
+                <img :src="qrDataUrl" alt="Código QR para facturar esta compra" />
+                <div>
+                  <h3>Factura tú mismo</h3>
+                  <ol>
+                    <li>Escanea el código.</li>
+                    <li>Captura tu RFC.</li>
+                    <li>Te llega por correo.</li>
+                  </ol>
+                  <small>Válido el mes de la compra · Folio {{ folio }}</small>
+                </div>
+              </div>
+            </template>
+            <p v-else-if="paid && !order.offlinePending" class="tk-note">Si requiere factura, solicítela en caja.</p>
+
+            <div class="tk-foot">
+              <TicketBarcode :value="folio" :caption="folio" />
+              <p class="tk-made">Hecho con <b>Mi Tiendita</b></p>
+            </div>
+          </template>
+        </article>
+      </div>
     </div>
   </div>
 </template>
@@ -104,79 +150,116 @@
 import { onMounted, ref, computed, watch } from "vue";
 import { useRoute } from "vue-router";
 import QRCode from "qrcode";
+import "../ticket.css";
 import { apiService, appPublicOrigin } from "../apiService";
 import { venueStore, fetchVenueSettings } from "../venueStore";
 import { authStore } from "../authStore";
 import { lineBreakdown } from "../tax";
 import { getSale, saleToPrintOrder } from "../offlineDb";
+import { useTicketShell, folioOf, closingLine, closingNote } from "../ticketShell";
+import PosIcon from "../components/PosIcon.js";
+import TicketHeader from "../components/TicketHeader.vue";
+import TicketBarcode from "../components/TicketBarcode.vue";
 
 const route = useRoute();
+const { paper, setPaper, print, close } = useTicketShell(() =>
+  route.name === "printOffline" ? "/pos" : "/orders"
+);
+
 const order = ref(null);
 const loading = ref(true);
 const err = ref("");
 const qrDataUrl = ref("");
 
-const businessName = computed(() =>
-  (venueStore.businessName || "TIENDA").toUpperCase()
-);
-const address = computed(() => venueStore.address || "");
-const phone = computed(() => venueStore.phone || "");
+const items = computed(() => (Array.isArray(order.value?.items) ? order.value.items : []));
+const folio = computed(() => folioOf(order.value?.id));
 const cashier = computed(() => authStore.username || "");
-const itemCount = computed(() =>
-  (order.value?.items || []).reduce((s, i) => s + Number(i.quantity || 0), 0)
-);
+const stamp = computed(() => order.value?.paidAt || order.value?.createdAt);
+const thanks = computed(() => closingLine(venueStore.businessType));
+const note = computed(() => closingNote(venueStore.businessType));
 
-const typeLabel = computed(() => {
-  const map = {
-    abarrotes: "ABARROTES / MINISÚPER",
-    convenience: "TIENDA DE CONVENIENCIA",
-    pharmacy: "FARMACIA",
-    hardware: "FERRETERÍA",
-    other: "COMERCIO",
-    restaurant: "RESTAURANTE",
-    cafe: "CAFÉ",
-    bar: "BAR",
-    hotel: "HOTEL",
-  };
-  return map[venueStore.businessType] || "ABARROTES / MINISÚPER";
+// Con kilos o metros no se suman cantidades: cada renglón cuenta como un artículo
+const countText = computed(() => {
+  const lines = items.value.length;
+  const units = items.value.reduce((s, i) => {
+    const q = Number(i.quantity || 0);
+    return s + (Number.isInteger(q) ? q : 1);
+  }, 0);
+  const a = `${units} ${units === 1 ? "artículo" : "artículos"}`;
+  return units === lines ? a : `${a} · ${lines} ${lines === 1 ? "producto" : "productos"}`;
 });
 
-const payLabels = {
-  cash: "EFECTIVO",
-  card: "TARJETA",
-  transfer: "TRANSFERENCIA",
-  split: "MIXTO",
-  other: "OTRO",
-};
+const status = computed(() => {
+  const o = order.value;
+  if (!o) return "";
+  if (o.paymentStatus === "refunded") return "refunded";
+  if (o.status === "cancelled") return "cancelled";
+  if (o.paymentStatus === "paid") return "paid";
+  return "pending";
+});
+const paid = computed(() => status.value === "paid");
+const statusText = computed(
+  () => ({ paid: "Pagado", refunded: "Devuelta", cancelled: "Cancelada", pending: "Pendiente de pago" })[status.value] || ""
+);
+const stampWord = computed(
+  () => ({ paid: "Pagado", refunded: "Devuelta", cancelled: "Cancelada", pending: "Por cobrar" })[status.value] || ""
+);
+const stampSub = computed(() => {
+  const o = order.value;
+  if (status.value === "refunded" && o?.refundedAt) return `${shortDate(o.refundedAt)} · ${clock(o.refundedAt)}`;
+  if (status.value === "pending") return "Pendiente de pago";
+  if (status.value === "paid" && o?.offlinePending) return "Sin sincronizar";
+  return `${shortDate(stamp.value)} · ${clock(stamp.value)}`;
+});
 
-function moneyPlain(n) {
-  return Number(n || 0).toFixed(2);
+const METHOD = {
+  cash: "Efectivo",
+  card: "Tarjeta",
+  transfer: "Transferencia",
+  split: "Tarjeta y efectivo",
+  other: "Otro medio",
+};
+const methodText = computed(() => METHOD[order.value?.paymentMethod] || "—");
+const hasChangeBox = computed(() => {
+  const o = order.value;
+  return Boolean(o && (o.paymentMethod === "cash" || o.paymentMethod === "split") && Number(o.cashReceived || 0) > 0);
+});
+
+const moneyFmt = new Intl.NumberFormat("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+function num(n) {
+  return moneyFmt.format(Number(n || 0));
 }
-function formatQty(q) {
+function money(n) {
+  return `$${num(n)}`;
+}
+function qty(q) {
   const n = Number(q || 0);
-  return Number.isInteger(n) ? String(n) : n.toFixed(3);
+  return Number.isInteger(n) ? String(n) : String(Number(n.toFixed(3)));
+}
+function pct(p) {
+  return `${Number(Number(p || 0).toFixed(2))}%`;
 }
 function lineGross(item) {
   const rate = order.value?.taxRate || 0.16;
   return lineBreakdown(item.price, item.quantity, item.priceIncludesTax, rate).gross;
 }
-function formatDate(d) {
-  if (!d) return "";
-  const dt = new Date(d);
-  const p = (x) => String(x).padStart(2, "0");
-  return `${p(dt.getDate())}/${p(dt.getMonth() + 1)}/${dt.getFullYear()} ${p(dt.getHours())}:${p(dt.getMinutes())}`;
+const MONTHS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+const DAYS = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
+function validDate(d) {
+  const dt = d ? new Date(d) : null;
+  return dt && !Number.isNaN(dt.getTime()) ? dt : null;
 }
-function payMethodLabel(m) {
-  return payLabels[m] || String(m || "—").toUpperCase();
+function shortDate(d) {
+  const dt = validDate(d);
+  return dt ? `${String(dt.getDate()).padStart(2, "0")} ${MONTHS[dt.getMonth()]} ${dt.getFullYear()}` : "";
 }
-function shortId(id) {
-  return String(id || "").slice(-8).toUpperCase();
+function clock(d) {
+  const dt = validDate(d);
+  return dt ? `${String(dt.getHours()).padStart(2, "0")}:${String(dt.getMinutes()).padStart(2, "0")}` : "";
 }
-function print() {
-  window.print();
-}
-function closeWin() {
-  window.close();
+function dayName(d) {
+  const dt = validDate(d);
+  return dt ? DAYS[dt.getDay()] : "Fecha";
 }
 
 async function paintQr(token) {
@@ -207,19 +290,20 @@ onMounted(async () => {
     if (route.name === "printOffline") {
       const sale = await getSale(String(route.params.clientSaleId));
       if (!sale) {
-        err.value = "No se encontró la venta local";
+        err.value = "No se encontró la venta en este dispositivo.";
         return;
       }
       order.value = saleToPrintOrder(sale);
     } else {
       order.value = await apiService.getOrdersById(String(route.params.id));
-      await paintQr(order.value?.invoiceToken);
+      await paintQr(order.value?.invoiceToken).catch(() => {});
     }
     if (route.query.autoprint === "1") {
       setTimeout(() => window.print(), 400);
     }
   } catch (e) {
-    err.value = e.response?.data || e.message || "No se pudo cargar el pedido";
+    const msg = e?.response?.data;
+    err.value = typeof msg === "string" && msg ? msg : "No se pudo cargar el ticket.";
   } finally {
     loading.value = false;
   }
@@ -227,180 +311,9 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.wrap {
-  min-height: 100vh;
-  background: #d8dee8;
-  padding: 1rem;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.75rem;
-}
-.no-print.bar { display: flex; gap: 0.5rem; }
-.btn {
-  border: none;
-  background: #1e5aa8;
-  color: #fff;
-  border-radius: 0.55rem;
-  padding: 0.65rem 1rem;
-  font-weight: 700;
-  cursor: pointer;
-  font-family: var(--font-sans, system-ui, sans-serif);
-}
-.btn.ghost {
-  background: #fff;
-  color: #1a2332;
-  border: 1px solid #c5cedb;
-}
-
-.ticket {
-  width: 80mm;
-  max-width: 100%;
-  background: #fff;
-  color: #111;
-  padding: 5mm 4mm 10mm;
-  font-family: "Courier New", Courier, monospace;
-  font-size: 11px;
-  line-height: 1.35;
-  box-shadow: 0 8px 28px rgba(18, 32, 56, 0.18);
-}
-.center { text-align: center; }
-.shop {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-}
-.subtype {
-  margin: 3px 0 5px;
-  font-size: 9px;
-  letter-spacing: 0.14em;
-  color: #333;
-}
-.muted { margin: 0; font-size: 10px; color: #333; }
-.title {
-  margin: 0;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-}
-.rule {
-  border: none;
-  border-top: 1.5px solid #111;
-  margin: 6px 0;
-  height: 0;
-}
-.rule.dashed { border-top-style: dashed; border-top-width: 1px; }
-.rule.thin { margin: 3px 0; border-top-width: 1px; }
-
-.meta-block { display: grid; gap: 2px; }
-.meta-row {
-  display: flex;
-  justify-content: space-between;
-  gap: 0.5rem;
-  font-variant-numeric: tabular-nums;
-}
-.meta-row span { color: #444; }
-.meta-row strong { font-weight: 700; }
-
-.cols {
-  display: grid;
-  grid-template-columns: 2.4rem 1fr 3.2rem;
-  gap: 0.2rem;
-  font-variant-numeric: tabular-nums;
-  align-items: start;
-}
-.cols.hdr { font-weight: 700; font-size: 10px; }
-.c-qty { text-align: left; }
-.c-imp { text-align: right; }
-.c-name { text-align: left; word-break: break-word; }
-.c-name small {
-  display: block;
-  font-size: 9px;
-  color: #555;
-  font-weight: 400;
-}
-.item { margin-bottom: 5px; }
-
-.totals { display: grid; gap: 2px; }
-.row {
-  display: flex;
-  justify-content: space-between;
-  gap: 0.4rem;
-  font-variant-numeric: tabular-nums;
-}
-.grand {
-  font-size: 15px;
-  font-weight: 700;
-  margin: 2px 0;
-}
-.pay-label {
-  margin: 6px 0 2px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-}
-.paid {
-  margin: 0;
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-}
-.unpaid {
-  margin: 6px 0;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-}
-.thanks {
-  margin: 6px 0 4px;
-  font-size: 12px;
-  font-weight: 700;
-}
-.qr-block { margin: 4px 0 2px; }
-.qr {
-  display: block;
-  width: 32mm;
-  height: 32mm;
-  margin: 0 auto 4px;
-}
-.legal {
-  margin: 0;
-  font-size: 9px;
-  line-height: 1.4;
-  color: #333;
-}
-.folio-bar {
-  margin: 8px 0 2px;
-  font-size: 13px;
-  letter-spacing: 0.12em;
-  font-weight: 700;
-}
-.tiny { margin: 2px 0 0; font-size: 9px; color: #666; }
-.brand-print { font-weight: 800; }
-.brand-print .mi { color: #e08a1e; }
-.brand-print .rest { color: #1e5aa8; }
-.err { color: #b42318; }
-p { margin: 0; }
-
-@media print {
-  @page { size: 80mm auto; margin: 0; }
-  html, body {
-    margin: 0 !important;
-    padding: 0 !important;
-    background: #fff !important;
-  }
-  .wrap {
-    min-height: auto;
-    background: #fff;
-    padding: 0;
-    display: block;
-  }
-  .no-print { display: none !important; }
-  .ticket {
-    width: 72mm;
-    max-width: 72mm;
-    box-shadow: none;
-    padding: 2mm 2mm 10mm;
-    margin: 0 auto;
-  }
+.tk-taxnote {
+  margin-top: 1mm !important;
+  text-align: right;
+  font-size: 0.82em;
 }
 </style>
