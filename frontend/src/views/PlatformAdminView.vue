@@ -241,7 +241,7 @@
         </ul>
 
         <Teleport to="body">
-          <div v-if="showStaffForm" class="modal-bg" @click.self="showStaffForm = false">
+          <div v-if="showStaffForm" class="modal-bg">
             <form class="modal" @submit.prevent="createStaff">
               <h3>Nueva persona</h3>
               <div class="form">

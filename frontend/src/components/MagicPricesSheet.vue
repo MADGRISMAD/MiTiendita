@@ -1,6 +1,6 @@
 <template>
   <Teleport to="body">
-    <div class="sheet-bg" @click.self="close">
+    <div class="sheet-bg">
       <div class="sheet" role="dialog" aria-modal="true">
         <header class="head">
           <div>

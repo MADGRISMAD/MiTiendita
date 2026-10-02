@@ -107,7 +107,7 @@
 
       <!-- Cancelar o devolver -->
       <Teleport to="body">
-        <div v-if="voidOrder" class="modal-bg" @click.self="voidOrder = null">
+        <div v-if="voidOrder" class="modal-bg">
           <div class="modal" role="dialog" aria-modal="true">
             <h3>{{ voidOrder.paymentStatus === 'paid' ? 'Devolver venta' : 'Cancelar venta' }}</h3>
             <p class="modal-hint">
@@ -130,7 +130,7 @@
 
       <!-- Abrir caja -->
       <Teleport to="body">
-        <div v-if="showOpen" class="modal-bg" @click.self="showOpen = false">
+        <div v-if="showOpen" class="modal-bg">
           <form class="modal" role="dialog" aria-modal="true" @submit.prevent="openCash">
             <h3>Abrir caja</h3>
             <p class="modal-hint">Escribe el efectivo con el que empieza el turno. Si no llevas cambio, pon 0.</p>
@@ -157,7 +157,7 @@
 
       <!-- Cerrar caja -->
       <Teleport to="body">
-        <div v-if="showClose" class="modal-bg" @click.self="showClose = false">
+        <div v-if="showClose" class="modal-bg">
           <form class="modal" role="dialog" aria-modal="true" @submit.prevent="closeCash">
             <h3>Cerrar turno</h3>
             <div class="close-summary">
@@ -191,7 +191,7 @@
 
       <!-- Cobrar -->
       <Teleport to="body">
-        <div v-if="payOrder" class="modal-bg" @click.self="payOrder = null">
+        <div v-if="payOrder" class="modal-bg">
           <div class="modal" role="dialog" aria-modal="true" aria-labelledby="pay-title">
             <h3 id="pay-title">Cobrar esta venta</h3>
             <div class="pay-sum">

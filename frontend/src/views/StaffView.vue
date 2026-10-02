@@ -27,7 +27,7 @@
       </div>
 
       <Teleport to="body">
-        <div v-if="showForm" class="modal-bg" @click.self="showForm = false">
+        <div v-if="showForm" class="modal-bg">
           <form class="modal" @submit.prevent="create" role="dialog" aria-modal="true" aria-labelledby="staff-form-title">
             <h3 id="staff-form-title">Nuevo empleado</h3>
             <div class="modal-body">

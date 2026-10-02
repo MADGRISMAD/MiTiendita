@@ -19,7 +19,7 @@
         <p v-if="!clientesEnEspera.length" class="empty">Lista vacía.</p>
       </div>
 
-      <div v-if="modalAgregarCliente" class="modal-bg" @click.self="cerrarModalAgregarCliente">
+      <div v-if="modalAgregarCliente" class="modal-bg" >
         <div class="modal">
           <h3>Agregar cliente</h3>
           <input v-model="nombreNuevoCliente" type="text" placeholder="Nombre" />
@@ -31,7 +31,7 @@
         </div>
       </div>
 
-      <div v-if="modalOpcionesCliente" class="modal-bg" @click.self="cerrarModalOpcionesCliente">
+      <div v-if="modalOpcionesCliente" class="modal-bg" >
         <div class="modal">
           <h3>{{ clienteSeleccionado?.nombre }}</h3>
           <div class="modal-actions">
@@ -42,7 +42,7 @@
         </div>
       </div>
 
-      <div v-if="modalAsignarMesa" class="modal-bg" @click.self="cerrarModalAsignarMesa">
+      <div v-if="modalAsignarMesa" class="modal-bg">
         <div class="modal">
           <h3>Asignar mesa</h3>
           <select v-model="mesaSeleccionada">

@@ -154,7 +154,7 @@
 
       <!-- Modal proveedor -->
       <Teleport to="body">
-        <div v-if="showSupplier" class="modal-bg" @click.self="showSupplier = false">
+        <div v-if="showSupplier" class="modal-bg">
           <form class="modal" @submit.prevent="saveSupplier" role="dialog" aria-modal="true">
             <h3>{{ editingSupplier ? 'Editar proveedor' : 'Nuevo proveedor' }}</h3>
             <div class="modal-body">
@@ -180,7 +180,7 @@
 
       <!-- Modal compra -->
       <Teleport to="body">
-        <div v-if="showPurchase" class="modal-bg" @click.self="showPurchase = false">
+        <div v-if="showPurchase" class="modal-bg">
           <form class="modal wide" @submit.prevent="savePurchase" role="dialog" aria-modal="true">
             <h3>Registrar compra</h3>
             <div class="modal-body">
@@ -235,7 +235,7 @@
 
       <!-- Detalle compra -->
       <Teleport to="body">
-        <div v-if="purchaseDetail" class="modal-bg" @click.self="purchaseDetail = null">
+        <div v-if="purchaseDetail" class="modal-bg" >
           <div class="modal wide" role="dialog" aria-modal="true">
             <h3>Compra · {{ purchaseDetail.supplierName }}</h3>
             <div class="modal-body">

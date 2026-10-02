@@ -450,7 +450,7 @@
 
       <!-- Ticket móvil -->
       <Teleport to="body">
-        <div v-if="showMobileCart" class="sheet-bg m-cart-bg" @click.self="showMobileCart = false">
+        <div v-if="showMobileCart" class="sheet-bg m-cart-bg">
           <div class="m-cart-sheet" role="dialog" aria-labelledby="m-cart-title">
             <header class="m-cart-head">
               <div>
@@ -498,7 +498,7 @@
 
       <!-- Precio F4 -->
       <Teleport to="body">
-        <div v-if="showPriceCheck" class="sheet-bg" @click.self="closePriceCheck">
+        <div v-if="showPriceCheck" class="sheet-bg">
           <form class="sheet" @submit.prevent="runPriceCheck">
             <h3>Consulta de precio</h3>
             <p class="sheet-hint">Escanea o escribe el código (F4)</p>
@@ -529,7 +529,7 @@
       </Teleport>
 
       <Teleport to="body">
-        <div v-if="missingCode" class="sheet-bg" @click.self="dismissMissing">
+        <div v-if="missingCode" class="sheet-bg">
           <div class="sheet" role="dialog" aria-labelledby="missing-title">
             <h3 id="missing-title">No está en el catálogo</h3>
             <p class="sheet-hint">
@@ -544,7 +544,7 @@
 
       <!-- Descuento F9 -->
       <Teleport to="body">
-        <div v-if="showDiscount" class="sheet-bg" @click.self="showDiscount = false">
+        <div v-if="showDiscount" class="sheet-bg">
           <form class="sheet" @submit.prevent="applyDiscount">
             <h3>Descuento del ticket</h3>
             <label class="field">
@@ -558,7 +558,7 @@
       </Teleport>
 
       <Teleport to="body">
-        <div v-if="showMenuForm" class="sheet-bg" @click.self="cancelMenuForm">
+        <div v-if="showMenuForm" class="sheet-bg">
           <form class="sheet" @submit.prevent="createMenu">
             <h3>Nueva categoría</h3>
             <input v-model="menuForm.name" class="inp" placeholder="Nombre" required />
@@ -581,7 +581,7 @@
 
       <!-- Modal de pago / cobro -->
       <Teleport to="body">
-        <div v-if="showPayment" class="sheet-bg" @click.self="closePayment">
+        <div v-if="showPayment" class="sheet-bg">
           <div class="sheet pay-sheet">
             <h3>Cobrar venta</h3>
 
@@ -605,12 +605,15 @@
               <label class="field">
                 <span>Efectivo inicial</span>
                 <input
+                  ref="openingInput"
                   v-model.number="openingFloat"
+                  v-select-on-focus
                   class="inp pay-inp"
                   type="number"
                   min="0"
                   step="1"
                   inputmode="decimal"
+                  placeholder="0"
                 />
               </label>
               <p v-if="payError" class="scan-msg err">{{ payError }}</p>
@@ -639,7 +642,16 @@
               <template v-if="payMethod === 'cash'">
                 <label class="field">
                   <span>Efectivo recibido</span>
-                  <input v-model.number="payCashReceived" class="inp pay-inp" type="number" min="0" step="0.01" placeholder="0.00" />
+                  <input
+                    ref="cashReceivedInput"
+                    v-model.number="payCashReceived"
+                    v-select-on-focus
+                    class="inp pay-inp"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="0.00"
+                  />
                 </label>
                 <div v-if="payChange > 0" class="pay-change">
                   Cambio: <strong>{{ money(payChange) }}</strong>
@@ -649,14 +661,23 @@
               <template v-if="payMethod === 'split'">
                 <label class="field">
                   <span>Monto con tarjeta</span>
-                  <input v-model.number="payCardAmount" class="inp pay-inp" type="number" min="0" :max="total" step="0.01" placeholder="0.00" />
+                  <input v-model.number="payCardAmount" v-select-on-focus class="inp pay-inp" type="number" min="0" :max="total" step="0.01" placeholder="0.00" />
                 </label>
                 <div class="pay-split-info">
                   Efectivo: <strong>{{ money(payCashPortion) }}</strong>
                 </div>
                 <label class="field">
                   <span>Efectivo recibido</span>
-                  <input v-model.number="payCashReceived" class="inp pay-inp" type="number" min="0" step="0.01" placeholder="0.00" />
+                  <input
+                    ref="cashReceivedInput"
+                    v-model.number="payCashReceived"
+                    v-select-on-focus
+                    class="inp pay-inp"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="0.00"
+                  />
                 </label>
                 <div v-if="payChange > 0" class="pay-change">
                   Cambio: <strong>{{ money(payChange) }}</strong>
@@ -680,7 +701,7 @@
       </Teleport>
 
       <Teleport to="body">
-        <div v-if="showFoodForm" class="sheet-bg product-modal" @click.self="closeFoodForm">
+        <div v-if="showFoodForm" class="sheet-bg product-modal">
           <form class="sheet product-sheet" @submit.prevent="createFood">
             <div class="product-banner">
               <img
@@ -696,10 +717,7 @@
                 <p class="sheet-kicker">Catálogo</p>
                 <h3>{{ editingFood ? "Editar producto" : "Nuevo producto" }}</h3>
               </div>
-              <label class="banner-url">
-                <input v-model="foodForm.imgUrl" type="url" placeholder="Pega aquí el link de la foto" />
-              </label>
-            </div>
+                          </div>
 
             <div class="product-body">
               <label class="field wide">
@@ -771,6 +789,13 @@
                 <span>Código de barras</span>
                 <input v-model="foodForm.barcode" class="inp" placeholder="Escanea o escribe" autocomplete="off" data-scan="barcode" />
               </label>
+
+              <!-- Link de la foto: ahora arriba de Descripción -->
+              <label class="field wide">
+                <span>Foto (link)</span>
+                <input v-model="foodForm.imgUrl" class="inp" type="url" placeholder="Pega aquí el link de la foto" />
+              </label>
+
               <label class="field" :class="{ wide: !inventoryOn }">
                 <span>Descripción</span>
                 <input v-model="foodForm.description" class="inp" placeholder="Opcional" />
@@ -824,8 +849,18 @@ import {
 } from "../offlineDb";
 import { flushOfflineSales, offlineStore, queueSale } from "../offlineSync";
 
+const vSelectOnFocus = {
+  mounted(el) {
+    el.addEventListener("focus", () => {
+      // setTimeout para que funcione también en móvil/Safari
+      setTimeout(() => el.select?.(), 0);
+    });
+  },
+};
+
 export default {
   components: { AppShell, MagicPricesSheet },
+  directives: { selectOnFocus: vSelectOnFocus },
   props: {
     initialMode: { type: String, default: "pos" },
   },
@@ -847,6 +882,8 @@ export default {
 
     const scanInput = ref(null);
     const priceInput = ref(null);
+    const openingInput = ref(null);
+    const cashReceivedInput = ref(null);
     const scanCode = ref("");
     const scanError = ref("");
     const scanFlash = ref(false);
@@ -907,8 +944,8 @@ export default {
     // Estado del modal de pago
     const showPayment = ref(false);
     const payMethod = ref("cash"); // 'cash' | 'card' | 'split'
-    const payCashReceived = ref(0);
-    const payCardAmount = ref(0);
+    const payCashReceived = ref("");
+    const payCardAmount = ref("");
     const payError = ref("");
     const payChange = computed(() => {
       if (payMethod.value === "card") return 0;
@@ -928,12 +965,21 @@ export default {
     const cashSession = ref(null);
     const cashOpenWarning = ref(false);
     const cashOpen = computed(() => Boolean(cashSession.value));
-    const openingFloat = ref(0);
+    const openingFloat = ref("");
     const cashBusy = ref(false);
     const lastTicketId = ref("");
     const lastTicketOffline = ref(false);
     const cashBlocked = computed(() => cashOpenWarning.value);
     const BLOCK_MSG = "Caja abierta más de 12 horas. Realiza el corte de caja para continuar.";
+
+    // Enfoca el campo correcto del modal de pago
+    function focusPayField() {
+      nextTick(() => {
+        if (!showPayment.value) return;
+        if (!cashOpen.value) openingInput.value?.focus();
+        else if (payMethod.value !== "card") cashReceivedInput.value?.focus();
+      });
+    }
 
     async function loadCashSession() {
       try {
@@ -974,6 +1020,7 @@ export default {
       try {
         await apiService.openCashSession(Number(openingFloat.value || 0));
         await loadCashSession();
+        focusPayField();
       } catch (e) {
         payError.value = isNetworkError(e)
           ? "Necesitas internet para abrir la caja la primera vez."
@@ -1359,7 +1406,8 @@ export default {
         }
       }, 220);
     });
-      watch(cashBlocked, (blocked) => {
+
+    watch(cashBlocked, (blocked) => {
       if (!blocked) {
         if (scanError.value === BLOCK_MSG) scanError.value = "";
         if (payError.value === BLOCK_MSG) payError.value = "";
@@ -1370,6 +1418,11 @@ export default {
         nameHits.value = [];
         scanInput.value?.blur();
       }
+    });
+
+    // Al cambiar el método de pago, enfoca el campo de efectivo
+    watch(payMethod, () => {
+      if (showPayment.value && cashOpen.value) focusPayField();
     });
 
     function bumpQty(i, delta) {
@@ -1456,7 +1509,7 @@ export default {
       }, 280);
     });
 
-    function finalizeOrder() {
+    async function finalizeOrder() {
       if (cashBlocked.value) {
         scanError.value = BLOCK_MSG;
         showMobileCart.value = false;
@@ -1464,13 +1517,16 @@ export default {
       }
       if (!lines.value.length || sending.value) return;
       payMethod.value = "cash";
-      payCashReceived.value = 0;
-      payCardAmount.value = 0;
+      payCashReceived.value = "";
+      payCardAmount.value = "";
       payError.value = "";
-      openingFloat.value = 0;
+      openingFloat.value = "";
       showMobileCart.value = false;
       showPayment.value = true;
-      loadCashSession();
+      focusPayField();
+      const wasOpen = cashOpen.value;
+      await loadCashSession();
+      if (cashOpen.value !== wasOpen) focusPayField();
     }
 
     function payFromMobileCart() {
@@ -1981,7 +2037,8 @@ export default {
     watch(showPriceCheck, (v) => {
       if (v) nextTick(() => priceInput.value?.focus());
     });
-      function onWindowFocus() {
+
+    function onWindowFocus() {
       loadCashSession();
       focusScan();
     }
@@ -2023,6 +2080,8 @@ export default {
       businessName,
       scanInput,
       priceInput,
+      openingInput,
+      cashReceivedInput,
       scanCode,
       scanError,
       scanFlash,
@@ -2758,6 +2817,7 @@ a.seg {
   line-height: 1.2;
   display: -webkit-box;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -2852,12 +2912,16 @@ a.seg {
   color: #fff;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
 }
-.product-banner .sheet-x {
+.product-sheet .product-banner .sheet-x {
   position: absolute;
   top: 0.65rem;
   right: 0.65rem;
   z-index: 2;
-  background: rgba(255, 255, 255, 0.94);
+  display: grid;
+  place-items: center;
+  background: var(--timber-surface);
+  color: var(--timber-ink);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
 }
 .banner-url {
   position: absolute;
@@ -3052,9 +3116,9 @@ a.seg {
 
 /* Aviso de caja abierta mucho tiempo */
 .cash-warning-banner {
-  background: var(--timber-warning-soft, #fff3cd);
-  color: var(--timber-warning, #856404);
-  border: 1px solid var(--timber-warning, #ffc107);
+background: color-mix(in srgb, var(--timber-warning) 14%, var(--timber-panel));
+  color: var(--timber-ink);
+  border: 1px solid color-mix(in srgb, var(--timber-warning) 40%, var(--timber-line));
   border-radius: 0.65rem;
   padding: 0.65rem 0.85rem;
   margin: 0.35rem 0.5rem;
@@ -3166,7 +3230,7 @@ a.seg {
   font-weight: 800;
   color: var(--timber-success);
   padding: 0.45rem;
-  background: var(--timber-success-soft, #d4edda);
+  background: color-mix(in srgb, var(--timber-success) 14%, var(--timber-panel));
   border-radius: 0.65rem;
 }
 .pay-split-info {
@@ -3647,7 +3711,7 @@ a.seg {
   color: var(--timber-ink);
 }
 .low-stock-icon { font-size: 1.3rem; flex-shrink: 0; }
-.low-stock-body { display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; flex: 1; }
+.low-stock-body { display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; }
 .low-stock-body strong { font-size: 0.82rem; color: var(--timber-warning); }
 .low-stock-list {
   font-size: 0.8rem;

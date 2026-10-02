@@ -68,7 +68,7 @@
 
       <p v-if="!mesas.length" class="empty">Aún no hay mesas. Toca “+ Mesa” para empezar.</p>
 
-      <div v-if="modalActivo" class="sheet-bg" @click.self="cerrarMesa">
+      <div v-if="modalActivo" class="sheet-bg">
         <div class="sheet">
           <div class="sheet-handle"></div>
           <h2>{{ mesaSeleccionada?.nombre }}</h2>
@@ -101,7 +101,7 @@
         </div>
       </div>
 
-      <div v-if="modalAgregarMesa" class="sheet-bg" @click.self="cerrarModalAgregarMesa">
+      <div v-if="modalAgregarMesa" class="sheet-bg" >
         <div class="sheet">
           <div class="sheet-handle"></div>
           <h2>Nueva mesa</h2>
