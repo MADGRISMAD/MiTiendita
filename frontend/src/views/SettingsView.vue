@@ -91,7 +91,7 @@
                   <div class="adm-row2">
                     <label class="adm-field">
                       <span>Teléfono <em>(opcional)</em></span>
-                      <input v-model="form.phone" class="adm-inp" type="tel" inputmode="tel" maxlength="30" placeholder="222 123 4567" />
+                      <input v-model="form.phone" class="adm-inp" type="tel" inputmode="tel" maxlength="30" placeholder="222 123 4567" @blur="form.phone = prettyPhone(form.phone)" />
                     </label>
                     <label class="adm-field">
                       <span>Zona horaria</span>
@@ -360,6 +360,7 @@ import { currentVenueSettings, fetchVenueSettings, saveVenueSettings, venueStore
 import { themeStore, applyUiTheme } from "../themeStore";
 import { authStore, clearSession } from "../authStore";
 import { closingLine } from "../ticketShell";
+import { prettyPhone } from "../phone";
 
 const SECTIONS = {
   negocio: { label: "Mi negocio", icon: "store", desc: "Nombre, giro, dirección y logo", lead: "Así te ven tus clientes en el ticket y en la app.", tone: "info" },

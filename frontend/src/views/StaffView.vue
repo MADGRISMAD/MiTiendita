@@ -245,16 +245,15 @@
             <label class="adm-field">
               <span>Celular</span>
               <input
-                v-model="personForm.cellphone"
+                :value="formatMxPhone(personForm.cellphone)"
                 class="adm-inp"
                 type="tel"
                 inputmode="numeric"
-                maxlength="10"
-                pattern="\d{10}"
-                title="10 dígitos"
+                autocomplete="off"
                 required
                 :disabled="Boolean(editingPhone)"
-                placeholder="10 dígitos"
+                placeholder="55 1234 5678"
+                @input="onCell"
               />
             </label>
             <div class="adm-field">
@@ -306,6 +305,7 @@ import "../admin.css";
 import AppShell from "../components/AppShell.vue";
 import PosIcon from "../components/PosIcon.js";
 import { apiService } from "../apiService";
+import { formatMxPhone, phoneDigits, prettyPhone } from "../phone";
 
 const ROLE = {
   admin: { label: "Admin", tone: "info", can: "Todo: productos, precios, reportes, ajustes y equipo." },
@@ -377,9 +377,9 @@ function hueStyle(name) {
   for (const ch of String(name || "")) h = (h * 31 + ch.charCodeAt(0)) % 360;
   return { "--h": h };
 }
-function prettyPhone(p) {
-  const d = String(p || "").replace(/\D/g, "");
-  return d.length === 10 ? `${d.slice(0, 3)} ${d.slice(3, 6)} ${d.slice(6)}` : p;
+function onCell(e) {
+  personForm.cellphone = phoneDigits(e.target.value);
+  e.target.value = formatMxPhone(personForm.cellphone);
 }
 function waLink(p) {
   const d = String(p || "").replace(/\D/g, "");
@@ -528,7 +528,7 @@ async function savePerson() {
     workSchedule: personForm.workSchedule,
     status: personForm.status,
   };
-  const phone = String(personForm.cellphone).replace(/\D/g, "");
+  const phone = phoneDigits(personForm.cellphone);
   if (!editingPhone.value && phone.length !== 10) {
     personErr.value = "El celular lleva 10 dígitos.";
     return;

@@ -64,7 +64,7 @@
               class="auth-input"
               type="tel"
               inputmode="numeric"
-              placeholder="(664) 123-4567"
+              placeholder="55 1234 5678"
               autocomplete="tel-national"
               :aria-invalid="Boolean(shown.phone)"
               aria-describedby="reg-phone-err"
@@ -195,6 +195,7 @@ import { fetchVenueSettings } from "../venueStore";
 import AuthLayout from "../components/AuthLayout.vue";
 import PosIcon from "../components/PosIcon.js";
 import { isNetworkError } from "../net";
+import { formatMxPhone, phoneDigits } from "../phone";
 import "../auth.css";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -233,10 +234,7 @@ export default {
   },
   computed: {
     phoneDisplay() {
-      const d = this.phone;
-      if (d.length <= 3) return d;
-      if (d.length <= 6) return `(${d.slice(0, 3)}) ${d.slice(3)}`;
-      return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`;
+      return formatMxPhone(this.phone);
     },
     errors() {
       const e = {};
@@ -298,10 +296,8 @@ export default {
       e.target.value = this.username;
     },
     onPhone(e) {
-      // Solo dígitos; acepta pegar "+52 664 123 4567"
-      let digits = String(e.target.value || "").replace(/\D/g, "");
-      if (digits.length > 10 && digits.startsWith("52")) digits = digits.slice(2);
-      this.phone = digits.slice(0, 10);
+      // Se guardan solo los 10 dígitos; acepta pegar "+52 1 55 1234 5678"
+      this.phone = phoneDigits(e.target.value);
       e.target.value = this.phoneDisplay;
     },
     focusFirstError() {
