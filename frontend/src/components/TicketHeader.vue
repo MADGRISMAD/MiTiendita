@@ -24,10 +24,15 @@ import { computed } from "vue";
 import { venueStore } from "../venueStore";
 import { BUSINESS_TYPE_LABEL } from "../ticketShell";
 
-const name = computed(() => venueStore.businessName || "Mi Tiendita");
-const kind = computed(() => BUSINESS_TYPE_LABEL[venueStore.businessType] || BUSINESS_TYPE_LABEL.abarrotes);
-const address = computed(() => venueStore.address || "");
-const phone = computed(() => venueStore.phone || "");
+// Sin props usa los datos guardados; con props sirve de vista previa (Configuración)
+const props = defineProps({
+  preview: { type: Object, default: null },
+});
+const src = computed(() => props.preview || venueStore);
+const name = computed(() => src.value.businessName || "Mi Tiendita");
+const kind = computed(() => BUSINESS_TYPE_LABEL[src.value.businessType] || BUSINESS_TYPE_LABEL.abarrotes);
+const address = computed(() => src.value.address || "");
+const phone = computed(() => src.value.phone || "");
 </script>
 
 <style scoped>
