@@ -503,6 +503,11 @@
 
           <!-- ======= Soporte ======= -->
           <template v-else-if="section === 'soporte'">
+            <section class="adm-card cfg-card">
+              <h3>Ayuda por WhatsApp</h3>
+              <p class="adm-hint">La forma más rápida. El mensaje ya lleva el nombre de tu tienda y tu plan para atenderte sin preguntas.</p>
+              <WhatsAppHelp />
+            </section>
             <form class="adm-card cfg-card" @submit.prevent="sendSupport">
               <h3>Escríbenos</h3>
               <p class="adm-hint">
@@ -570,6 +575,7 @@ import "../ticket.css";
 import AppShell from "../components/AppShell.vue";
 import PosIcon from "../components/PosIcon.js";
 import TicketHeader from "../components/TicketHeader.vue";
+import WhatsAppHelp from "../components/WhatsAppHelp.vue";
 import { apiService } from "../apiService";
 import { currentVenueSettings, fetchVenueSettings, saveVenueSettings, venueStore } from "../venueStore";
 import { themeStore, applyUiTheme } from "../themeStore";

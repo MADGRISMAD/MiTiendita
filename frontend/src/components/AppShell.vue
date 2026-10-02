@@ -79,6 +79,7 @@
           >
             {{ item.label }}
           </router-link>
+          <WhatsAppHelp compact class="more-wa" @open="moreOpen = false" />
           <button type="button" class="more-link danger hide-pc" @click="logout">
             Cerrar sesión
           </button>
@@ -123,6 +124,7 @@ import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { venueStore } from "../venueStore";
 import BrandName from "./BrandName.vue";
+import WhatsAppHelp from "./WhatsAppHelp.vue";
 import { themeStore, toggleUiTheme } from "../themeStore";
 import { clearSession, canAccessRoute, hasRole, isPlatformAdmin, isPlatformStaff } from "../authStore";
 import { apiService } from "../apiService";
@@ -297,6 +299,9 @@ onUnmounted(() => clearInterval(timer));
 </script>
 
 <style scoped>
+.more-wa {
+  margin: 0.4rem 0;
+}
 .pos-shell {
   position: fixed;
   inset: 0;
