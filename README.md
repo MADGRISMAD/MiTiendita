@@ -30,11 +30,35 @@ Pensada para abarrotes, farmacia y ferretería. A la izquierda el buscador y el 
 - **Cantidad**: `3*` antes del código agrega 3 piezas; **F3** (o tocar la cantidad) acepta decimales para kilos o metros; `+` / `−` suman o quitan una pieza.
 - **Artículo varios** (**Ins**): cobra algo sin código o que aún no está en el catálogo; no toca el inventario.
 - **En espera** (**F6**): aparta el ticket para atender a otro cliente y retómalo después. Se guarda en ese equipo.
-- **Cobrar** (**F12**): efectivo con billetes sugeridos y cambio, tarjeta, transferencia o mixto. Enter o F12 confirman.
+- **Cobrar** (**F12**): efectivo con billetes sugeridos y cambio, tarjeta, transferencia (con folio SPEI opcional), mixto u otro. Enter o F12 confirman.
 - Otros atajos: **F2** quitar renglón, **F4** consultar precio, **F9** descuento, **Esc** cerrar o limpiar la búsqueda.
 
 ### Sin internet
 La caja sigue cobrando sin conexión: las ventas se guardan en el dispositivo y se suben solas al volver la red, sin duplicarse. Las que el servidor rechace quedan en Caja → «Ventas de este dispositivo sin subir». Cómo funciona y cómo probarlo: [docs/modo-sin-internet.md](docs/modo-sin-internet.md).
+
+### Impresora térmica
+En **Configuración → Impresora** cada caja elige cómo sale el ticket (se guarda en ese dispositivo):
+
+| Modo | Para qué | Navegador |
+|---|---|---|
+| Navegador (actual) | Cualquier impresora, con el diálogo de imprimir | Todos |
+| Térmica USB | ESC/POS por WebUSB, sin diálogo | Chrome/Edge en PC; Chrome Android con cable OTG |
+| Térmica USB (puerto COM) | Impresoras que Windows instala como puerto COM (Web Serial) | Chrome/Edge en PC |
+| Térmica Bluetooth | Impresoras Bluetooth LE (Web Bluetooth) | Chrome en Android y PC |
+
+- **Elegir impresora** pide el permiso del navegador una vez; después el ticket sale solo al cobrar, con los mismos datos que el ticket en pantalla (incluido el QR para facturar). **Imprimir prueba** confirma acentos, ancho (58 u 80 mm) y QR.
+- **Abrir el cajón al cobrar en efectivo** manda el pulso ESC/POS al cajón conectado a la impresora.
+- Si la impresora no responde (8 s), Vender muestra el error con **Reintentar** e **Imprimir con el navegador**; la venta ya quedó registrada.
+- **Windows + USB:** el driver de impresora de Windows no deja que Chrome use el puerto. Si «Térmica USB» no la encuentra o no tiene permiso, usa el modo «puerto COM» (si la impresora trae driver de puerto virtual) o cambia el driver a WinUSB con [Zadig](https://zadig.akeo.ie/).
+- **Bluetooth clásico (SPP):** las impresoras que solo tienen Bluetooth clásico no funcionan con Web Bluetooth; usa una con Bluetooth LE (BLE) o el modo Navegador.
+- Comandos ESC/POS en `frontend/src/escpos.js`; conexión en `frontend/src/thermalPrinter.js`.
+
+Modelos probados (ir llenando al probar en tienda; formato: modelo · conexión · sistema y navegador · resultado):
+
+| Modelo | Conexión | Sistema / navegador | Resultado |
+|---|---|---|---|
+| _pendiente_ | USB ESC/POS genérica 80 mm | Windows · Chrome | _por probar_ |
+| _pendiente_ | Bluetooth 80 mm | Android · Chrome | _por probar_ |
 
 ## Configuración inicial
 Tras registrarte, el wizard pide nombre de tienda, tipo (abarrotes / conveniencia / farmacia / ferretería) y logo. Puedes cargar 8 productos de ejemplo para cobrar el mismo día. Términos: `/terminos` · Privacidad: `/privacidad`.

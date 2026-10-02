@@ -287,6 +287,71 @@
             </router-link>
           </template>
 
+          <!-- ======= Impresora ======= -->
+          <template v-else-if="section === 'impresora'">
+            <section class="adm-card cfg-card">
+              <h3>Cómo sale el ticket</h3>
+              <p class="adm-hint">Se guarda solo en este dispositivo: cada caja elige su impresora. No necesita «Guardar cambios».</p>
+              <div class="adm-choices printer-modes">
+                <button
+                  v-for="m in PRINTER_MODES"
+                  :key="m.id"
+                  type="button"
+                  class="adm-choice"
+                  :aria-pressed="printerStore.mode === m.id"
+                  :disabled="m.id !== 'browser' && !printerSupport()[m.id]"
+                  @click="setPrinterMode(m.id)"
+                >
+                  <strong>{{ m.label }}</strong>
+                  <small>{{ m.id !== 'browser' && !printerSupport()[m.id] ? 'Este navegador no lo permite. Usa Chrome o Edge.' : m.hint }}</small>
+                </button>
+              </div>
+            </section>
+            <section v-if="printerStore.mode !== 'browser'" class="adm-card cfg-card">
+              <h3>Impresora térmica</h3>
+              <p class="state-line" :class="printerStore.connected ? 'on' : 'off'">
+                <i></i>{{ printerStore.connected ? `Conectada: ${printerStore.deviceName}` : printerStore.deviceName ? `Elegida: ${printerStore.deviceName} (se conecta al imprimir)` : 'Sin impresora elegida' }}
+              </p>
+              <div class="adm-choices">
+                <button type="button" class="adm-choice" :aria-pressed="printerStore.paper === '80'" @click="savePrinterSettings({ paper: '80' })">
+                  <strong>Papel 80 mm</strong><small>48 letras por renglón</small>
+                </button>
+                <button type="button" class="adm-choice" :aria-pressed="printerStore.paper === '58'" @click="savePrinterSettings({ paper: '58' })">
+                  <strong>Papel 58 mm</strong><small>32 letras por renglón</small>
+                </button>
+              </div>
+              <label v-if="printerStore.mode === 'serial'" class="adm-field">
+                <span>Velocidad del puerto</span>
+                <select class="adm-inp" :value="printerStore.baudRate" @change="savePrinterSettings({ baudRate: Number($event.target.value) })">
+                  <option v-for="b in [9600, 19200, 38400, 115200]" :key="b" :value="b">{{ b }}</option>
+                </select>
+              </label>
+              <div class="switch-head">
+                <div>
+                  <h3>Abrir el cajón al cobrar en efectivo</h3>
+                  <p class="adm-hint">Manda el pulso al cajón conectado a la impresora (conector RJ11).</p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  class="adm-switch"
+                  :aria-checked="printerStore.drawer"
+                  aria-label="Abrir el cajón al cobrar en efectivo"
+                  @click="savePrinterSettings({ drawer: !printerStore.drawer })"
+                ></button>
+              </div>
+              <div class="printer-acts">
+                <button type="button" class="adm-btn" :disabled="printerStore.busy" @click="choosePrinter">
+                  <PosIcon name="printer" :size="17" /> {{ printerStore.deviceName ? 'Cambiar impresora' : 'Elegir impresora' }}
+                </button>
+                <button type="button" class="adm-btn primary" :disabled="printerStore.busy" @click="testPrint">
+                  {{ printerStore.busy ? 'Imprimiendo…' : 'Imprimir prueba' }}
+                </button>
+              </div>
+              <p v-if="printerErr" class="adm-banner warn">{{ printerErr }}</p>
+            </section>
+          </template>
+
           <!-- ======= Apariencia ======= -->
           <template v-else-if="section === 'apariencia'">
             <section class="adm-card cfg-card">
@@ -428,11 +493,43 @@ import { themeStore, applyUiTheme } from "../themeStore";
 import { authStore, clearSession } from "../authStore";
 import { closingLine } from "../ticketShell";
 import { prettyPhone } from "../phone";
+import { printerStore, printerSupport, printTestPage, savePrinterSettings, connectPrinter } from "../thermalPrinter";
+
+const PRINTER_MODES = [
+  { id: "browser", label: "Navegador (actual)", hint: "Abre el ticket y el diálogo de imprimir de Chrome. Sirve con cualquier impresora." },
+  { id: "usb", label: "Térmica USB", hint: "Sale directo, sin diálogo. Chrome en PC o Android (con cable OTG)." },
+  { id: "serial", label: "Térmica USB (puerto COM)", hint: "Para impresoras que Windows muestra como puerto COM. Chrome o Edge en PC." },
+  { id: "bluetooth", label: "Térmica Bluetooth", hint: "Sale directo, sin diálogo. Chrome en Android o PC con Bluetooth." },
+];
+const printerErr = ref("");
+function setPrinterMode(mode) {
+  printerErr.value = "";
+  savePrinterSettings({ mode, deviceName: mode === printerStore.mode ? printerStore.deviceName : "" });
+}
+async function choosePrinter() {
+  printerErr.value = "";
+  try {
+    await connectPrinter({ prompt: true });
+    say(`Impresora lista: ${printerStore.deviceName}`);
+  } catch (e) {
+    printerErr.value = e.message;
+  }
+}
+async function testPrint() {
+  printerErr.value = "";
+  try {
+    await printTestPage({ prompt: !printerStore.deviceName });
+    say("Prueba enviada a la impresora.");
+  } catch (e) {
+    printerErr.value = e.message;
+  }
+}
 
 const SECTIONS = {
   negocio: { label: "Mi negocio", icon: "store", desc: "Nombre, giro, dirección y logo", lead: "Así te ven tus clientes en el ticket y en la app.", tone: "info" },
   ventas: { label: "Ventas e IVA", icon: "percent", desc: "IVA y comisión por tarjeta", lead: "El impuesto de tus ventas y la comisión al pagar con tarjeta.", tone: "good" },
   inventario: { label: "Inventario", icon: "box", desc: "Existencias y costo de compras", lead: "Cómo se mueven tus existencias y tus costos.", tone: "warn" },
+  impresora: { label: "Impresora", icon: "printer", desc: "Ticket directo en térmica y cajón", lead: "Cómo sale el ticket en esta caja.", tone: "info" },
   apariencia: { label: "Apariencia", icon: "sun", desc: "Tema claro u oscuro", lead: "Cómo se ve la app en este dispositivo.", tone: "" },
   cuenta: { label: "Mi cuenta", icon: "lock", desc: "Contraseña y sesión", lead: "Tus datos de acceso.", tone: "" },
   soporte: { label: "Soporte", icon: "chat", desc: "Escríbenos y ve las respuestas", lead: "Estamos para ayudarte.", tone: "info" },
@@ -446,7 +543,7 @@ const NAV = [
       { id: "billing", to: "/billing", label: "Plan y facturación", icon: "card", desc: "Tu suscripción y pagos", tone: "warn" },
     ],
   },
-  { title: "Esta app", items: ["apariencia", "cuenta", "soporte"].map((id) => ({ id, ...SECTIONS[id] })) },
+  { title: "Esta app", items: ["impresora", "apariencia", "cuenta", "soporte"].map((id) => ({ id, ...SECTIONS[id] })) },
 ];
 const KINDS = [
   { id: "abarrotes", label: "Abarrotes", hint: "Minisúper, tiendita" },
@@ -994,6 +1091,8 @@ onBeforeUnmount(() => {
 .state-line.on { color: var(--timber-success); }
 .state-line.on i { background: var(--timber-success); box-shadow: 0 0 0 3px var(--timber-success-soft); }
 .state-line.off { color: var(--timber-muted); }
+.printer-modes { grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); }
+.printer-acts { display: flex; flex-wrap: wrap; gap: 0.6rem; }
 
 /* Apariencia */
 .themes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.65rem; max-width: 30rem; }

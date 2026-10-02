@@ -6,6 +6,7 @@ on:
       - "backend/**"
       - "frontend/src/tax.ts"
       - "frontend/src/storeTime.js"
+      - "frontend/src/escpos.js"
       - "package.json"
       - "package-lock.json"
     branches:
@@ -15,6 +16,7 @@ on:
       - "backend/**"
       - "frontend/src/tax.ts"
       - "frontend/src/storeTime.js"
+      - "frontend/src/escpos.js"
       - "package.json"
       - "package-lock.json"
     branches:
