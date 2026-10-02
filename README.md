@@ -28,7 +28,10 @@ Pensada para abarrotes, farmacia y ferretería. A la izquierda el buscador y el 
 
 - **Buscar**: por nombre, código o descripción, sin acentos y con varias palabras (`para 500` encuentra *Paracetamol 500 mg*). ↑ ↓ eligen y Enter agrega.
 - **Cantidad**: `3*` antes del código agrega 3 piezas; **F3** (o tocar la cantidad) acepta decimales para kilos o metros; `+` / `−` suman o quitan una pieza.
-- **A granel** (kg, g, litros): al dar de alta el producto elige su *Unidad de venta*. Al agregarlo se abre un teclado para capturar el peso **o** el importe en pesos (calcula el peso); la línea y el ticket dicen «0.750 kg × $180.00/kg». Las etiquetas de báscula (EAN-13 que empieza con 20–29) se leen solas: configura en *Ventas e IVA* si traen peso o importe y usa la clave de la báscula como código del producto.
+- **A granel** (kg, g, litros): al dar de alta el producto elige *¿Cómo se vende?* → «Por kilo» y pon el precio por kilo (ej. Tomate a $28.00/kg). Si buscas algo que no existe, «Registrar a granel (por kilo)» lo da de alta así. La línea y el ticket dicen «0.750 kg × $28.00/kg».
+  - **Con báscula conectada** (Configuración → Báscula; Chrome o Edge en PC, báscula por USB o puerto serie): eliges el producto, la pantalla avisa «Pon el tomate en la báscula», muestra el peso en vivo y, cuando el peso se queda quieto **2 segundos**, pita y lo agrega solo. Lo que ya estaba encima de la báscula al elegir el producto no se cobra hasta que lo cambien o lo retiren.
+  - **Sin báscula**: se escribe el peso **o** el importe en pesos (calcula el peso).
+  - Las etiquetas de báscula (EAN-13 que empieza con 20–29) se leen solas: configura en *Ventas e IVA* si traen peso o importe y usa la clave de la báscula como código del producto.
 - **Artículo varios** (**Ins**): cobra algo sin código o que aún no está en el catálogo; no toca el inventario.
 - **En espera** (**F6**): aparta el ticket para atender a otro cliente y retómalo después. Se guarda en ese equipo.
 - **Cobrar** (**F12**): efectivo con billetes sugeridos y cambio, tarjeta, transferencia (con folio SPEI opcional), mixto u otro. Enter o F12 confirman.
@@ -53,6 +56,10 @@ En **Configuración → Impresora** cada caja elige cómo sale el ticket (se gua
 - **Windows + USB:** el driver de impresora de Windows no deja que Chrome use el puerto. Si «Térmica USB» no la encuentra o no tiene permiso, usa el modo «puerto COM» (si la impresora trae driver de puerto virtual) o cambia el driver a WinUSB con [Zadig](https://zadig.akeo.ie/).
 - **Bluetooth clásico (SPP):** las impresoras que solo tienen Bluetooth clásico no funcionan con Web Bluetooth; usa una con Bluetooth LE (BLE) o el modo Navegador.
 - Comandos ESC/POS en `frontend/src/escpos.js`; conexión en `frontend/src/thermalPrinter.js`.
+
+### Báscula
+En **Configuración → Báscula** se conecta la báscula de la caja (Web Serial: Chrome/Edge en PC). Se elige cómo manda el peso (continuo, o pedirlo con «P», «W» o ENQ), la velocidad del puerto (9600 casi siempre) y en qué unidad viene si no la dice. Ahí mismo se ve el peso en vivo para probar. Lectura en `frontend/src/scale.js`; la regla de los 2 segundos en `frontend/src/bulk.js` (`createStableWeigh`).
+- Si la impresora (modo puerto COM) y la báscula usan el mismo adaptador USB-serie (mismo fabricante y modelo), el navegador no las distingue: conecta una por USB directo o usa otro adaptador.
 
 Modelos probados (ir llenando al probar en tienda; formato: modelo · conexión · sistema y navegador · resultado):
 

@@ -137,8 +137,11 @@
                   <button type="button" class="soft-btn" :disabled="cashBlocked" @click="openMisc(debouncedTerm)">
                     Vender como artículo varios
                   </button>
-                  <button type="button" class="soft-btn" :disabled="cashBlocked" @click="registerFromSearch">
+                  <button type="button" class="soft-btn" :disabled="cashBlocked" @click="registerFromSearch()">
                     Registrar producto nuevo
+                  </button>
+                  <button type="button" class="soft-btn" :disabled="cashBlocked" @click="registerFromSearch('kg')">
+                    Registrar a granel (por kilo)
                   </button>
                 </div>
               </div>
@@ -858,6 +861,21 @@
               </div>
               <button type="button" class="dlg-x" aria-label="Cerrar" @click="closeWeigh"><PosIcon name="x" /></button>
             </header>
+            <div
+              v-if="weighByScale"
+              class="scale-panel"
+              :class="[scaleRead.state, { mute: !scaleHasData, clear: scaleRead.waitingClear }]"
+              role="status"
+              aria-live="polite"
+            >
+              <p class="scale-hint">{{ weighHint }}</p>
+              <strong class="scale-kg">{{ scaleHasData ? formatQtyUnit(weighQty, weighUnit) : '— — —' }}</strong>
+              <span class="scale-amount">{{ scaleHasData && weighQty > 0 ? money(weighAmount) : '' }}</span>
+              <div class="scale-bar" aria-hidden="true">
+                <i :style="{ width: `${Math.min(100, (scaleRead.heldMs / 2000) * 100)}%` }"></i>
+              </div>
+              <small>Se agrega solo cuando el peso se queda quieto 2 segundos. O escribe el peso o el importe abajo.</small>
+            </div>
             <div class="methods two" role="radiogroup" aria-label="Capturar por">
               <label class="method" :class="{ on: weighMode === 'qty' }">
                 <input v-model="weighMode" type="radio" name="weigh-mode" value="qty" @change="resetWeighDraft" />
@@ -1247,19 +1265,25 @@
                   />
                 </label>
                 <label class="field">
-                  <span>Precio<span class="hide-mobile"> de venta</span>{{ foodForm.saleUnit !== 'pz' ? ` por ${foodForm.saleUnit}` : '' }}</span>
+                  <span>{{ foodForm.saleUnit !== 'pz' ? `Precio por ${SALE_UNITS[foodForm.saleUnit].label.toLowerCase()}` : 'Precio' }}<span v-if="foodForm.saleUnit === 'pz'" class="hide-mobile"> de venta</span></span>
                   <input v-model.number="foodForm.price" class="inp num strong" type="number" min="0" step="0.01" required />
                 </label>
               </div>
 
-              <label class="field wide">
-                <span>Unidad de venta</span>
-                <select v-model="foodForm.saleUnit" class="inp">
-                  <option v-for="(u, id) in SALE_UNITS" :key="id" :value="id">
-                    {{ u.label }}{{ id === 'pz' ? '' : ` (${u.short}) · a granel: pide peso o importe al venderlo` }}
-                  </option>
-                </select>
-              </label>
+              <div class="field wide">
+                <span>¿Cómo se vende?</span>
+                <div class="unit-picks" role="radiogroup" aria-label="Unidad de venta">
+                  <label v-for="(u, id) in SALE_UNITS" :key="id" class="unit-pick" :class="{ on: foodForm.saleUnit === id }">
+                    <input v-model="foodForm.saleUnit" type="radio" name="sale-unit" :value="id" />
+                    <strong>{{ id === 'pz' ? 'Por pieza' : `Por ${u.label.toLowerCase()}` }}</strong>
+                    <small>{{ id === 'pz' ? 'Coca, jabón, galletas' : id === 'kg' ? 'Tomate, queso, frijol' : id === 'g' ? 'Especias, chiles secos' : 'Leche, aceite a granel' }}</small>
+                  </label>
+                </div>
+                <small v-if="foodForm.saleUnit !== 'pz'" class="unit-help">
+                  El precio es por {{ SALE_UNITS[foodForm.saleUnit].label.toLowerCase() }}. Al venderlo se pesa en la báscula o se escribe el
+                  peso o el importe.
+                </small>
+              </div>
 
               <div class="iva-choice wide">
                 <p class="iva-q">¿Este precio ya incluye IVA?</p>
@@ -1351,8 +1375,10 @@ import { venueStore, fetchVenueSettings } from "../venueStore";
 import { billingStore } from "../billingStore";
 import { cardFeeRateOf, cartTotals, lineBreakdown, rateOf } from "../tax";
 import { storeClock } from "../storeTime";
+import { connectScale, scaleLive, scaleStore, weighBeep } from "../scale";
 import {
   SALE_UNITS,
+  createStableWeigh,
   formatQtyUnit,
   isBulk,
   parseScaleBarcode,
@@ -2396,10 +2422,78 @@ export default {
     const weighErr = ref("");
     const weighInput = ref(null);
     const weighUnit = computed(() => unitOf(weighItem.value));
+
+    // Báscula conectada: el peso se toma solo cuando se queda quieto 2 s
+    const SCALE_HOLD_MS = 2000;
+    const scaleRead = ref({ state: "empty", kg: 0, heldMs: 0, waitingClear: false });
+    const scaleNow = ref(Date.now());
+    let scaleDetector = null;
+    let scaleTimer = null;
+    /** El diálogo está pesando con la báscula (no escribiendo a mano). */
+    const weighByScale = computed(
+      () =>
+        showWeigh.value &&
+        scaleStore.enabled &&
+        scaleStore.connected &&
+        (weighUnit.value === "kg" || weighUnit.value === "g") &&
+        weighMode.value === "qty" &&
+        !String(weighDraft.value || "").trim()
+    );
+    const scaleHasData = computed(() => scaleNow.value && scaleLive(scaleNow.value));
+    function scaleQtyOf(kg) {
+      return weighUnit.value === "g" ? Math.round((Number(kg) || 0) * 1000) : roundQty(kg, "kg");
+    }
+    const weighHint = computed(() => {
+      if (!scaleHasData.value) return "La báscula no manda peso. Revisa el cable o escribe el peso abajo.";
+      const r = scaleRead.value;
+      if (r.waitingClear) return "Retira lo que hay en la báscula.";
+      if (r.state === "empty") return `Pon ${weighItem.value?.name || "el producto"} en la báscula`;
+      if (r.state === "stable") return "¡Listo!";
+      return "Pesando… no lo muevas";
+    });
+    function stopScaleWatch() {
+      clearInterval(scaleTimer);
+      scaleTimer = null;
+      scaleDetector = null;
+    }
+    function startScaleWatch() {
+      stopScaleWatch();
+      if (!scaleStore.enabled) return;
+      if (!scaleStore.connected) connectScale().catch(() => {});
+      // Lo que ya estaba encima al abrir no cuenta: hay que cambiarlo o retirarlo
+      const baseline = scaleLive() ? Number(scaleStore.kg) || 0 : 0;
+      scaleDetector = createStableWeigh({ holdMs: SCALE_HOLD_MS, baselineKg: baseline });
+      scaleRead.value = { state: "empty", kg: baseline, heldMs: 0, waitingClear: baseline >= 0.01 };
+      scaleTimer = setInterval(() => {
+        const now = Date.now();
+        scaleNow.value = now;
+        if (!weighByScale.value || !scaleDetector) return;
+        if (!scaleLive(now)) {
+          scaleRead.value = { state: "empty", kg: 0, heldMs: 0, waitingClear: false };
+          return;
+        }
+        const r = scaleDetector.feed(Number(scaleStore.kg), now);
+        scaleRead.value = r;
+        if (r.state === "stable") {
+          const q = scaleQtyOf(r.kg);
+          if (q > 0) {
+            weighBeep();
+            stopScaleWatch();
+            const p = weighItem.value;
+            showWeigh.value = false;
+            weighItem.value = null;
+            addProduct(p, q, { weighed: true });
+          }
+        }
+      }, 150);
+    }
+
     const weighQty = computed(() => {
       const p = weighItem.value;
+      if (!p) return 0;
+      if (weighByScale.value) return scaleHasData.value ? Math.max(0, scaleQtyOf(scaleRead.value.kg)) : 0;
       const v = Number(String(weighDraft.value || "").replace(",", ".")) || 0;
-      if (!p || v <= 0) return 0;
+      if (v <= 0) return 0;
       return weighMode.value === "amount" ? qtyForAmount(v, lineUnit(p), weighUnit.value) : roundQty(v, weighUnit.value);
     });
     const weighAmount = computed(() => {
@@ -2414,9 +2508,12 @@ export default {
       nameHits.value = [];
       clearScanField();
       showWeigh.value = true;
-      nextTick(() => weighInput.value?.focus());
+      startScaleWatch();
+      // Con báscula no se enfoca el campo: el teclado del celular taparía el peso
+      if (!scaleStore.enabled) nextTick(() => weighInput.value?.focus());
     }
     function closeWeigh() {
+      stopScaleWatch();
       showWeigh.value = false;
       weighItem.value = null;
       weighErr.value = "";
@@ -2450,6 +2547,7 @@ export default {
         weighErr.value = "La cantidad es demasiado grande.";
         return;
       }
+      stopScaleWatch();
       showWeigh.value = false;
       weighItem.value = null;
       addProduct(p, q, { weighed: true });
@@ -2547,7 +2645,7 @@ export default {
       focusScan();
     }
 
-    function registerFromSearch() {
+    function registerFromSearch(saleUnit = "pz") {
       const term = debouncedTerm.value;
       if (isCodeQuery(term) || isScannerPayload(term)) {
         clearScanField();
@@ -2560,6 +2658,7 @@ export default {
       pendingIntent.value = "sale";
       nextTick(() => {
         foodForm.name = term;
+        foodForm.saleUnit = SALE_UNITS[saleUnit] ? saleUnit : "pz";
       });
     }
 
@@ -3729,9 +3828,12 @@ export default {
       else focusScan();
       window.addEventListener("keydown", onHotkey);
       window.addEventListener("focus", onWindowFocus);
+      // Báscula de esta caja: se reconecta sola si ya tiene permiso
+      if (scaleStore.enabled) connectScale().catch(() => {});
     });
 
     onUnmounted(() => {
+      stopScaleWatch();
       window.removeEventListener("keydown", onHotkey);
       window.removeEventListener("focus", onWindowFocus);
       if (compactMq) {
@@ -3892,6 +3994,10 @@ export default {
       resetWeighDraft,
       weighKey,
       applyWeigh,
+      weighByScale,
+      scaleHasData,
+      scaleRead,
+      weighHint,
       printIssue,
       printerStore,
       directPrinting,
@@ -5306,6 +5412,110 @@ html[data-theme="dark"] .avatar {
 }
 .methods.two .method {
   min-height: 2.8rem;
+}
+.unit-picks {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.4rem;
+}
+.unit-pick {
+  position: relative;
+  display: grid;
+  gap: 0.1rem;
+  padding: 0.55rem 0.6rem;
+  border: 1.5px solid var(--timber-line);
+  border-radius: 0.8rem;
+  background: var(--timber-panel);
+  cursor: pointer;
+}
+.unit-pick input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.unit-pick strong {
+  font-size: 0.88rem;
+}
+.unit-pick small {
+  font-size: 0.72rem;
+  color: var(--timber-muted);
+  line-height: 1.25;
+}
+.unit-pick.on {
+  border-color: var(--timber-primary);
+  background: color-mix(in srgb, var(--timber-primary) 9%, var(--timber-panel));
+}
+.unit-pick:focus-within {
+  outline: 2px solid var(--timber-primary);
+  outline-offset: 2px;
+}
+.unit-help {
+  color: var(--timber-muted);
+  font-size: 0.78rem;
+}
+@media (max-width: 767.98px) {
+  .unit-picks { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+.scale-panel {
+  display: grid;
+  justify-items: center;
+  gap: 0.3rem;
+  padding: 1rem 0.9rem 0.85rem;
+  border: 2px solid var(--timber-primary);
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--timber-primary) 7%, var(--timber-panel));
+  text-align: center;
+}
+.scale-panel.mute,
+.scale-panel.clear {
+  border-color: var(--timber-warning);
+  background: var(--timber-warning-soft);
+}
+.scale-panel.stable {
+  border-color: var(--timber-success);
+  background: var(--timber-success-soft);
+}
+.scale-hint {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 800;
+}
+.scale-panel.empty:not(.mute):not(.clear) .scale-hint {
+  animation: scale-pulse 1.4s ease-in-out infinite;
+}
+@keyframes scale-pulse {
+  50% { opacity: 0.45; }
+}
+.scale-kg {
+  font-size: 2.6rem;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.scale-amount {
+  min-height: 1.2em;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.scale-bar {
+  width: 100%;
+  height: 0.4rem;
+  border-radius: 99px;
+  background: var(--timber-line);
+  overflow: hidden;
+}
+.scale-bar i {
+  display: block;
+  height: 100%;
+  background: var(--timber-success);
+  transition: width 0.15s linear;
+}
+.scale-panel small {
+  font-size: 0.78rem;
+  color: var(--timber-muted);
+}
+@media (prefers-reduced-motion: reduce) {
+  .scale-panel.empty .scale-hint { animation: none; }
 }
 .method {
   position: relative;

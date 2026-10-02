@@ -34,6 +34,7 @@ function readSettings() {
       drawer: Boolean(raw.drawer),
       baudRate: Number(raw.baudRate) || 9600,
       deviceName: String(raw.deviceName || ""),
+      portInfo: raw.portInfo && typeof raw.portInfo === "object" ? raw.portInfo : null,
     };
   } catch {
     return { mode: "browser", paper: "80", drawer: false, baudRate: 9600, deviceName: "" };
@@ -55,6 +56,7 @@ export function savePrinterSettings(patch = {}) {
         drawer: printerStore.drawer,
         baudRate: printerStore.baudRate,
         deviceName: printerStore.deviceName,
+        portInfo: printerStore.portInfo,
       })
     );
   } catch {
@@ -130,7 +132,23 @@ async function openUsb(prompt) {
 }
 
 async function openSerial(prompt) {
-  const port = prompt ? await navigator.serial.requestPort() : (await navigator.serial.getPorts())[0];
+  // Recordar el puerto de la impresora para no confundirlo con el de la báscula
+  let port;
+  if (prompt) {
+    port = await navigator.serial.requestPort();
+    savePrinterSettings({ portInfo: port.getInfo?.() || null });
+  } else {
+    const saved = printerStore.portInfo;
+    const ports = await navigator.serial.getPorts();
+    port = saved
+      ? ports.find((p) => {
+          const i = p.getInfo?.() || {};
+          return i.usbVendorId === saved.usbVendorId && i.usbProductId === saved.usbProductId;
+        })
+      : ports.length === 1
+        ? ports[0]
+        : null;
+  }
   if (!port) return null;
   if (!port.writable) await port.open({ baudRate: printerStore.baudRate || 9600 });
   const info = port.getInfo?.() || {};

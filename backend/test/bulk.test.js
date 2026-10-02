@@ -66,3 +66,51 @@ test('el pedido guarda la unidad y cantidades con decimales; el total cuadra', (
   assert.equal(order.total, 171);
   assert.equal(order.total, cartTotals(order.items).total);
 });
+
+test('lee el peso de los formatos comunes de báscula (en kg)', () => {
+  assert.equal(bulk.parseScaleWeight('ST,GS,+  0.750kg'), 0.75);
+  assert.equal(bulk.parseScaleWeight('  1.235 kg\r'), 1.235);
+  assert.equal(bulk.parseScaleWeight('W 750 g'), 0.75);
+  assert.equal(bulk.parseScaleWeight('\x02 0.500\x03'), 0.5);
+  assert.equal(bulk.parseScaleWeight('750', 'g'), 0.75);
+  assert.equal(bulk.parseScaleWeight('US,GS,-  0.020kg'), -0.02);
+  assert.equal(bulk.parseScaleWeight('1.00 lb'), 0.454);
+  assert.equal(bulk.parseScaleWeight('ERROR'), null);
+});
+
+test('báscula: agrega solo cuando el peso se queda quieto 2 segundos', () => {
+  const d = bulk.createStableWeigh({ holdMs: 2000 });
+  assert.equal(d.feed(0, 0).state, 'empty');
+  assert.equal(d.feed(0.412, 100).state, 'settling');
+  assert.equal(d.feed(0.748, 400).state, 'settling', 'todavía se mueve');
+  assert.equal(d.feed(0.75, 1500).state, 'settling', 'dentro de la tolerancia, sigue contando');
+  assert.equal(d.feed(0.752, 2300).state, 'settling', '1.9 s quieto');
+  const r = d.feed(0.751, 2401);
+  assert.equal(r.state, 'stable');
+  assert.equal(r.kg, 0.751);
+  assert.equal(d.feed(1.5, 3000).state, 'stable', 'una vez tomado ya no cambia');
+});
+
+test('báscula: si el peso cambia, vuelve a contar los 2 s', () => {
+  const d = bulk.createStableWeigh({ holdMs: 2000 });
+  d.feed(0.5, 0);
+  assert.equal(d.feed(0.5, 1800).state, 'settling');
+  assert.equal(d.feed(0.62, 1900).state, 'settling', 'agregaron más tomate');
+  assert.equal(d.feed(0.62, 3800).state, 'settling');
+  assert.equal(d.feed(0.62, 3900).state, 'stable');
+});
+
+test('báscula: lo que ya estaba encima no se cobra; hay que cambiarlo o retirarlo', () => {
+  const d = bulk.createStableWeigh({ holdMs: 2000, baselineKg: 0.75 });
+  assert.equal(d.feed(0.75, 0).waitingClear, true);
+  assert.equal(d.feed(0.75, 5000).state, 'empty', 'el producto anterior no se toma');
+  assert.equal(d.feed(0, 5100).state, 'empty', 'la vaciaron');
+  d.feed(0.75, 5200);
+  assert.equal(d.feed(0.75, 7200).state, 'stable', 'mismo peso pero ya es otro producto');
+});
+
+test('báscula: lo muy ligero cuenta como vacía', () => {
+  const d = bulk.createStableWeigh({ holdMs: 2000 });
+  d.feed(0.004, 0);
+  assert.equal(d.feed(0.004, 5000).state, 'empty');
+});
