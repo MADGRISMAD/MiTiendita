@@ -471,7 +471,8 @@ const openedAt = computed(() => {
   const d = session.value?.openedAt || session.value?.createdAt;
   return d ? new Date(d) : null;
 });
-const hoursOpen = computed(() => (openedAt.value ? (now.value - openedAt.value.getTime()) / 3600000 : 0));
+// Si el reloj del equipo va un poco atrás del servidor, no muestra tiempo negativo
+const hoursOpen = computed(() => (openedAt.value ? Math.max(0, now.value - openedAt.value.getTime()) / 3600000 : 0));
 const longOpen = computed(() => cashOpen.value && hoursOpen.value >= 12);
 const headline = computed(() => {
   if (!loaded.value) return "Cargando…";
