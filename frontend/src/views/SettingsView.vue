@@ -474,7 +474,7 @@
               <label class="adm-field">
                 <span>Nueva contraseña</span>
                 <span class="pass">
-                  <input v-model="pwForm.newPw" class="adm-inp" :type="showPw ? 'text' : 'password'" required minlength="6" autocomplete="new-password" />
+                  <input v-model="pwForm.newPw" class="adm-inp" :type="showPw ? 'text' : 'password'" required :minlength="MIN_PASSWORD" autocomplete="new-password" />
                   <button type="button" class="eye" :aria-label="showPw ? 'Ocultar contraseñas' : 'Mostrar contraseñas'" @click="showPw = !showPw">
                     <PosIcon :name="showPw ? 'eye-off' : 'eye'" :size="19" />
                   </button>
@@ -485,13 +485,77 @@
               </div>
               <label class="adm-field">
                 <span>Repite la nueva</span>
-                <input v-model="pwForm.confirm" class="adm-inp" :type="showPw ? 'text' : 'password'" required minlength="6" autocomplete="new-password" />
+                <input v-model="pwForm.confirm" class="adm-inp" :type="showPw ? 'text' : 'password'" required :minlength="MIN_PASSWORD" autocomplete="new-password" />
               </label>
               <p v-if="pwForm.confirm && pwForm.confirm !== pwForm.newPw" class="adm-err">No coinciden.</p>
               <p v-if="pwErr" class="adm-err">{{ pwErr }}</p>
               <p v-if="pwMsg" class="adm-banner ok"><PosIcon name="check" :size="18" /> {{ pwMsg }}</p>
               <button type="submit" class="adm-btn primary" :disabled="pwBusy">{{ pwBusy ? 'Cambiando…' : 'Cambiar contraseña' }}</button>
             </form>
+            <section class="adm-card cfg-card">
+              <div class="switch-head">
+                <div>
+                  <h3>Verificación en dos pasos</h3>
+                  <p class="adm-hint">
+                    Además de tu contraseña, al entrar se pide un código de tu celular (Google Authenticator, Authy o similar).
+                    Así nadie entra a ver tus ventas aunque adivine tu contraseña.
+                  </p>
+                </div>
+              </div>
+              <p v-if="mfa.enabled !== null" class="state-line" :class="mfa.enabled ? 'on' : 'off'">
+                <i></i>{{ mfa.enabled ? `Activa · te quedan ${mfa.recoveryLeft} códigos de respaldo` : 'Apagada' }}
+              </p>
+
+              <template v-if="mfa.codes.length">
+                <p class="adm-banner ok">
+                  <span><strong>Guarda estos códigos de respaldo</strong> en un lugar seguro (no en este celular). Cada uno sirve una vez si
+                  pierdes el celular.</span>
+                </p>
+                <ul class="mfa-codes">
+                  <li v-for="c in mfa.codes" :key="c">{{ c }}</li>
+                </ul>
+                <button type="button" class="adm-btn primary" @click="mfa.codes = []">Ya los guardé</button>
+              </template>
+
+              <form v-else-if="mfa.step === 'setup'" class="mfa-setup" @submit.prevent="enableMfa">
+                <img v-if="mfa.qr" :src="mfa.qr" alt="Código QR para tu app de autenticación" class="mfa-qr" />
+                <p class="adm-hint">¿No puedes escanear? Escribe esta clave en la app: <code>{{ mfa.secret }}</code></p>
+                <label class="adm-field">
+                  <span>Código de 6 dígitos que muestra la app</span>
+                  <input v-model.trim="mfa.code" class="adm-inp num" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="123456" />
+                </label>
+                <div class="printer-acts">
+                  <button type="submit" class="adm-btn primary" :disabled="mfa.busy">{{ mfa.busy ? 'Activando…' : 'Activar' }}</button>
+                  <button type="button" class="adm-btn" @click="mfa.step = 'idle'">Cancelar</button>
+                </div>
+              </form>
+
+              <form v-else-if="mfa.step === 'disable'" class="mfa-setup" @submit.prevent="disableMfa">
+                <label class="adm-field">
+                  <span>Tu contraseña</span>
+                  <input v-model="mfa.password" class="adm-inp" type="password" autocomplete="current-password" />
+                </label>
+                <label class="adm-field">
+                  <span>Código de la app o uno de respaldo</span>
+                  <input v-model.trim="mfa.code" class="adm-inp" autocomplete="one-time-code" maxlength="9" placeholder="123456" />
+                </label>
+                <div class="printer-acts">
+                  <button type="submit" class="adm-btn danger-ghost" :disabled="mfa.busy">{{ mfa.busy ? 'Desactivando…' : 'Desactivar' }}</button>
+                  <button type="button" class="adm-btn" @click="mfa.step = 'idle'">Cancelar</button>
+                </div>
+              </form>
+
+              <div v-else-if="mfa.enabled !== null" class="printer-acts">
+                <button v-if="!mfa.enabled" type="button" class="adm-btn primary" :disabled="mfa.busy" @click="startMfa">
+                  {{ mfa.busy ? 'Preparando…' : 'Activar verificación en dos pasos' }}
+                </button>
+                <button v-else-if="!isPlatformStaff()" type="button" class="adm-btn danger-ghost" @click="openDisableMfa">
+                  Desactivar
+                </button>
+              </div>
+              <p v-if="mfa.err" class="adm-err">{{ mfa.err }}</p>
+              <p v-if="mfa.msg" class="adm-banner ok"><PosIcon name="check" :size="18" /> {{ mfa.msg }}</p>
+            </section>
             <section class="adm-card cfg-card">
               <h3>Sesión</h3>
               <p class="adm-hint">Si usas un equipo prestado, cierra la sesión al terminar.</p>
@@ -576,10 +640,12 @@ import AppShell from "../components/AppShell.vue";
 import PosIcon from "../components/PosIcon.js";
 import TicketHeader from "../components/TicketHeader.vue";
 import WhatsAppHelp from "../components/WhatsAppHelp.vue";
-import { apiService } from "../apiService";
+import { MIN_PASSWORD, passwordProblem } from "../passwordPolicy";
+import { apiService, logoutSession } from "../apiService";
 import { currentVenueSettings, fetchVenueSettings, saveVenueSettings, venueStore } from "../venueStore";
 import { themeStore, applyUiTheme } from "../themeStore";
-import { authStore, clearSession } from "../authStore";
+import { authStore, isPlatformStaff, setSession } from "../authStore";
+import QRCode from "qrcode";
 import { closingLine } from "../ticketShell";
 import { prettyPhone } from "../phone";
 import { printerStore, printerSupport, printTestPage, savePrinterSettings, connectPrinter } from "../thermalPrinter";
@@ -923,7 +989,7 @@ const pwMsg = ref("");
 const pwErr = ref("");
 const pwScore = computed(() => {
   const p = pwForm.newPw;
-  if (p.length < 6) return 0;
+  if (p.length < MIN_PASSWORD || passwordProblem(p)) return p ? 1 : 0;
   let s = 1;
   if (p.length >= 8 && /[a-zA-Z]/.test(p) && /\d/.test(p)) s++;
   if (p.length >= 12 || /[^a-zA-Z0-9]/.test(p)) s++;
@@ -932,8 +998,9 @@ const pwScore = computed(() => {
 async function changePassword() {
   pwMsg.value = "";
   pwErr.value = "";
-  if (pwForm.newPw.length < 6) {
-    pwErr.value = "La nueva contraseña necesita al menos 6 caracteres.";
+  const weak = passwordProblem(pwForm.newPw, { email: authStore.email, username: authStore.username });
+  if (weak) {
+    pwErr.value = weak;
     return;
   }
   if (pwForm.newPw !== pwForm.confirm) {
@@ -946,8 +1013,10 @@ async function changePassword() {
   }
   pwBusy.value = true;
   try {
-    await apiService.changePassword(pwForm.current, pwForm.newPw);
-    pwMsg.value = "Contraseña actualizada.";
+    const res = await apiService.changePassword(pwForm.current, pwForm.newPw);
+    // El servidor cerró las demás sesiones y entrega un token nuevo para esta
+    if (res?.token) setSession(res);
+    pwMsg.value = "Contraseña actualizada. Cerramos tu sesión en los demás dispositivos.";
     pwForm.current = "";
     pwForm.newPw = "";
     pwForm.confirm = "";
@@ -958,12 +1027,105 @@ async function changePassword() {
     pwBusy.value = false;
   }
 }
+// ---------- Verificación en dos pasos ----------
+const mfa = reactive({
+  enabled: null,
+  recoveryLeft: 0,
+  step: "idle", // 'idle' | 'setup' | 'disable'
+  secret: "",
+  qr: "",
+  code: "",
+  password: "",
+  codes: [],
+  busy: false,
+  err: "",
+  msg: "",
+});
+async function loadMfa() {
+  try {
+    const me = await apiService.me();
+    mfa.enabled = Boolean(me.mfaEnabled);
+    mfa.recoveryLeft = Number(me.mfaRecoveryLeft) || 0;
+  } catch {
+    mfa.enabled = null;
+  }
+}
+async function startMfa() {
+  mfa.err = "";
+  mfa.msg = "";
+  mfa.busy = true;
+  try {
+    const res = await apiService.mfaSetup();
+    mfa.secret = res.secret;
+    mfa.qr = await QRCode.toDataURL(res.otpauthUrl, { width: 220, margin: 1 });
+    mfa.code = "";
+    mfa.step = "setup";
+  } catch (e) {
+    mfa.err = errText(e, "No se pudo preparar la verificación en dos pasos.");
+  } finally {
+    mfa.busy = false;
+  }
+}
+async function enableMfa() {
+  mfa.err = "";
+  if (!/^\d{6}$/.test(mfa.code)) {
+    mfa.err = "Escribe los 6 dígitos que muestra tu app.";
+    return;
+  }
+  mfa.busy = true;
+  try {
+    const res = await apiService.mfaEnable(mfa.code);
+    mfa.codes = res.recoveryCodes || [];
+    mfa.enabled = true;
+    mfa.recoveryLeft = mfa.codes.length;
+    mfa.step = "idle";
+    mfa.secret = "";
+    mfa.qr = "";
+    mfa.msg = "Listo: desde ahora se pide el código al entrar.";
+  } catch (e) {
+    mfa.err = errText(e, "Código incorrecto.");
+  } finally {
+    mfa.busy = false;
+  }
+}
+function openDisableMfa() {
+  mfa.err = "";
+  mfa.msg = "";
+  mfa.code = "";
+  mfa.password = "";
+  mfa.step = "disable";
+}
+async function disableMfa() {
+  mfa.err = "";
+  mfa.busy = true;
+  try {
+    await apiService.mfaDisable(mfa.password, mfa.code);
+    mfa.enabled = false;
+    mfa.recoveryLeft = 0;
+    mfa.step = "idle";
+    mfa.msg = "Verificación en dos pasos desactivada.";
+  } catch (e) {
+    mfa.err = errText(e, "No se pudo desactivar.");
+  } finally {
+    mfa.busy = false;
+    mfa.password = "";
+  }
+}
+
+// Estado de la verificación en dos pasos al abrir «Mi cuenta»
+watch(
+  () => section.value === "cuenta",
+  (on) => {
+    if (on) loadMfa();
+  },
+  { immediate: true }
+);
+
 let leaving = false;
 function logout() {
   if (dirty.value && !window.confirm("Tienes cambios sin guardar en Configuración. ¿Cerrar sesión de todos modos?")) return;
   leaving = true;
-  clearSession();
-  router.push("/");
+  logoutSession().finally(() => router.push("/"));
 }
 
 // ---------- Soporte ----------
@@ -1208,6 +1370,10 @@ onBeforeUnmount(() => {
 .state-line.off { color: var(--timber-muted); }
 .printer-modes { grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); }
 .printer-acts { display: flex; flex-wrap: wrap; gap: 0.6rem; }
+.mfa-setup { display: grid; gap: 0.7rem; }
+.mfa-qr { width: 200px; height: 200px; padding: 6px; border-radius: 0.6rem; background: #fff; }
+.mfa-codes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.4rem; margin: 0; padding: 0; list-style: none; }
+.mfa-codes li { padding: 0.45rem; border: 1px dashed var(--timber-line); border-radius: 0.5rem; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 700; text-align: center; }
 .scale-live { display: grid; justify-items: center; gap: 0.2rem; padding: 1rem; border-radius: 0.9rem; background: var(--timber-surface); color: var(--timber-muted); text-align: center; }
 .scale-live strong { font-size: 2.2rem; font-variant-numeric: tabular-nums; color: var(--timber-ink); letter-spacing: -0.02em; }
 .scale-live.on strong { color: var(--timber-success); }

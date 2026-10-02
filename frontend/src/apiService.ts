@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { authStore, clearSession } from './authStore';
+import { authStore, clearSession, setSession } from './authStore';
 
 const envUrl = (import.meta as { env?: Record<string, string> }).env?.VITE_API_URL;
 
@@ -19,6 +19,8 @@ function resolveApiBase() {
 const publicUrl = resolveApiBase();
 
 axios.defaults.baseURL = publicUrl;
+// La sesión se renueva con una cookie HttpOnly (refresh token)
+axios.defaults.withCredentials = true;
 axios.defaults.headers.common['Content-Type'] = 'application/json';
 
 /** Origen usable desde el celular (QR de factura). En LAN usa la IP de la Mac. */
@@ -45,24 +47,73 @@ axios.interceptors.request.use((config) => {
   return config;
 });
 
+// Rutas de login/registro: un 401 ahí es «datos incorrectos», no «sesión vencida»
+const AUTH_PATHS = /\/usuarios\/(login|login\/mfa|refresh|logout|register|forgot-password|reset-password|mfa\/setup|mfa\/enable)\/?$/;
+const PUBLIC_PAGES = /^\/($|login|register|invite|forgot|reset|factura)/;
+
+let refreshing: Promise<boolean> | null = null;
+
+/**
+ * Pide un access token nuevo con la cookie de refresh. Una sola petición a la vez.
+ * true si se renovó; false si la sesión ya no sirve. Sin red lanza el error (no cierra sesión).
+ */
+export function refreshSession(): Promise<boolean> {
+  if (!refreshing) {
+    refreshing = axios
+      .post('/usuarios/refresh', {}, { skipAuthRefresh: true } as Record<string, unknown>)
+      .then((r) => {
+        setSession(r.data);
+        return true;
+      })
+      .catch((err) => {
+        if (isNetworkError(err)) throw err;
+        return false;
+      })
+      .finally(() => {
+        refreshing = null;
+      });
+  }
+  return refreshing;
+}
+
+function endSessionAndGoToLogin() {
+  clearSession();
+  if (typeof window !== 'undefined' && !window.location.pathname.match(PUBLIC_PAGES)) {
+    window.location.href = '/login';
+  }
+}
+
 axios.interceptors.response.use(
   (r) => {
     noteOnline();
     return r;
   },
-  (error) => {
+  async (error) => {
     if (isNetworkError(error)) noteOffline();
-    if (error.response?.status === 401) {
-      clearSession();
-      if (
-        typeof window !== 'undefined' &&
-        !window.location.pathname.match(/^\/($|login|register|invite|forgot|reset|factura)/)
-      ) {
-        window.location.href = '/login';
+    const config = (error.config || {}) as Record<string, unknown> & { url?: string; headers?: Record<string, string> };
+    const status = error.response?.status;
+    const isAuthCall = AUTH_PATHS.test(String(config.url || ''));
+
+    // Access token vencido: se renueva y se repite la petición una vez
+    if (status === 401 && !isAuthCall && !config.skipAuthRefresh && !config._retried) {
+      config._retried = true;
+      let renewed = false;
+      try {
+        renewed = await refreshSession();
+      } catch {
+        return Promise.reject(error); // sin red: la sesión sigue, se reintentará
       }
+      if (renewed) {
+        config.headers = { ...(config.headers || {}), Authorization: `Bearer ${authStore.token}` };
+        return axios(config);
+      }
+      endSessionAndGoToLogin();
+      return Promise.reject(error);
     }
+    if (status === 401 && !isAuthCall) endSessionAndGoToLogin();
+    if (status === 403 && error.response?.data?.code === 'MFA_SETUP_REQUIRED') endSessionAndGoToLogin();
     if (
-      error.response?.status === 403 &&
+      status === 403 &&
       error.response?.data?.code === 'SUBSCRIPTION_REQUIRED' &&
       typeof window !== 'undefined' &&
       !window.location.pathname.startsWith('/billing') &&
@@ -74,11 +125,38 @@ axios.interceptors.response.use(
   }
 );
 
+/** Cierra la sesión en el servidor (revoca el refresh) y en este dispositivo. */
+export async function logoutSession() {
+  try {
+    await Promise.race([
+      axios.post('/usuarios/logout', {}, { skipAuthRefresh: true } as Record<string, unknown>),
+      new Promise((resolve) => setTimeout(resolve, 2500)),
+    ]);
+  } catch {
+    /* sin red: igual se cierra aquí */
+  }
+  clearSession();
+}
+
 export const apiClient = axios;
 
 export const apiService = {
   login(data: string, password: string) {
     return axios.post('/usuarios/login', { data, password }).then((r) => r.data);
+  },
+  /** Segundo paso del login: código de la app o uno de respaldo. */
+  loginMfa(mfaToken: string, code: string) {
+    return axios.post('/usuarios/login/mfa', { mfaToken, code }).then((r) => r.data);
+  },
+  /** Genera el secreto de 2FA (con sesión, o con mfaToken si se activa desde el login). */
+  mfaSetup(mfaToken?: string) {
+    return axios.post('/usuarios/mfa/setup', mfaToken ? { mfaToken } : {}).then((r) => r.data);
+  },
+  mfaEnable(code: string, mfaToken?: string) {
+    return axios.post('/usuarios/mfa/enable', mfaToken ? { code, mfaToken } : { code }).then((r) => r.data);
+  },
+  mfaDisable(password: string, code: string) {
+    return axios.post('/usuarios/mfa/disable', { password, code }).then((r) => r.data);
   },
   register(payload: Record<string, unknown>) {
     return axios.post('/usuarios/register', payload).then((r) => r.data);

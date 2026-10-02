@@ -1,7 +1,9 @@
 /**
  * Crea o actualiza el usuario platform_admin de Mi Tiendita.
  * Uso:
- *   PLATFORM_ADMIN_EMAIL=ops@timber.com PLATFORM_ADMIN_PASSWORD='Secreta123!' node scripts/create-platform-admin.js
+ *   PLATFORM_ADMIN_EMAIL=ops@timber.com PLATFORM_ADMIN_PASSWORD='una frase larga y tuya' node scripts/create-platform-admin.js
+ * La contraseña es obligatoria y sigue la misma regla que la app (10+ caracteres, no de las más usadas).
+ * Al entrar por primera vez la app pide activar la verificación en dos pasos.
  */
 require('dotenv').config();
 const { MongoClient } = require('mongodb');
@@ -10,10 +12,17 @@ const bcrypt = require('bcryptjs');
 const uri = process.env.DATABASE_URI || 'mongodb://127.0.0.1:27017';
 const dbName = process.env.DATABASE_NAME || 'timber';
 const email = (process.env.PLATFORM_ADMIN_EMAIL || 'platform@timber.com').toLowerCase();
-const password = process.env.PLATFORM_ADMIN_PASSWORD || 'Platform123!';
+const { passwordProblem } = require('../utils/password-policy');
+
+const password = process.env.PLATFORM_ADMIN_PASSWORD || '';
 const username = process.env.PLATFORM_ADMIN_USERNAME || 'platform';
 
 async function main() {
+  const weak = passwordProblem(password, { email, username });
+  if (weak) {
+    console.error(`PLATFORM_ADMIN_PASSWORD: ${weak}`);
+    process.exit(1);
+  }
   const client = new MongoClient(uri);
   await client.connect();
   const db = client.db(dbName);

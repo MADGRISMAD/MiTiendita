@@ -7,16 +7,21 @@ const compression = require('compression');
 const server = require('http').createServer(app);
 
 app.set('trust proxy', 1);
+app.disable('x-powered-by');
+const { securityHeaders } = require('./middleware/security.middleware');
+const { limits } = require('./services/rate-limit.service');
+app.use(securityHeaders);
 app.use((req, _res, next) => {
   if (req.url === '/api') req.url = '/';
   else if (req.url.startsWith('/api/')) req.url = req.url.slice(4) || '/';
   next();
 });
+// CORS antes de leer el cuerpo: así hasta un JSON mal formado responde con cabeceras CORS
+let corsoptions = require('./configurations/cors.configuration');
+app.use(cors(corsoptions));
 app.use(bodyParser.json({ limit: '10mb' }));
 app.use(bodyParser.urlencoded({ limit: '10mb', extended: true }));
 app.use(compression());
-let corsoptions = require('./configurations/cors.configuration');
-app.use(cors(corsoptions));
 
 const { ensureConnection } = require('./database/mongodb');
 app.use(async (_req, _res, next) => {
@@ -25,6 +30,9 @@ app.use(async (_req, _res, next) => {
   }
   next();
 });
+
+// Límite global por IP (después de conectar: el conteo vive en la base)
+app.use(limits.global());
 
 app.use('/usuarios', require('./routers/usuarios.router'));
 app.use('/mesas', require('./routers/tables.router'));

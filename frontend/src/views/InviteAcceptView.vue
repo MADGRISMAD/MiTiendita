@@ -12,7 +12,9 @@
           <label>Apellido<input v-model="form.lastName" required /></label>
           <label>Usuario<input v-model="form.username" required /></label>
           <label>Celular<input v-model="form.cellphone" maxlength="10" placeholder="10 dígitos" /></label>
-          <label>Contraseña<input v-model="form.password" type="password" required minlength="6" /></label>
+          <label>Contraseña<input v-model="form.password" type="password" required :minlength="MIN_PASSWORD" autocomplete="new-password" /></label>
+          <small class="hint">Mínimo {{ MIN_PASSWORD }} caracteres; una frase corta funciona.</small>
+          <p v-if="formErr" class="err">{{ formErr }}</p>
           <button type="submit" class="btn" :disabled="saving">{{ saving ? 'Creando…' : 'Aceptar e ingresar' }}</button>
         </form>
         <p v-if="ok" class="ok">Cuenta creada. <router-link to="/login">Inicia sesión</router-link></p>
@@ -27,6 +29,9 @@ import BrandName from "../components/BrandName.vue";
 import { useRoute, useRouter } from "vue-router";
 import { apiService } from "../apiService";
 import { setSession, homeForRole } from "../authStore";
+import { MIN_PASSWORD, passwordProblem } from "../passwordPolicy";
+
+const formErr = ref("");
 
 const route = useRoute();
 const router = useRouter();
@@ -54,6 +59,8 @@ onMounted(async () => {
 });
 
 async function accept() {
+  formErr.value = passwordProblem(form.password, { email: invite.value?.email, username: form.username, name: form.name });
+  if (formErr.value) return;
   saving.value = true;
   error.value = "";
   try {
@@ -75,7 +82,10 @@ async function accept() {
       setTimeout(() => router.push("/"), 1200);
     }
   } catch (e) {
-    error.value = e.response?.data || "No se pudo aceptar la invitación.";
+    // Errores de los datos (contraseña, usuario repetido) se quedan junto al formulario
+    const msg = e.response?.data || "No se pudo aceptar la invitación.";
+    if (e.response?.status === 400) formErr.value = msg;
+    else error.value = msg;
   } finally {
     saving.value = false;
   }
@@ -83,6 +93,7 @@ async function accept() {
 </script>
 
 <style scoped>
+.hint { margin-top: -0.35rem; font-size: 0.78rem; color: #6b6b6b; }
 .invite-shell {
   min-height: 100vh;
   display: flex;

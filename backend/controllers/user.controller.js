@@ -12,6 +12,45 @@ const {
   safeSend,
 } = require('../utils/mail.utils');
 const { resolveAppUrl } = require('../utils/app-url.utils');
+const { passwordProblem } = require('../utils/password-policy');
+const sessions = require('../services/session.service');
+const totp = require('../utils/totp');
+const secretBox = require('../utils/secret-box');
+
+const MAX_FAILED_LOGINS = 5;
+const LOCK_MS = 15 * 60 * 1000;
+
+function minutesLeft(date) {
+  return Math.max(1, Math.ceil((new Date(date).getTime() - Date.now()) / 60000));
+}
+
+function lockedMessage(user) {
+  return `Cuenta bloqueada por varios intentos fallidos. Intenta de nuevo en ${minutesLeft(user.lockedUntil)} min o restablece tu contraseña.`;
+}
+
+function isLocked(user) {
+  return Boolean(user?.lockedUntil && new Date(user.lockedUntil).getTime() > Date.now());
+}
+
+/** Intento fallido (contraseña o código): suma y avisa si ya quedó bloqueada. */
+async function failAttempt(res, user, message) {
+  const after = await db.RecordLoginFailure(String(user._id), { max: MAX_FAILED_LOGINS, lockMs: LOCK_MS });
+  if (isLocked(after)) return res.status(423).send(lockedMessage(after));
+  return res.status(401).send(message);
+}
+
+/** Revisa un código de la app o uno de respaldo. Devuelve los cambios a guardar o null. */
+function checkSecondFactor(user, code) {
+  const secret = secretBox.open(user.mfaSecretEnc);
+  const step = totp.verifyTotp(secret, code, { lastStep: Number(user.mfaLastStep) || -1 });
+  if (step != null) return { mfaLastStep: step };
+  const hash = totp.hashRecoveryCode(code);
+  const list = Array.isArray(user.mfaRecovery) ? user.mfaRecovery : [];
+  if (String(code || '').replace(/[^a-z0-9]/gi, '').length === 8 && list.includes(hash)) {
+    return { mfaRecovery: list.filter((h) => h !== hash) };
+  }
+  return null;
+}
 
 const CreateUser = async (req, res) => {
   try {
@@ -19,6 +58,8 @@ const CreateUser = async (req, res) => {
     if (error) {
       return res.status(400).send(error.message);
     }
+    const weak = passwordProblem(value.password, { email: value.email, username: value.username, name: value.name });
+    if (weak) return res.status(400).send(weak);
     if (await service.FindUserByUsername(value.username)) {
       return res.status(400).send('Usuario con el nombre de usuario ya registrado');
     }
@@ -60,12 +101,8 @@ const CreateUser = async (req, res) => {
       updatedAt: new Date(),
     });
 
-    const token = jwtCreator.generateJWT({
-      userId: value.username,
-      userRole: 'admin',
-      tenantId,
-      email: String(value.email || '').trim().toLowerCase(),
-    });
+    const created = await service.FindUserByUsername(value.username);
+    const session = await sessions.startSession(req, res, created);
 
     const appUrl = resolveAppUrl(req);
     safeSend(() =>
@@ -80,11 +117,7 @@ const CreateUser = async (req, res) => {
 
     return res.status(201).json({
       message: 'Usuario creado con exito',
-      token,
-      role: 'admin',
-      tenantId,
-      username: value.username,
-      email: String(value.email || '').trim().toLowerCase(),
+      ...session,
     });
   } catch (error) {
     return res.status(500).send(error.message);
@@ -101,34 +134,173 @@ const FindUserByEmail = async (req, res) => {
   }
 };
 
-const LoginUsuario = async (req, res, next) => {
+const BAD_LOGIN = 'Correo o contraseña incorrecta';
+
+/**
+ * Paso 1: usuario y contraseña. Si la cuenta tiene 2FA responde { mfaRequired, mfaToken };
+ * si es del equipo de la plataforma y aún no lo tiene, { mfaSetupRequired, mfaToken }.
+ */
+const LoginUsuario = async (req, res) => {
   try {
-    const search = await service.LoginUsuario(req.body.data);
-    if (search) {
-      const compare = await hasher.checkPassword(req.body.password, search.password);
-      if (compare) {
-        const isPlatform = isPlatformStaff(search.role);
-        if (!isPlatform && !search.tenantId) {
-          return res.status(403).send('Usuario sin tenant asignado');
-        }
-        const token = jwtCreator.generateJWT({
-          userId: search.username,
-          userRole: search.role,
-          tenantId: search.tenantId || null,
-          email: String(search.email || '').trim().toLowerCase(),
-        });
-        req.token = token;
-        req.role = search.role;
-        req.tenantId = search.tenantId || null;
-        req.username = search.username;
-        req.email = String(search.email || '').trim().toLowerCase();
-        return next();
-      }
+    const user = await service.LoginUsuario(String(req.body?.data || '').trim());
+    // Misma respuesta si el usuario no existe, para no revelar qué correos hay
+    if (!user) return res.status(401).send(BAD_LOGIN);
+    if (isLocked(user)) return res.status(423).send(lockedMessage(user));
+    if (user.disabled) return res.status(403).send('Esta cuenta está desactivada. Pide acceso al dueño de la tienda.');
+
+    const ok = await hasher.checkPassword(req.body?.password || '', user.password);
+    if (!ok) return failAttempt(res, user, BAD_LOGIN);
+
+    const isPlatform = isPlatformStaff(user.role);
+    if (!isPlatform && !user.tenantId) {
+      return res.status(403).send('Usuario sin tenant asignado');
     }
-    return res.status(404).send('Correo o contraseña incorrecta');
+
+    if (user.mfaEnabled) {
+      return res.status(200).json({
+        mfaRequired: true,
+        mfaToken: jwtCreator.signPurposeToken('mfa', { uid: String(user._id) }, '5m'),
+      });
+    }
+    if (isPlatform) {
+      return res.status(200).json({
+        mfaSetupRequired: true,
+        mfaToken: jwtCreator.signPurposeToken('mfa-setup', { uid: String(user._id) }, '15m'),
+      });
+    }
+
+    await db.ClearLoginFailures(String(user._id));
+    return res.status(200).json(await sessions.startSession(req, res, user));
   } catch (error) {
     console.error(error.message);
-    return res.status(500).send(error.message);
+    return res.status(500).send('No se pudo iniciar sesión');
+  }
+};
+
+/** Paso 2: código de la app de autenticación (o uno de respaldo). */
+const LoginMfa = async (req, res) => {
+  try {
+    const claim = jwtCreator.verifyPurposeToken(req.body?.mfaToken, 'mfa');
+    if (!claim) return res.status(401).send('El tiempo para escribir el código terminó. Vuelve a entrar.');
+    const user = await db.FindUserById(claim.uid);
+    if (!user || !user.mfaEnabled) return res.status(401).send('Vuelve a entrar.');
+    if (isLocked(user)) return res.status(423).send(lockedMessage(user));
+
+    const changes = checkSecondFactor(user, req.body?.code);
+    if (!changes) return failAttempt(res, user, 'Código incorrecto o vencido.');
+
+    await db.UpdateUserById(String(user._id), changes);
+    await db.ClearLoginFailures(String(user._id));
+    return res.status(200).json(await sessions.startSession(req, res, user));
+  } catch (err) {
+    console.error(err.message);
+    return res.status(500).send('No se pudo verificar el código');
+  }
+};
+
+const RefreshSession = async (req, res) => {
+  try {
+    return res.status(200).json(await sessions.refreshSession(req, res));
+  } catch (err) {
+    if (err.status) return res.status(err.status).send(err.message);
+    console.error(err.message);
+    return res.status(500).send('No se pudo renovar la sesión');
+  }
+};
+
+const Logout = async (req, res) => {
+  try {
+    await sessions.endSession(req, res);
+  } catch (err) {
+    console.error(err.message);
+  }
+  return res.status(200).json({ ok: true });
+};
+
+/** Usuario que está activando 2FA: con sesión, o con el token del login (equipo de plataforma). */
+async function mfaSubject(req) {
+  const claim = req.body?.mfaToken ? jwtCreator.verifyPurposeToken(req.body.mfaToken, 'mfa-setup') : null;
+  if (claim) return { user: await db.FindUserById(claim.uid), viaLogin: true };
+  const payload = jwtCreator.verifyToken(req.headers.authorization || '');
+  if (!payload?.userId) return { user: null };
+  const user = await service.FindUserByUsername(payload.userId);
+  if (!user || (Number(payload.tv) || 0) !== (Number(user.tokenVersion) || 0)) return { user: null };
+  return { user, viaLogin: false };
+}
+
+const MfaSetup = async (req, res) => {
+  try {
+    const { user } = await mfaSubject(req);
+    if (!user) return res.status(401).send('No autorizado');
+    if (user.mfaEnabled) return res.status(400).send('La verificación en dos pasos ya está activa.');
+    const secret = totp.generateSecret();
+    await db.UpdateUserById(String(user._id), { mfaPendingEnc: secretBox.seal(secret) });
+    return res.status(200).json({
+      secret,
+      otpauthUrl: totp.otpauthUrl({ secret, account: user.email || user.username }),
+    });
+  } catch (err) {
+    console.error(err.message);
+    return res.status(500).send('No se pudo preparar la verificación en dos pasos');
+  }
+};
+
+const MfaEnable = async (req, res) => {
+  try {
+    const { user, viaLogin } = await mfaSubject(req);
+    if (!user) return res.status(401).send('No autorizado');
+    if (user.mfaEnabled) return res.status(400).send('La verificación en dos pasos ya está activa.');
+    const secret = secretBox.open(user.mfaPendingEnc);
+    if (!secret) return res.status(400).send('Empieza de nuevo: genera el código QR.');
+    const step = totp.verifyTotp(secret, req.body?.code);
+    if (step == null) return res.status(400).send('Código incorrecto. Revisa que la hora del celular esté bien.');
+
+    const recoveryCodes = totp.generateRecoveryCodes();
+    const updated = await db.UpdateUserById(String(user._id), {
+      mfaEnabled: true,
+      mfaSecretEnc: secretBox.seal(secret),
+      mfaPendingEnc: null,
+      mfaLastStep: step,
+      mfaRecovery: recoveryCodes.map(totp.hashRecoveryCode),
+      mfaEnabledAt: new Date(),
+    });
+    sessions.forgetUser(user.username);
+    const out = { ok: true, recoveryCodes };
+    // Equipo de plataforma: al activarlo desde el login, ya entra
+    if (viaLogin) {
+      await db.ClearLoginFailures(String(user._id));
+      Object.assign(out, await sessions.startSession(req, res, updated || user));
+    }
+    return res.status(200).json(out);
+  } catch (err) {
+    console.error(err.message);
+    return res.status(500).send('No se pudo activar la verificación en dos pasos');
+  }
+};
+
+const MfaDisable = async (req, res) => {
+  try {
+    const user = await service.FindUserByUsername(req.user.username);
+    if (!user) return res.status(404).send('Usuario no encontrado');
+    if (isPlatformStaff(user.role)) {
+      return res.status(400).send('El equipo de Mi Tiendita debe tener la verificación en dos pasos siempre activa.');
+    }
+    if (!user.mfaEnabled) return res.status(200).json({ ok: true });
+    const ok = await hasher.checkPassword(req.body?.password || '', user.password);
+    if (!ok) return res.status(400).send('La contraseña es incorrecta.');
+    if (!checkSecondFactor(user, req.body?.code)) return res.status(400).send('Código incorrecto o vencido.');
+    await db.UpdateUserById(String(user._id), {
+      mfaEnabled: false,
+      mfaSecretEnc: null,
+      mfaPendingEnc: null,
+      mfaRecovery: [],
+      mfaLastStep: null,
+    });
+    sessions.forgetUser(user.username);
+    return res.status(200).json({ ok: true });
+  } catch (err) {
+    console.error(err.message);
+    return res.status(500).send('No se pudo desactivar la verificación en dos pasos');
   }
 };
 
@@ -227,18 +399,24 @@ const ForgotPassword = async (req, res) => {
 const ResetPassword = async (req, res) => {
   try {
     const { token, password } = req.body || {};
-    if (!token || !password || String(password).length < 6) {
-      return res.status(400).send('Token y contraseña (mín. 6) requeridos');
+    if (!token || !password) {
+      return res.status(400).send('Token y contraseña requeridos');
     }
     const user = await db.FindUserByResetToken(token);
     if (!user) return res.status(400).send('Token inválido o expirado');
+    const weak = passwordProblem(password, { email: user.email, username: user.username, name: user.name });
+    if (weak) return res.status(400).send(weak);
 
     const hashed = await hasher.hashPassword(password);
     await db.UpdateUserById(String(user._id), {
       password: hashed,
       resetToken: null,
       resetExpires: null,
+      failedLogins: 0,
+      lockedUntil: null,
     });
+    // Quien tuviera la sesión abierta con la contraseña anterior queda fuera
+    await sessions.revokeAll(user, 'password_reset');
     return res.status(200).json({ ok: true });
   } catch (err) {
     console.error(err);
@@ -255,6 +433,8 @@ const Me = async (req, res) => {
       tenantId: req.tenantId,
       email: String(user?.email || req.user.email || '').trim().toLowerCase(),
       roles: ROLES,
+      mfaEnabled: Boolean(user?.mfaEnabled),
+      mfaRecoveryLeft: Array.isArray(user?.mfaRecovery) ? user.mfaRecovery.length : 0,
     });
   } catch (err) {
     return res.status(500).send(err.message || 'No pude leer tu sesión');
@@ -267,19 +447,20 @@ const ChangePassword = async (req, res) => {
     if (!currentPassword || !newPassword) {
       return res.status(400).send('Contraseña actual y nueva son requeridas');
     }
-    if (String(newPassword).length < 6) {
-      return res.status(400).send('La nueva contraseña debe tener al menos 6 caracteres');
-    }
-
     const user = await service.FindUserByUsername(req.user.username);
     if (!user) return res.status(404).send('Usuario no encontrado');
+    const weak = passwordProblem(newPassword, { email: user.email, username: user.username, name: user.name });
+    if (weak) return res.status(400).send(weak);
 
     const valid = await hasher.checkPassword(currentPassword, user.password);
     if (!valid) return res.status(400).send('La contraseña actual es incorrecta');
 
     const hashed = await hasher.hashPassword(newPassword);
     await db.UpdateUserById(String(user._id), { password: hashed });
-    return res.status(200).json({ ok: true, message: 'Contraseña actualizada' });
+    // Cierra las demás sesiones y deja abierta esta con un token nuevo
+    const fresh = await sessions.revokeAll(user, 'password_change');
+    const session = await sessions.startSession(req, res, fresh);
+    return res.status(200).json({ ok: true, message: 'Contraseña actualizada. Cerramos tus otras sesiones.', ...session });
   } catch (err) {
     console.error(err);
     return res.status(500).send(err.message || 'Error al cambiar contraseña');
@@ -290,6 +471,12 @@ module.exports = {
   CreateUser,
   FindUserByEmail,
   LoginUsuario,
+  LoginMfa,
+  RefreshSession,
+  Logout,
+  MfaSetup,
+  MfaEnable,
+  MfaDisable,
   FindUserByUsername,
   FindWaiters,
   GetWaitList,

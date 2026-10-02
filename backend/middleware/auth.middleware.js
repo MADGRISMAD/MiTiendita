@@ -6,8 +6,13 @@ const {
   isSubscriptionActive,
 } = require('../models/tenant.model');
 const db = require('../database/mongodb');
+const sessions = require('../services/session.service');
 
-function requireAuth(req, res, next) {
+/**
+ * Valida el access token y que siga vigente: misma versión de sesión (se invalida al cambiar
+ * la contraseña), cuenta activa y, para el equipo de la plataforma, 2FA activado.
+ */
+async function requireAuth(req, res, next) {
   const payload = verifyToken(req.headers.authorization || '');
   if (!payload || !payload.userId) {
     return res.status(401).send('No autorizado');
@@ -18,6 +23,22 @@ function requireAuth(req, res, next) {
 
   if (!isPlatform && !payload.tenantId) {
     return res.status(401).send('No autorizado');
+  }
+
+  try {
+    const state = await sessions.currentUserState(payload.userId);
+    if (!state.exists || state.disabled || (Number(payload.tv) || 0) !== state.tokenVersion) {
+      return res.status(401).send('Tu sesión terminó. Vuelve a entrar.');
+    }
+    if (isPlatform && !state.mfaEnabled) {
+      return res.status(403).json({
+        code: 'MFA_SETUP_REQUIRED',
+        message: 'El equipo de Mi Tiendita debe activar la verificación en dos pasos. Vuelve a entrar.',
+      });
+    }
+  } catch (err) {
+    console.error('[auth] no se pudo validar la sesión:', err.message);
+    return res.status(503).send('No se pudo validar tu sesión. Intenta de nuevo.');
   }
 
   req.user = {

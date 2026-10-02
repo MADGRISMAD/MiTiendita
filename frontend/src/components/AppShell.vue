@@ -126,8 +126,8 @@ import { venueStore } from "../venueStore";
 import BrandName from "./BrandName.vue";
 import WhatsAppHelp from "./WhatsAppHelp.vue";
 import { themeStore, toggleUiTheme } from "../themeStore";
-import { clearSession, canAccessRoute, hasRole, isPlatformAdmin, isPlatformStaff } from "../authStore";
-import { apiService } from "../apiService";
+import { canAccessRoute, hasRole, isPlatformAdmin, isPlatformStaff } from "../authStore";
+import { apiService, logoutSession } from "../apiService";
 import { applyBillingStatus } from "../billingStore";
 import { offlineStore } from "../offlineFlags";
 import { flushOfflineSales } from "../offlineSync";
@@ -274,8 +274,7 @@ const onMoreRoute = computed(() => moreItems.value.some((i) => i.name === route.
 
 function logout() {
   moreOpen.value = false;
-  clearSession();
-  router.push("/");
+  logoutSession().finally(() => router.push("/"));
 }
 
 async function loadBilling() {
