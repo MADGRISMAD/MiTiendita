@@ -37,6 +37,7 @@
 .auth-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: start;
   gap: 0.75rem;
 }
 .auth-field { display: grid; gap: 0.35rem; min-width: 0; }
@@ -234,6 +235,12 @@
   text-decoration: none;
 }
 .auth-alt a.inline:hover { text-decoration: underline; }
+.auth-alt a.inline.muted { color: var(--timber-muted); font-weight: 600; }
+.auth-alt.compact {
+  display: block;
+  margin-top: 1rem;
+  padding-top: 0.9rem;
+}
 .auth-back {
   display: block;
   margin-top: 1rem;
@@ -246,4 +253,18 @@
 .auth-back:hover { color: var(--timber-ink); }
 @media (max-width: 420px) {
   .auth-row { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Registro en PC: compacto para que quepa en una laptop sin desplazar */
+@media (min-width: 1024px) {
+  .wide .auth-head { margin-bottom: 1rem; }
+  .wide .auth-head h1 { font-size: 1.4rem; }
+  .wide .auth-head p { margin-top: 0.2rem; font-size: 0.88rem; }
+  .wide .auth-form { gap: 0.8rem; }
+  .wide .auth-group { gap: 0.7rem; }
+  .wide .auth-group + .auth-group { padding-top: 0.8rem; }
+  .wide .auth-group legend { display: none; }
+  .wide .auth-field { gap: 0.25rem; }
+  .wide .auth-input { min-height: 2.75rem; }
+  .wide .auth-btn { min-height: 2.95rem; }
 }
