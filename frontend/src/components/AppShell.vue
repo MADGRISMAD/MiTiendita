@@ -34,7 +34,14 @@
         >
           {{ isDark ? '☀' : '☾' }}
         </button>
-        <button v-if="moreItems.length || ownerMode" type="button" class="icon-btn" @click="moreOpen = !moreOpen" aria-label="Más opciones">
+        <button
+          v-if="moreItems.length || ownerMode"
+          type="button"
+          class="icon-btn"
+          :class="{ 'only-pc': moreInDock }"
+          aria-label="Más opciones"
+          @click="moreOpen = !moreOpen"
+        >
           Más
         </button>
         <button type="button" class="icon-btn ghost only-pc" @click="logout">Salir</button>
@@ -77,8 +84,8 @@
       </main>
     </div>
 
-    <!-- Dock solo móvil y tablet -->
-    <nav class="pos-dock hide-pc" aria-label="Navegación principal">
+    <!-- Pestañas: barra inferior en celular, riel lateral en tablet -->
+    <nav class="pos-dock hide-pc" aria-label="Navegación principal" :style="{ '--tabs': dockCount }">
       <router-link
         v-for="item in dock"
         :key="item.to"
@@ -90,6 +97,17 @@
         <span class="dock-ico" v-html="item.icon"></span>
         <span class="dock-label">{{ item.label }}</span>
       </router-link>
+      <button
+        v-if="moreInDock"
+        type="button"
+        class="dock-item dock-more"
+        :class="{ 'router-link-active': moreOpen || onMoreRoute }"
+        :aria-expanded="moreOpen"
+        @click="moreOpen = !moreOpen"
+      >
+        <span class="dock-ico" v-html="ico.more"></span>
+        <span class="dock-label">Más</span>
+      </button>
     </nav>
   </div>
 </template>
@@ -183,12 +201,13 @@ const offlineBanner = computed(() => {
 });
 
 const ico = {
-  sell: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h16l-1.2 12.2a2 2 0 01-2 1.8H7.2a2 2 0 01-2-1.8L4 7z"/><path d="M8 7V5a4 4 0 018 0v2"/></svg>`,
-  products: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>`,
-  cash: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/></svg>`,
-  spark: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l1.6 5.2L19 10l-5.4 1.8L12 17l-1.6-5.2L5 10l5.4-1.8L12 3z"/></svg>`,
-  receipt: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 3h12v18l-2.2-1.4L12 21l-3.8-1.4L6 21V3z"/><path d="M9 8h6M9 12h6"/></svg>`,
-  people: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="3.2"/><path d="M22 21v-2a3.6 3.6 0 00-3-3.5"/><path d="M16 3.2a3.2 3.2 0 010 6.2"/></svg>`,
+  sell: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16l-1.2 12.2a2 2 0 01-2 1.8H7.2a2 2 0 01-2-1.8L4 7z"/><path d="M8 7V5a4 4 0 018 0v2"/></svg>`,
+  products: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>`,
+  cash: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/></svg>`,
+  spark: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.6 5.2L19 10l-5.4 1.8L12 17l-1.6-5.2L5 10l5.4-1.8L12 3z"/></svg>`,
+  receipt: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-2.2-1.4L12 21l-3.8-1.4L6 21V3z"/><path d="M9 8h6M9 12h6"/></svg>`,
+  more: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/></svg>`,
+  people: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="3.2"/><path d="M22 21v-2a3.6 3.6 0 00-3-3.5"/><path d="M16 3.2a3.2 3.2 0 010 6.2"/></svg>`,
 };
 
 const adminDock = [
@@ -224,6 +243,10 @@ const dock = computed(() => {
   return isPlatformAdmin() ? adminDock : supportDock;
 });
 const moreItems = computed(() => allMore.filter((i) => canAccessRoute(i.name)));
+// "Más" vive con las demás pestañas cuando caben (celular y tablet)
+const moreInDock = computed(() => (moreItems.value.length > 0 || ownerMode.value) && dock.value.length <= 4);
+const dockCount = computed(() => dock.value.length + (moreInDock.value ? 1 : 0));
+const onMoreRoute = computed(() => moreItems.value.some((i) => i.name === route.name));
 
 function logout() {
   moreOpen.value = false;
@@ -261,6 +284,8 @@ onUnmounted(() => clearInterval(timer));
   max-height: 100dvh;
   overflow: hidden;
   display: grid;
+  grid-template-areas: "top" "body" "dock";
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr) auto;
   background:
     radial-gradient(ellipse 70% 45% at 100% 0%, color-mix(in srgb, var(--timber-primary) 10%, transparent), transparent 55%),
@@ -293,6 +318,7 @@ onUnmounted(() => clearInterval(timer));
 }
 
 .pos-top {
+  grid-area: top;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -341,26 +367,48 @@ onUnmounted(() => clearInterval(timer));
 .top-nav {
   display: flex;
   align-items: center;
-  gap: 0.35rem;
+  gap: 0.25rem;
   flex: 1;
   justify-content: center;
   min-width: 0;
 }
 .top-nav-item {
+  position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
-  min-height: 2.4rem;
-  padding: 0 0.85rem;
-  border-radius: 0.55rem;
-  color: color-mix(in srgb, var(--timber-topbar-text) 78%, transparent);
+  gap: 0.45rem;
+  min-height: 2.5rem;
+  padding: 0 0.95rem;
+  border-radius: 0.7rem;
+  color: color-mix(in srgb, var(--timber-topbar-text) 72%, transparent);
   text-decoration: none;
-  font-weight: 700;
-  font-size: 0.88rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.top-nav-item .dock-ico {
+  width: auto;
+  height: auto;
+  background: none;
+}
+.top-nav-item:hover {
+  color: var(--timber-topbar-text);
+  background: rgba(255, 255, 255, 0.07);
 }
 .top-nav-item.router-link-active {
-  background: rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.13);
   color: #fff;
+  font-weight: 700;
+}
+.top-nav-item.router-link-active::after {
+  content: "";
+  position: absolute;
+  left: 0.95rem;
+  right: 0.95rem;
+  bottom: -0.38rem;
+  height: 3px;
+  border-radius: 3px;
+  background: var(--timber-accent);
 }
 
 .top-actions {
@@ -384,7 +432,7 @@ onUnmounted(() => clearInterval(timer));
   border-radius: 0.5rem;
   background: rgba(255, 255, 255, 0.12);
   color: var(--timber-topbar-text);
-  font-weight: 700;
+  font-weight: 600;
   font-size: 0.85rem;
   cursor: pointer;
 }
@@ -394,6 +442,8 @@ onUnmounted(() => clearInterval(timer));
 }
 
 .pos-body {
+  grid-area: body;
+  min-width: 0;
   min-height: 0;
   height: 100%;
   display: flex;
@@ -420,34 +470,55 @@ onUnmounted(() => clearInterval(timer));
 }
 
 .pos-dock {
+  grid-area: dock;
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 0.25rem;
-  padding: 0.28rem 0.4rem calc(0.32rem + env(safe-area-inset-bottom, 0px));
+  grid-template-columns: repeat(var(--tabs, 4), minmax(0, 1fr));
+  gap: 0.15rem;
+  padding: 0.3rem 0.35rem calc(0.35rem + env(safe-area-inset-bottom, 0px));
   background: var(--timber-dock);
   border-top: 1px solid var(--timber-line);
   z-index: 30;
-  flex-shrink: 0;
 }
 .dock-item {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0.08rem;
-  min-height: 3.15rem;
-  border-radius: 0.65rem;
-  text-decoration: none;
+  gap: 0.2rem;
+  min-height: 3.25rem;
+  padding: 0.25rem 0.15rem;
+  border: none;
+  border-radius: 0.75rem;
+  background: transparent;
   color: var(--timber-dock-text);
-  font-weight: 700;
+  font: inherit;
+  font-weight: 600;
   font-size: 0.72rem;
+  text-decoration: none;
+  cursor: pointer;
+}
+.dock-ico {
+  display: grid;
+  place-items: center;
+  width: 3.4rem;
+  height: 1.95rem;
+  border-radius: 999px;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.dock-label {
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .dock-item.router-link-active {
-  background: var(--timber-primary);
-  color: var(--timber-on-primary);
-  box-shadow: var(--timber-shadow);
+  color: var(--timber-primary);
+  font-weight: 700;
 }
-.dock-ico { display: grid; place-items: center; }
+.dock-item.router-link-active .dock-ico {
+  background: var(--timber-primary-soft);
+}
+.dock-item:active .dock-ico { background: color-mix(in srgb, var(--timber-primary) 10%, transparent); }
 
 .more-sheet {
   position: fixed;
@@ -505,17 +576,48 @@ onUnmounted(() => clearInterval(timer));
   background: color-mix(in srgb, var(--timber-accent) 18%, var(--timber-panel));
 }
 
-/* —— Tablet —— */
+/* —— Celular: "Más" sale desde abajo, junto a las pestañas —— */
+@media (max-width: 767.98px) {
+  .more-sheet {
+    align-items: flex-end;
+    justify-content: center;
+    padding: 0 0 calc(4.3rem + env(safe-area-inset-bottom, 0px));
+  }
+  .more-panel { width: calc(100% - 1.3rem); }
+}
+
+/* —— Tablet: pestañas en un riel a la izquierda —— */
 @media (min-width: 768px) and (max-width: 1099.98px) {
+  .pos-shell {
+    grid-template-areas: "top top" "dock body";
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
   .pos-top { padding: 0.4rem 0.85rem; }
-  .brand-venue { max-width: 28vw; font-size: 1.05rem; }
-  .dock-item { min-height: 3.5rem; font-size: 0.8rem; }
+  .brand-venue { max-width: 36vw; font-size: 1.05rem; }
+  .pos-dock {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    width: 5.4rem;
+    padding: 0.7rem 0.35rem calc(0.7rem + env(safe-area-inset-bottom, 0px));
+    border-top: none;
+    border-right: 1px solid var(--timber-line);
+  }
+  .dock-more { margin-top: auto; }
+  .dock-item { min-height: 3.9rem; font-size: 0.74rem; }
   .pos-shell:not(.desk) .pos-content { padding: 0.75rem 1rem; }
+  .more-sheet {
+    justify-content: flex-start;
+    align-items: flex-end;
+    padding: 1rem 1rem 1rem 6rem;
+  }
 }
 
 /* —— PC —— */
 @media (min-width: 1100px) {
   .pos-shell {
+    grid-template-areas: "top" "body";
     grid-template-rows: auto minmax(0, 1fr);
   }
   .pos-top { padding: 0.45rem 1rem; gap: 1rem; }
