@@ -17,6 +17,17 @@ function hasMpConfig() {
   return Boolean(String(process.env.MP_ACCESS_TOKEN || '').trim());
 }
 
+/** El modo de prueba (sin token o ids mock_) solo existe fuera de producción. */
+function mockAllowed() {
+  return process.env.NODE_ENV !== 'production';
+}
+
+function mockDisabledError() {
+  const err = new Error('Mercado Pago no está configurado en producción (MP_ACCESS_TOKEN).');
+  err.status = 503;
+  return err;
+}
+
 function isMpSandbox() {
   if (String(process.env.MP_SANDBOX || '').toLowerCase() === 'true') return true;
   if (String(process.env.MP_SANDBOX || '').toLowerCase() === 'false') return false;
@@ -104,6 +115,7 @@ async function createPreapproval({
   const ref = externalReference || `${tenantId}:${plan}:${billingInterval}`;
 
   if (!hasMpConfig()) {
+    if (!mockAllowed()) throw mockDisabledError();
     return {
       mock: true,
       id: `mock_${tenantId}_${plan}_${billingInterval}_${Date.now()}`,
@@ -175,6 +187,8 @@ async function createPreapproval({
 
 async function getPreapproval(id) {
   if (!hasMpConfig() || String(id).startsWith('mock_')) {
+    // En producción nunca se inventa una suscripción autorizada
+    if (!mockAllowed()) throw mockDisabledError();
     return { id, status: 'authorized' };
   }
   const res = await fetch(`${MP_API}/preapproval/${id}`, {

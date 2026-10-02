@@ -9,6 +9,7 @@ const {
   sendSubscriptionCancelledEmail,
 } = require('../utils/mail.utils');
 const { resolveAppUrl } = require('../utils/app-url.utils');
+const { verifyMpSignature } = require('../utils/mp-signature');
 
 function daysLeft(trialEndsAt) {
   if (!trialEndsAt) return 0;
@@ -356,6 +357,26 @@ async function webhook(req, res) {
     const body = req.body || {};
     const query = req.query || {};
 
+    // Solo se aceptan avisos firmados por Mercado Pago. Sin la clave, en desarrollo se deja pasar con aviso.
+    const secret = String(process.env.MP_WEBHOOK_SECRET || '').trim();
+    const isProd = process.env.NODE_ENV === 'production';
+    if (secret || isProd) {
+      const check = verifyMpSignature({ headers: req.headers || {}, query, body, secret });
+      if (!check.ok) {
+        console.warn('[mp:webhook] rechazado:', check.reason);
+        // Bitácora de la plataforma (no es de ninguna tienda)
+        const requestId = String(req.headers?.['x-request-id'] || '').slice(0, 80);
+        await recordEvent({
+          tenantId: '_mercadopago',
+          type: 'webhook_rejected',
+          note: `Webhook de Mercado Pago rechazado: ${check.reason}${requestId ? ` (request-id ${requestId})` : ''}`,
+        });
+        return res.status(401).json({ ok: false });
+      }
+    } else {
+      console.warn('[mp:webhook] MP_WEBHOOK_SECRET sin configurar: no se verifica la firma (solo desarrollo)');
+    }
+
     const topic = body.type || body.topic || query.topic || query.type;
     const dataId =
       body.data?.id ||
@@ -364,7 +385,7 @@ async function webhook(req, res) {
       query['data.id'] ||
       null;
 
-    console.log('[mp:webhook]', { topic, dataId, query, bodyKeys: Object.keys(body) });
+    console.log('[mp:webhook]', { topic, dataId });
 
     const topicStr = String(topic || '').toLowerCase();
     const isPreapproval =
