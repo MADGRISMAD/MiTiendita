@@ -252,6 +252,10 @@ export const apiService = {
   getInvites() {
     return axios.get('/invites').then((r) => r.data);
   },
+  /** Usuarios con acceso a la tienda y lugares del plan. */
+  getTeam() {
+    return axios.get('/invites/team').then((r) => r.data);
+  },
   createInvite(data: { email: string; role: string }) {
     return axios.post('/invites', data).then((r) => r.data);
   },
@@ -483,6 +487,10 @@ export const apiService = {
   },
   getPurchaseSuggestions() {
     return axios.get('/inventory/suggestions').then((r) => r.data);
+  },
+  /** Ajuste manual de existencia (conteo, merma); queda en la bitácora. */
+  adjustStock(data: { foodId: string; stock: number; reason: string; note?: string }) {
+    return axios.post('/inventory/adjust', data).then((r) => r.data);
   },
   getInventoryActivity(limit = 80) {
     return axios.get('/inventory/activity', { params: { limit } }).then((r) => r.data);

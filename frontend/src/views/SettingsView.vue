@@ -61,36 +61,9 @@
       </section>
 
       <section v-else-if="tab === 'team'" class="panel">
-        <h2>Invitar al equipo</h2>
-        <p class="hint">Se envía un correo con el enlace para unirse al equipo.</p>
-        <form class="invite-form" @submit.prevent="sendInvite">
-          <label>Correo<input v-model="invite.email" type="email" required placeholder="persona@negocio.com" /></label>
-          <label>Rol
-            <select v-model="invite.role">
-              <option value="admin">Admin</option>
-              <option value="cashier">Cajero</option>
-              <option value="waiter">Vendedor</option>
-            </select>
-          </label>
-          <button type="submit" class="btn-primary" :disabled="inviting">{{ inviting ? 'Enviando…' : 'Enviar invitación' }}</button>
-        </form>
-        <p v-if="inviteMsg" class="ok">{{ inviteMsg }}</p>
-        <p v-if="inviteErr" class="err">{{ inviteErr }}</p>
-
-        <h3>Invitaciones</h3>
-        <ul class="invite-list">
-          <li v-for="i in invites" :key="i.id">
-            <div>
-              <strong>{{ i.email }}</strong>
-              <span class="meta">{{ roleText(i.role) }} · {{ inviteText(i.status) }}</span>
-            </div>
-            <div class="row-actions">
-              <button v-if="i.status === 'pending'" type="button" @click="revoke(i)">Revocar</button>
-              <button type="button" class="danger" @click="removeInvite(i)">Eliminar</button>
-            </div>
-          </li>
-          <li v-if="!invites.length" class="empty">Sin invitaciones aún.</li>
-        </ul>
+        <h2>Equipo</h2>
+        <p class="hint">Las invitaciones, quién entra a la app y el personal con sus turnos ahora están en Empleados.</p>
+        <router-link to="/staff" class="btn-primary team-link">Ir a Empleados</router-link>
       </section>
 
       <section v-else-if="tab === 'support'" class="panel">
@@ -182,7 +155,6 @@ import AppShell from "../components/AppShell.vue";
 import { apiService } from "../apiService";
 import { saveVenueSettings, venueStore } from "../venueStore";
 import { themeStore, applyUiTheme } from "../themeStore";
-import { inviteStatusLabel, labelOf, roleLabel } from "../labels";
 
 const tab = ref("brand");
 const tabs = [
@@ -197,8 +169,6 @@ const tabs = [
 const isDark = computed(() => themeStore.mode === "dark");
 function setLight() { applyUiTheme("light"); }
 function setDark() { applyUiTheme("dark"); }
-function inviteText(s) { return labelOf(inviteStatusLabel, s); }
-function roleText(r) { return labelOf(roleLabel, r); }
 
 const form = reactive({
   businessName: venueStore.businessName || "",
@@ -218,11 +188,6 @@ const form = reactive({
 const saving = ref(false);
 const message = ref("");
 const prefsMsg = ref("");
-const invites = ref([]);
-const inviting = ref(false);
-const inviteMsg = ref("");
-const inviteErr = ref("");
-const invite = reactive({ email: "", role: "cashier" });
 const support = reactive({ subject: "", message: "" });
 const supportBusy = ref(false);
 const supportMsg = ref("");
@@ -312,14 +277,6 @@ async function changePassword() {
   }
 }
 
-async function loadInvites() {
-  try {
-    invites.value = (await apiService.getInvites()) || [];
-  } catch {
-    invites.value = [];
-  }
-}
-
 async function loadSupport() {
   try {
     const data = await apiService.getSupportThread();
@@ -350,36 +307,7 @@ async function sendSupport() {
   }
 }
 
-async function sendInvite() {
-  inviting.value = true;
-  inviteMsg.value = "";
-  inviteErr.value = "";
-  try {
-    const res = await apiService.createInvite({ email: invite.email, role: invite.role });
-    inviteMsg.value = "Invitación enviada por correo.";
-    invite.email = "";
-    await loadInvites();
-  } catch (e) {
-    const raw = e.response?.data;
-    inviteErr.value = typeof raw === "string" ? raw : raw?.message || "No se pudo enviar la invitación.";
-  } finally {
-    inviting.value = false;
-  }
-}
-
-async function revoke(i) {
-  await apiService.revokeInvite(i.id);
-  await loadInvites();
-}
-
-async function removeInvite(i) {
-  if (!confirm("¿Eliminar invitación?")) return;
-  await apiService.deleteInvite(i.id);
-  await loadInvites();
-}
-
 onMounted(() => {
-  loadInvites();
   loadSupport();
 });
 </script>
@@ -462,7 +390,7 @@ input, select { border:1px solid var(--timber-line); border-radius:.65rem; paddi
 .btn-primary { background:var(--timber-primary); color:var(--timber-on-primary); border:none; border-radius:.7rem; padding:.65rem 1.05rem; font-weight:600; cursor:pointer; box-shadow:var(--timber-shadow); }
 .ok { color:var(--timber-success); font-size:.88rem; }
 .err { color:var(--timber-danger); font-size:.88rem; }
-.invite-form { display:grid; grid-template-columns:1.4fr .8fr auto; gap:.65rem; align-items:end; margin-bottom:.85rem; }
+.team-link { display:inline-flex; margin-top:.4rem; text-decoration:none; }
 .invite-list { list-style:none; margin:0; padding:0; }
 .invite-list li { display:flex; justify-content:space-between; gap:1rem; padding:.75rem 0; border-bottom:1px solid var(--timber-line); }
 .meta { display:block; font-size:.8rem; color:var(--timber-muted); }
@@ -501,5 +429,4 @@ input, select { border:1px solid var(--timber-line); border-radius:.65rem; paddi
   text-align: center;
 }
 .pw-form { display: grid; gap: 0.75rem; max-width: 24rem; margin-bottom: 0.85rem; }
-@media (max-width:720px) { .invite-form { grid-template-columns:1fr; } }
 </style>
