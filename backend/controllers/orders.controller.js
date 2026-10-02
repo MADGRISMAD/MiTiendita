@@ -110,16 +110,18 @@ async function settlePayment(req, existing, body, { requireCash = true, paidAt }
   }
 
   const { cartTotals, rateOf } = require('../utils/tax');
-  const cardExtraIva = method === 'card' && Boolean(body?.cardExtraIva);
+  const settings = await db.GetSettings(req.tenantId);
+  // La comisión por tarjeta solo aplica si la tienda la activó, y con su porcentaje (no el del dispositivo)
+  const cardExtraIva = method === 'card' && Boolean(body?.cardExtraIva) && Boolean(settings?.cardFeeEnabled);
   const totals = cartTotals(existing.items || [], {
     discountPercent: existing.discountPercent || 0,
     taxRate: rateOf(existing.taxRate),
     cardExtraIva,
+    cardFeeRate: Math.min(30, Math.max(0, Number(settings?.cardFeePercent ?? 4) || 0)) / 100,
   });
   const deliveryFee = Number(existing.deliveryFee || 0);
   const total = Number((totals.total + deliveryFee).toFixed(2));
 
-  const settings = await db.GetSettings(req.tenantId);
   if (settings?.inventoryEnabled && !existing.inventoryApplied) {
     const nextItems = [];
     for (const item of existing.items || []) {

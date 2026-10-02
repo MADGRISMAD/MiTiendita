@@ -340,7 +340,7 @@
             <div class="pay-total">
               <span>A cobrar</span>
               <strong>{{ money(payTotal) }}</strong>
-              <small v-if="cardExtraAmount">Incluye IVA extra de tarjeta {{ money(cardExtraAmount) }}</small>
+              <small v-if="cardExtraAmount">Incluye comisión por tarjeta {{ money(cardExtraAmount) }}</small>
             </div>
             <div class="methods">
               <button
@@ -354,9 +354,9 @@
                 <PosIcon :name="m.icon" />{{ m.label }}
               </button>
             </div>
-            <label v-if="payMethod === 'card'" class="check">
+            <label v-if="payMethod === 'card' && cardFeeOn" class="check">
               <input v-model="cardExtraIva" type="checkbox" />
-              Agregar IVA extra en tarjeta ({{ Math.round(TAX_RATE * 100) }}%)
+              Cobrar comisión por tarjeta ({{ feePctText }}) · +{{ money(cardFeeFor(payOrder?.total)) }}
             </label>
             <div class="dlg-acts">
               <button type="button" class="btn" :disabled="payBusy" @click="payOrder = null">Cancelar</button>
@@ -408,7 +408,7 @@ import { venueStore } from "../venueStore";
 import { offlineStore } from "../offlineFlags";
 import { flushOfflineSales, listDeviceSales, retrySales } from "../offlineSync";
 import { isNetworkError } from "../net";
-import { lineBreakdown, rateOf } from "../tax";
+import { cardFeeRateOf, lineBreakdown, rateOf } from "../tax";
 
 const vSelectOnFocus = {
   mounted(el) {
@@ -460,9 +460,16 @@ const voidBusy = ref(false);
 
 const TAX_RATE = computed(() => rateOf(venueStore.taxRate));
 
+// Comisión por pago con tarjeta: solo si la tienda la activó en Configuración
+const cardFeeOn = computed(() => Boolean(venueStore.cardFeeEnabled));
+const feeRate = computed(() => cardFeeRateOf(venueStore.cardFeePercent));
+const feePctText = computed(() => `${Number((feeRate.value * 100).toFixed(2))}%`);
+function cardFeeFor(amount) {
+  return round2(Number(amount || 0) * feeRate.value);
+}
 const cardExtraAmount = computed(() => {
-  if (!payOrder.value || payMethod.value !== "card" || !cardExtraIva.value) return 0;
-  return round2(Number(payOrder.value.total || 0) * TAX_RATE.value);
+  if (!payOrder.value || payMethod.value !== "card" || !cardFeeOn.value || !cardExtraIva.value) return 0;
+  return cardFeeFor(payOrder.value.total);
 });
 const payTotal = computed(() => round2(Number(payOrder.value?.total || 0) + cardExtraAmount.value));
 
@@ -780,7 +787,8 @@ function openPay(o) {
   }
   payOrder.value = o;
   payMethod.value = "cash";
-  cardExtraIva.value = false;
+  // Si la tienda cobra comisión, ya viene marcada al elegir tarjeta; el cajero puede quitarla
+  cardExtraIva.value = cardFeeOn.value;
 }
 
 async function confirmPay() {
@@ -788,7 +796,7 @@ async function confirmPay() {
   payBusy.value = true;
   try {
     const updated = await apiService.payOrder(payOrder.value.id, payMethod.value, {
-      cardExtraIva: payMethod.value === "card" && cardExtraIva.value,
+      cardExtraIva: payMethod.value === "card" && cardFeeOn.value && cardExtraIva.value,
     });
     replaceOrder(updated);
     const id = payOrder.value.id;

@@ -16,6 +16,8 @@ const defaultSettings = {
   inventoryEnabled: false,
   costMethod: "last",
   taxRate: 0.16,
+  cardFeeEnabled: false,
+  cardFeePercent: 4,
   setupCompleted: false,
 };
 
@@ -51,6 +53,8 @@ watch(
       inventoryEnabled: Boolean(value.inventoryEnabled),
       costMethod: value.costMethod === "average" ? "average" : "last",
       taxRate: value.taxRate ?? 0.16,
+      cardFeeEnabled: Boolean(value.cardFeeEnabled),
+      cardFeePercent: value.cardFeePercent ?? 4,
       setupCompleted: value.setupCompleted,
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
