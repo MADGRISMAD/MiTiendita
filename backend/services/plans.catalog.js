@@ -25,7 +25,7 @@ const PLAN_CATALOG = {
     id: 'basic',
     name: 'Básico',
     tagline: 'Entra desde cualquier pantalla y cobra',
-    pitch: 'Se daña la PC del cajero? Abres Mi Tiendita en una tablet o el celular y sigues vendiendo al instante.',
+    pitch: '¿Se daña la PC del cajero? Abres Mi Tiendita en una tablet o el celular y sigues vendiendo al instante.',
     priceMonth: Number(process.env.MP_PLAN_BASIC_PRICE || 349),
     priceYear: Number(process.env.MP_PLAN_BASIC_YEAR_PRICE || 3490),
     aiQuota: AI_QUOTAS.basic,

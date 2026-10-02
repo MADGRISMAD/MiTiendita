@@ -85,7 +85,7 @@
                 </div>
                 <div class="shot-status">
                   <span>Abarrotes López</span>
-                  <span>2 arts</span>
+                  <span>2 artículos</span>
                   <span class="hint">Escáner listo</span>
                 </div>
                 <div class="shot-desk">
@@ -94,7 +94,7 @@
                     <div>7501234567890<i class="caret"></i></div>
                   </div>
                   <div class="shot-total">
-                    <p>2 arts</p>
+                    <p>2 artículos</p>
                     <p class="lbl">Total</p>
                     <strong>$40.00</strong>
                     <p class="tax">IVA $5.52 · Neto $34.48</p>
@@ -220,7 +220,7 @@
                     <div class="bezel">
                       <span class="cam" aria-hidden="true"></span>
                       <div class="screen">
-                        <p>Ticket · 2 arts</p>
+                        <p>Ticket · 2 artículos</p>
                         <strong>$40.00</strong>
                       </div>
                     </div>
