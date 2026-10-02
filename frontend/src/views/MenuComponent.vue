@@ -377,13 +377,13 @@
               <button type="button" class="btn" :disabled="!pickFoods.length" @click="exportCatalog">
                 Exportar CSV
               </button>
-              <button type="button" class="btn primary" @click="openNewFood">
+              <button type="button" class="btn primary hide-mobile" @click="openNewFood">
                 <PosIcon name="plus" :size="18" /> Nuevo producto
               </button>
             </div>
           </header>
 
-          <div class="kpis">
+          <div class="kpis hide-mobile">
             <button type="button" class="kpi" :class="{ on: statusFilter === 'all' }" @click="statusFilter = 'all'">
               <span>Productos</span><strong>{{ pickFoods.length }}</strong>
             </button>
@@ -429,6 +429,7 @@
             </aside>
 
             <section class="cat-main">
+              <div class="cat-sticky">
               <div class="cat-tools">
                 <div class="finder-box">
                   <PosIcon name="search" class="finder-ico" />
@@ -450,7 +451,7 @@
                   <option v-if="inventoryOn" value="stock">Menos existencias</option>
                   <option value="margin">Menor ganancia</option>
                 </select>
-                <div class="view-toggle">
+                <div class="view-toggle hide-mobile">
                   <button type="button" :class="{ on: viewMode === 'list' }" title="Lista" @click="viewMode = 'list'">☰</button>
                   <button type="button" :class="{ on: viewMode === 'grid' }" title="Mosaico" @click="viewMode = 'grid'">▦</button>
                 </div>
@@ -465,13 +466,35 @@
                   :class="{ on: statusFilter === f.id }"
                   @click="statusFilter = f.id"
                 >
-                  {{ f.label }}
+                  {{ f.label }}<em v-if="f.count != null" class="chip-count">{{ f.count }}</em>
                 </button>
-                <span class="cat-count">{{ catalogRows.length }} {{ catalogRows.length === 1 ? 'producto' : 'productos' }}</span>
+                <span class="cat-count hide-mobile">{{ catalogRows.length }} {{ catalogRows.length === 1 ? 'producto' : 'productos' }}</span>
+              </div>
               </div>
 
               <div class="cat-list">
-                <table v-if="viewMode === 'list' && catalogRows.length" class="cat-table">
+                <div v-if="catalogRows.length" class="m-rows only-mobile">
+                  <button v-for="p in visibleRows" :key="p.id" type="button" class="m-row" @click="editFood(p)">
+                    <span class="avatar" :style="{ '--hue': hueOf(p.menuId) }">
+                      <img v-if="hasImg(p)" :src="p.imgUrl" alt="" loading="lazy" @error="brokenImgs.add(p.id)" />
+                      <template v-else>{{ initial(p.name) }}</template>
+                    </span>
+                    <span class="m-row-main">
+                      <strong>{{ p.name }}</strong>
+                      <small>
+                        {{ codeOf(p) || 'Sin código' }}
+                        <template v-if="!catFilter"> · {{ menuName(p.menuId) }}</template>
+                      </small>
+                    </span>
+                    <span class="m-row-side">
+                      <strong>{{ money(p.price) }}</strong>
+                      <span v-if="inventoryOn" class="pill" :class="stockTone(p)">{{ stockLabel(p) }}</span>
+                      <small v-else-if="marginPct(p) != null" :class="marginTone(p)">{{ marginPct(p) }}% ganancia</small>
+                    </span>
+                  </button>
+                </div>
+
+                <table v-if="viewMode === 'list' && catalogRows.length" class="cat-table hide-mobile">
                   <thead>
                     <tr>
                       <th>Producto</th>
@@ -520,7 +543,7 @@
                   </tbody>
                 </table>
 
-                <div v-else-if="catalogRows.length" class="tiles cat-tiles">
+                <div v-else-if="catalogRows.length" class="tiles cat-tiles hide-mobile">
                   <button v-for="p in visibleRows" :key="p.id" type="button" class="tile" @click="editFood(p)">
                     <span class="avatar" :style="{ '--hue': hueOf(p.menuId) }">
                       <img v-if="hasImg(p)" :src="p.imgUrl" alt="" loading="lazy" @error="brokenImgs.add(p.id)" />
@@ -565,6 +588,10 @@
             </section>
           </div>
         </div>
+
+        <button type="button" class="fab only-mobile" aria-label="Nuevo producto" @click="openNewFood">
+          <PosIcon name="plus" :size="26" />
+        </button>
 
         <!-- Administrar categorías -->
         <Teleport to="body">
@@ -1057,14 +1084,14 @@
                 <input v-model="foodForm.name" class="inp" :placeholder="namePlaceholder" required />
               </label>
 
-              <label class="field">
+              <label class="field m-wide">
                 <span>Categoría</span>
                 <select v-model="foodForm.menuId" class="inp" @change="onFormMenuChange">
                   <option v-for="m in menus" :key="m.id" :value="m.id">{{ m.name }}</option>
                   <option value="__new">+ Nueva categoría…</option>
                 </select>
               </label>
-              <div class="field">
+              <div class="field m-wide">
                 <span>Código de barras o clave</span>
                 <div class="code-row">
                   <input
@@ -1104,7 +1131,7 @@
                   />
                 </label>
                 <label class="field">
-                  <span>Precio de venta</span>
+                  <span>Precio<span class="hide-mobile"> de venta</span></span>
                   <input v-model.number="foodForm.price" class="inp num strong" type="number" min="0" step="0.01" required />
                 </label>
               </div>
@@ -1165,10 +1192,10 @@
             <footer class="product-foot" :class="{ editing: editingFood }">
               <div class="sheet-actions">
                 <button type="button" class="act" @click="closeFoodForm">Cancelar</button>
-                <button type="submit" class="act primary">Guardar producto</button>
+                <button type="submit" class="act primary">Guardar<span class="hide-mobile"> producto</span></button>
               </div>
               <button v-if="editingFood" type="button" class="delete-link dup-link" @click="duplicateFood">
-                Duplicar producto
+                Duplicar<span class="hide-mobile"> producto</span>
               </button>
               <button
                 v-if="editingFood"
@@ -1177,7 +1204,7 @@
                 :disabled="cashBlocked"
                 @click="deleteFood"
               >
-                Eliminar este producto
+                Eliminar<span class="hide-mobile"> este producto</span>
               </button>
             </footer>
           </form>
@@ -1552,11 +1579,16 @@ export default {
 
     // —— Catálogo ——
     const statusFilters = computed(() => {
-      const list = [{ id: "all", label: "Todos" }];
+      const st = catalogStats.value;
+      const list = [{ id: "all", label: "Todos", count: pickFoods.value.length }];
       if (inventoryOn.value) {
-        list.push({ id: "low", label: "Stock bajo" }, { id: "out", label: "Agotados" }, { id: "expiry", label: "Caducan" });
+        list.push(
+          { id: "low", label: "Stock bajo", count: st.low },
+          { id: "out", label: "Agotados", count: st.out },
+          { id: "expiry", label: "Caducan", count: st.expiry }
+        );
       }
-      list.push({ id: "nocode", label: "Sin código" }, { id: "nocost", label: "Sin costo" });
+      list.push({ id: "nocode", label: "Sin código", count: st.nocode }, { id: "nocost", label: "Sin costo", count: st.nocost });
       return list;
     });
     function codeOf(p) {
@@ -1579,7 +1611,7 @@ export default {
       return pickFoods.value.filter((p) => String(p.menuId || "") === String(id)).length;
     }
     const catalogStats = computed(() => {
-      const out = { value: 0, low: 0, out: 0, nocode: 0, nocost: 0 };
+      const out = { value: 0, low: 0, out: 0, nocode: 0, nocost: 0, expiry: 0 };
       for (const p of pickFoods.value) {
         const stock = Number(p.stock) || 0;
         if (stock > 0) out.value += stock * (Number(p.cost) || 0);
@@ -1587,6 +1619,7 @@ export default {
         else if (isLow(p)) out.low += 1;
         if (!codeOf(p)) out.nocode += 1;
         if (!(Number(p.cost) > 0)) out.nocost += 1;
+        if (p.tracksExpiry) out.expiry += 1;
       }
       return out;
     });
@@ -3451,6 +3484,7 @@ export default {
       catCount,
       marginPct,
       marginTone,
+      codeOf,
       generateCode,
       foodMarkup,
       onFormMenuChange,
@@ -5441,28 +5475,170 @@ html[data-theme="dark"] .avatar {
 }
 .price-trio .strong { font-weight: 800; }
 .dup-link { color: var(--timber-primary) !important; }
+.chip-count {
+  margin-left: 0.35rem;
+  font-style: normal;
+  font-size: 0.72rem;
+  font-weight: 800;
+  opacity: 0.7;
+  font-variant-numeric: tabular-nums;
+}
+.m-rows {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.6rem;
+}
+.m-row {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  width: 100%;
+  min-height: 4.2rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--timber-line);
+  border-radius: 0.9rem;
+  background: var(--timber-panel);
+  color: var(--timber-ink);
+  text-align: left;
+  cursor: pointer;
+}
+.m-row:active { background: var(--timber-panel-elevated); }
+.m-row-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: grid;
+  gap: 0.15rem;
+}
+.m-row-main strong {
+  font-size: 0.95rem;
+  line-height: 1.25;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.m-row-main small {
+  font-size: 0.76rem;
+  color: var(--timber-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.m-row-side {
+  flex-shrink: 0;
+  display: grid;
+  justify-items: end;
+  gap: 0.25rem;
+}
+.m-row-side strong {
+  font-size: 1.02rem;
+  font-variant-numeric: tabular-nums;
+}
+.m-row-side small { font-size: 0.72rem; font-weight: 700; }
+.fab {
+  position: fixed;
+  right: 1rem;
+  bottom: calc(4.6rem + env(safe-area-inset-bottom, 0px));
+  z-index: 40;
+  width: 3.6rem;
+  height: 3.6rem;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: 1.2rem;
+  background: var(--timber-primary);
+  color: var(--timber-on-primary);
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--timber-primary) 40%, transparent);
+  cursor: pointer;
+}
 
 @media (max-width: 767.98px) {
-  .cat-page { padding: 0.6rem; gap: 0.6rem; overflow-y: auto; }
-  .cat-head-acts .btn:not(.primary) { display: none; }
-  .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.4rem; }
-  .kpi { padding: 0.5rem 0.6rem; }
-  .kpi strong { font-size: 1.1rem; }
-  .cat-body { grid-template-columns: minmax(0, 1fr); flex: none; }
+  .cat-page {
+    padding: 0 0 6rem;
+    gap: 0;
+    overflow-y: auto;
+    background: var(--timber-surface);
+  }
+  .cat-head { padding: 0.75rem 0.85rem 0.35rem; }
+  .cat-title h1 { font-size: 1.25rem; }
+  .cat-title p { font-size: 0.8rem; }
+  .cat-head-acts { display: none; }
+  .cat-body { display: block; }
   .cat-rail {
     flex-direction: row;
+    gap: 0.35rem;
     overflow-x: auto;
-    padding: 0.4rem;
+    padding: 0.35rem 0.85rem 0.5rem;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    scrollbar-width: none;
   }
-  .rail-item { flex: 0 0 auto; }
-  .rail-acts { margin: 0; padding: 0 0 0 0.4rem; border-top: none; border-left: 1px solid var(--timber-line); flex-shrink: 0; }
-  .cat-main { min-height: 24rem; }
+  .cat-rail::-webkit-scrollbar { display: none; }
+  .rail-item {
+    flex: 0 0 auto;
+    min-height: 2.3rem;
+    padding: 0 0.85rem;
+    border: 1px solid var(--timber-line);
+    border-radius: 999px;
+    background: var(--timber-panel);
+    font-size: 0.85rem;
+  }
+  .rail-item.on { border-color: transparent; }
+  .rail-acts {
+    flex-shrink: 0;
+    flex-wrap: nowrap;
+    margin: 0;
+    padding: 0;
+    border: none;
+  }
+  .rail-acts .soft-btn { min-height: 2.3rem; border-radius: 999px; }
+  .cat-main {
+    overflow: visible;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+  .cat-sticky {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    background: var(--timber-surface);
+    border-bottom: 1px solid var(--timber-line);
+  }
+  .cat-tools { padding: 0.5rem 0.85rem 0.4rem; gap: 0.4rem; }
+  .cat-search { min-height: 2.75rem; border-width: 1px; padding-left: 2.6rem; }
+  .cat-tools .finder-ico { left: 0.8rem; }
+  .cat-tools .cat-sort { flex: 0 0 7.2rem; font-size: 0.8rem; padding: 0 0.4rem; }
+  .cat-chips { padding: 0 0.85rem 0.55rem; border-bottom: none; }
   .cat-list { overflow: visible; }
-  .cat-tools { padding: 0.6rem; }
-  .cat-tools { flex-wrap: wrap; }
-  .cat-tools .finder-box { flex-basis: 100%; }
-  .cat-tools .cat-sort { flex: 1 1 auto; }
+  .m-rows { padding: 0.6rem 0.85rem; }
+
+  /* Formulario de producto en celular */
+  .product-sheet { max-height: 100dvh; border-radius: 1rem 1rem 0 0; }
+  .product-sheet .product-banner { height: 4.25rem; }
+  .product-sheet .banner-copy { bottom: 0.8rem; }
+  .product-sheet .product-body { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 0.5rem; }
+  .product-sheet .m-wide { grid-column: 1 / -1; }
+  .product-banner .sheet-kicker { display: none; }
+  .product-banner h3 { font-size: 1.15rem; }
+  .product-sheet .product-banner .sheet-x { top: 0.6rem; }
+  .product-body { padding: 0.75rem 0.85rem 1rem; gap: 0.6rem; }
+  .product-sheet .inp { min-height: 2.9rem; font-size: 1rem; }
   .price-trio { gap: 0.4rem; }
+  .iva-card { padding: 0.6rem 0.7rem; }
+  .product-foot {
+    grid-template-columns: 1fr 1fr;
+    gap: 0.25rem 0.5rem;
+    padding: 0.6rem 0.85rem calc(0.6rem + env(safe-area-inset-bottom, 0px));
+  }
+  .product-foot .sheet-actions { grid-column: 1 / -1; }
+  .product-sheet .sheet-actions .act { min-height: 3rem; font-size: 1rem; }
+  .product-foot .delete-link { font-size: 0.85rem; }
+  .product-foot .dup-link { justify-self: start; }
+  .product-foot .delete-link:not(.dup-link) { justify-self: end; }
 }
 @media (min-width: 768px) and (max-width: 1099.98px) {
   .cat-body { grid-template-columns: 10.5rem minmax(0, 1fr); }
