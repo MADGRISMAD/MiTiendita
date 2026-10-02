@@ -51,7 +51,7 @@
                   <p class="tk-item-name">{{ item.name }}</p>
                   <p v-if="item.notes" class="tk-item-note">{{ item.notes }}</p>
                   <div class="tk-line">
-                    <span>{{ qty(item.quantity) }} × {{ money(item.price) }}</span>
+                    <span>{{ qty(item.quantity) }} × {{ money(lineUnit(item)) }}</span>
                     <i class="tk-dots"></i>
                     <span>{{ money(lineGross(item)) }}</span>
                   </div>
@@ -78,7 +78,7 @@
               <strong><sup>$</sup>{{ num(order.total) }}</strong>
             </div>
             <p class="tk-taxnote">
-              IVA {{ pct(rateOf(order.taxRate) * 100) }} incluido en el total: {{ money(order.tax) }}
+              Precios con IVA incluido · Base {{ money(taxBase) }} + IVA {{ pct(rateOf(order.taxRate) * 100) }} {{ money(order.tax) }}
             </p>
 
             <div v-if="paid" class="tk-pay" :class="{ single: !hasChangeBox }">
@@ -89,6 +89,7 @@
                   Tarjeta {{ money(order.cardAmount) }}<br />Efectivo {{ money(order.cashReceived) }}
                 </em>
                 <em v-else-if="order.cashReceived">{{ money(order.cashReceived) }}</em>
+                <em v-if="order.paymentReference">Ref. {{ order.paymentReference }}</em>
               </div>
               <div v-if="hasChangeBox" class="tk-change">
                 <span>Su cambio</span>
@@ -154,7 +155,7 @@ import "../ticket.css";
 import { apiService, appPublicOrigin } from "../apiService";
 import { venueStore, fetchVenueSettings } from "../venueStore";
 import { authStore } from "../authStore";
-import { lineBreakdown, rateOf } from "../tax";
+import { lineBreakdown, rateOf, round2 } from "../tax";
 import { getSale, saleToPrintOrder } from "../offlineDb";
 import { useTicketShell, folioOf, closingLine, closingNote } from "../ticketShell";
 import PosIcon from "../components/PosIcon.js";
@@ -243,6 +244,17 @@ function lineGross(item) {
   const rate = rateOf(order.value?.taxRate);
   return lineBreakdown(item.price, item.quantity, item.priceIncludesTax, rate).gross;
 }
+/** Precio c/u con IVA: por la cantidad da exactamente el importe del renglón. */
+function lineUnit(item) {
+  const rate = rateOf(order.value?.taxRate);
+  return lineBreakdown(item.price, 1, item.priceIncludesTax, rate).unitGross;
+}
+// Lo cobrado por los productos (sin comisión ni envío) = base + IVA
+const taxBase = computed(() => {
+  const o = order.value;
+  if (!o) return 0;
+  return round2(Number(o.subtotal || 0) - Number(o.discountAmount || 0) - Number(o.tax || 0));
+});
 const MONTHS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
 const DAYS = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
 function validDate(d) {

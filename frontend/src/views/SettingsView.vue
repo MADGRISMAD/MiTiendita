@@ -247,6 +247,25 @@
                 <i></i>{{ form.inventoryEnabled ? 'Activo: las ventas descuentan existencias.' : 'Apagado: las existencias no cambian al vender.' }}
               </p>
             </section>
+            <section v-if="form.inventoryEnabled" class="adm-card cfg-card">
+              <div class="switch-head">
+                <div>
+                  <h3>Permitir vender sin existencias</h3>
+                  <p class="adm-hint">Si lo apagas, no se puede cobrar un producto del que no hay piezas suficientes. Si lo prendes, la venta pasa, el stock queda en negativo y la venta se marca para revisar.</p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  class="adm-switch"
+                  :aria-checked="form.allowNegativeStock"
+                  aria-label="Permitir vender sin existencias"
+                  @click="form.allowNegativeStock = !form.allowNegativeStock"
+                ></button>
+              </div>
+              <p class="state-line" :class="form.allowNegativeStock ? 'on' : 'off'">
+                <i></i>{{ form.allowNegativeStock ? 'Sí: se vende aunque no haya stock y queda marcada para revisión.' : 'No: sin existencias no se puede cobrar.' }}
+              </p>
+            </section>
             <section class="adm-card cfg-card">
               <h3>Costo al registrar una compra</h3>
               <p class="adm-hint">Define con qué costo se calcula tu ganancia.</p>
@@ -492,6 +511,7 @@ function fromStore() {
     logoUrl: s.logoUrl || "/logo.svg",
     timezone: s.timezone || "America/Mexico_City",
     inventoryEnabled: Boolean(s.inventoryEnabled),
+    allowNegativeStock: Boolean(s.allowNegativeStock),
     costMethod: s.costMethod === "average" ? "average" : "last",
     taxPercent: Number((Number(s.taxRate ?? 0.16) * 100).toFixed(2)),
     cardFeeEnabled: Boolean(s.cardFeeEnabled),
@@ -503,7 +523,7 @@ const snapshot = ref(JSON.stringify(fromStore()));
 const FIELDS_BY_SECTION = {
   negocio: ["businessName", "businessType", "address", "phone", "logoUrl", "timezone"],
   ventas: ["taxPercent", "cardFeeEnabled", "cardFeePercent"],
-  inventario: ["inventoryEnabled", "costMethod"],
+  inventario: ["inventoryEnabled", "allowNegativeStock", "costMethod"],
 };
 const dirty = computed(() => JSON.stringify({ ...form }) !== snapshot.value);
 function dirtyIn(id) {
@@ -603,6 +623,7 @@ async function save() {
         logoUrl: form.logoUrl || "/logo.svg",
         timezone: form.timezone,
         inventoryEnabled: Boolean(form.inventoryEnabled),
+        allowNegativeStock: Boolean(form.allowNegativeStock),
         costMethod: form.costMethod === "average" ? "average" : "last",
         taxRate: taxRate.value,
         cardFeeEnabled: Boolean(form.cardFeeEnabled),

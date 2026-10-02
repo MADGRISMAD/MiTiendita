@@ -124,7 +124,7 @@
                   </small>
                 </span>
                 <span class="result-side">
-                  <strong class="result-price">{{ money(p.price) }}</strong>
+                  <strong class="result-price">{{ money(lineUnit(p)) }}</strong>
                   <small v-if="inventoryOn" class="stock" :class="stockTone(p)">{{ stockLabel(p) }}</small>
                   <em v-if="qtyInCart(p.id)" class="in-ticket">{{ formatQty(qtyInCart(p.id)) }} en ticket</em>
                 </span>
@@ -162,7 +162,7 @@
                 </span>
                 <span class="tile-name">{{ p.name }}</span>
                 <span class="tile-foot">
-                  <strong class="tile-price">{{ money(p.price) }}</strong>
+                  <strong class="tile-price">{{ money(lineUnit(p)) }}</strong>
                   <small v-if="inventoryOn" class="stock" :class="stockTone(p)">{{ stockLabel(p) }}</small>
                 </span>
               </button>
@@ -238,7 +238,7 @@
                 <div class="line-main">
                   <span class="line-name">{{ line.name }}</span>
                   <span class="line-meta">
-                    {{ formatQty(line.quantity) }} × {{ money(line.price) }}
+                    {{ formatQty(line.quantity) }} × {{ money(lineUnit(line)) }}
                     <template v-if="line.isMisc"> · Varios</template>
                     <template v-else-if="line.barcode || line.sku"> · {{ line.barcode || line.sku }}</template>
                   </span>
@@ -1062,9 +1062,27 @@
                   Cobra <strong>{{ money(chargeTotal) }}</strong> en la terminal y confirma cuando salga aprobado.
                 </p>
               </template>
-              <p v-else-if="payMethod === 'transfer'" class="pay-note">
-                Confirma que la transferencia de <strong>{{ money(total) }}</strong> ya llegó a la cuenta.
-              </p>
+              <template v-else-if="payMethod === 'transfer' || payMethod === 'other'">
+                <p class="pay-note">
+                  <template v-if="payMethod === 'transfer'">
+                    Confirma que la transferencia de <strong>{{ money(total) }}</strong> ya llegó a la cuenta.
+                  </template>
+                  <template v-else>
+                    Registra el cobro de <strong>{{ money(total) }}</strong> por otro medio (vales, pago en línea…). No entra al efectivo del cajón.
+                  </template>
+                </p>
+                <label class="field">
+                  <span>{{ payMethod === 'transfer' ? 'Folio SPEI o últimos dígitos (opcional)' : 'Referencia (opcional)' }}</span>
+                  <input
+                    v-model.trim="payReference"
+                    class="inp"
+                    type="text"
+                    maxlength="60"
+                    autocomplete="off"
+                    :placeholder="payMethod === 'transfer' ? 'Ej. 4821 o clave de rastreo' : 'Ej. vale 0012'"
+                  />
+                </label>
+              </template>
 
               <p v-if="payError" class="dlg-err">{{ payError }}</p>
 
@@ -1444,13 +1462,15 @@ export default {
 
     // Estado del modal de pago
     const showPayment = ref(false);
-    const payMethod = ref("cash"); // 'cash' | 'card' | 'transfer' | 'split'
+    const payMethod = ref("cash"); // 'cash' | 'card' | 'transfer' | 'split' | 'other'
     const payMethods = [
       { id: "cash", label: "Efectivo", icon: "cash" },
       { id: "card", label: "Tarjeta", icon: "card" },
       { id: "transfer", label: "Transferencia", icon: "transfer" },
       { id: "split", label: "Mixto", icon: "split" },
+      { id: "other", label: "Otro", icon: "receipt" },
     ];
+    const payReference = ref("");
     const payCashReceived = ref("");
     const payCardAmount = ref("");
     const payError = ref("");
@@ -1978,11 +1998,24 @@ export default {
       const min = p?.lowStockThreshold != null ? Number(p.lowStockThreshold) : 5;
       return stockNum(p) > 0 && stockNum(p) <= min;
     }
+    const allowNoStock = computed(() => Boolean(venueStore.allowNegativeStock));
+    /** Piezas que faltan si el renglón de `p` llega a `qty` (0 si alcanzan o no se lleva inventario). */
+    function stockGap(p, qty) {
+      if (!inventoryOn.value || !p || p.isMisc) return 0;
+      const row = pickFoods.value.find((f) => String(f.id) === String(p.id)) || p;
+      return Math.max(0, Number(qty || 0) - stockNum(row));
+    }
+    function noStockText(p) {
+      const row = pickFoods.value.find((f) => String(f.id) === String(p.id)) || p;
+      const n = Math.max(0, stockNum(row));
+      return n > 0 ? `Sin existencias suficientes: ${p.name} (quedan ${formatQty(n)})` : `Sin existencias: ${p.name}`;
+    }
     function stockTone(p) {
       return isOut(p) ? "out" : isLow(p) ? "low" : "ok";
     }
     function stockLabel(p) {
       const n = stockNum(p);
+      if (n < 0) return `Agotado (${formatQty(n)})`;
       if (n <= 0) return "Agotado";
       if (isLow(p)) return `Quedan ${formatQty(n)}`;
       return `${formatQty(n)} disp.`;
@@ -2038,6 +2071,10 @@ export default {
     function lineGross(line) {
       return lineBreakdown(line.price, line.quantity, line.priceIncludesTax, TAX_RATE.value).gross;
     }
+    /** Precio c/u con IVA: el mismo que, por la cantidad, da el importe del renglón. */
+    function lineUnit(line) {
+      return lineBreakdown(line.price, 1, line.priceIncludesTax, TAX_RATE.value).unitGross;
+    }
 
     const lastLineQty = computed(() => {
       if (!lastAdded.value) return 0;
@@ -2084,8 +2121,10 @@ export default {
       }
       if (lastAdded.value && lastLineQty.value > 0) {
         const p = lastAdded.value;
-        if (isOut(p)) return { tone: "warn", text: `Agregado: ${p.name} · sin existencias registradas` };
-        return { tone: "ok", text: `Agregado: ${p.name} · ${formatQty(lastLineQty.value)} × ${money(p.price)}` };
+        if (stockGap(p, lastLineQty.value) > 0) {
+          return { tone: "warn", text: `Agregado: ${p.name} · sin existencias suficientes; la venta quedará para revisar` };
+        }
+        return { tone: "ok", text: `Agregado: ${p.name} · ${formatQty(lastLineQty.value)} × ${money(lineUnit(p))}` };
       }
       if (!offlineStore.online) return { tone: "warn", text: "Sin internet · vendes con el catálogo guardado" };
       return {
@@ -2229,6 +2268,15 @@ export default {
       }
       const amount = Number(qty) > 0 ? Number(qty) : 1;
       const idx = store.platillosSeleccionados.findIndex((p) => p.id === producto.id);
+      const inCart = idx >= 0 ? Number(store.platillosSeleccionados[idx].quantity) || 0 : 0;
+      if (!allowNoStock.value && stockGap(producto, inCart + amount) > 0) {
+        scanError.value = noStockText(producto);
+        nameHits.value = [];
+        hitsFor.value = "";
+        scanCode.value = "";
+        if (!isCompactPos()) focusScan();
+        return;
+      }
       if (idx >= 0) {
         const line = store.platillosSeleccionados[idx];
         line.quantity = Math.round((Number(line.quantity) + amount) * 1000) / 1000;
@@ -2496,6 +2544,10 @@ export default {
         removeAt(i);
         return;
       }
+      if (delta > 0 && !allowNoStock.value && stockGap(line, next) > 0) {
+        scanError.value = noStockText(line);
+        return;
+      }
       line.quantity = next;
       selectedIdx.value = i;
       focusScan();
@@ -2596,6 +2648,10 @@ export default {
       }
       if (value > 99999) {
         qtyErr.value = "La cantidad es demasiado grande.";
+        return;
+      }
+      if (value > Number(line.quantity) && !allowNoStock.value && stockGap(line, value) > 0) {
+        qtyErr.value = noStockText(line);
         return;
       }
       line.quantity = Math.round(value * 1000) / 1000;
@@ -2798,6 +2854,7 @@ export default {
       cardFee.value = cardFeeOn.value;
       payCashReceived.value = "";
       payCardAmount.value = "";
+      payReference.value = "";
       payError.value = "";
       openingFloat.value = "";
       showMobileCart.value = false;
@@ -2868,6 +2925,10 @@ export default {
         paymentMethod: payMethod.value,
         cashReceived: takesCash.value ? Number(payCashReceived.value || 0) : undefined,
         cardAmount: payMethod.value === "split" ? Number(payCardAmount.value || 0) : undefined,
+        paymentReference:
+          payMethod.value === "transfer" || payMethod.value === "other"
+            ? String(payReference.value || "").trim().slice(0, 60) || undefined
+            : undefined,
         cardExtraIva: cardFeeAmount.value > 0,
         cardExtraTax: cardFeeAmount.value,
         soldAt: new Date().toISOString(),
@@ -2895,7 +2956,7 @@ export default {
             if (!item.foodId) continue;
             const row = pickFoods.value.find((p) => String(p.id) === String(item.foodId));
             if (row) {
-              row.stock = Math.max(0, (Number(row.stock) || 0) - Number(item.quantity || 0));
+              row.stock = (Number(row.stock) || 0) - Number(item.quantity || 0);
             }
           }
         }
@@ -3578,6 +3639,7 @@ export default {
       removeSelected,
       clearCart,
       lineGross,
+      lineUnit,
       money,
       moneyShort,
       formatQty,
@@ -3642,6 +3704,7 @@ export default {
       showPayment,
       payMethods,
       payMethod,
+      payReference,
       cardFeeOn,
       cardFee,
       cardFeeAmount,
@@ -4958,7 +5021,7 @@ html[data-theme="dark"] .avatar {
 }
 .methods {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.4rem;
 }
 .method {

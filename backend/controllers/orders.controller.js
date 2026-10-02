@@ -122,7 +122,13 @@ async function settlePayment(req, existing, body, { requireCash = true, paidAt }
   const deliveryFee = Number(existing.deliveryFee || 0);
   const total = Number((totals.total + deliveryFee).toFixed(2));
 
+  let stockShortages = [];
   if (settings?.inventoryEnabled && !existing.inventoryApplied) {
+    // Una venta hecha sin internet ya se entregó: se registra aunque falte stock y queda para revisión
+    const allowNegative = Boolean(settings.allowNegativeStock) || Boolean(body?.offline);
+    const reserved = await db.ReserveSaleStock(existing.items || [], req.tenantId, { allowNegative });
+    stockShortages = reserved.shortages;
+
     const nextItems = [];
     for (const item of existing.items || []) {
       const foodId = item.foodId || item.food;
@@ -132,20 +138,20 @@ async function settlePayment(req, existing, body, { requireCash = true, paidAt }
         continue;
       }
       try {
-        const result = await db.ApplySaleDecrement(foodId, qty, req.tenantId);
-        nextItems.push({
-          ...item,
-          lotAllocations: result.allocations || [],
-        });
+        const allocations = await db.ConsumeSaleLots(foodId, qty, req.tenantId);
+        nextItems.push({ ...item, lotAllocations: allocations });
       } catch (e) {
-        console.warn('No se pudo descontar stock:', foodId, e.message);
+        console.warn('No se pudieron descontar lotes:', foodId, e.message);
         nextItems.push(item);
       }
     }
     existing = { ...existing, items: nextItems };
   }
 
-  const cashReceived = Number(body?.cashReceived ?? 0);
+  const takesCash = method === 'cash' || method === 'split';
+  const cashReceived = takesCash ? Number(body?.cashReceived ?? 0) : 0;
+  const paymentReference =
+    method === 'transfer' || method === 'other' ? String(body?.paymentReference || '').trim().slice(0, 60) : '';
   const cardAmount = Number(body?.cardAmount ?? 0);
   const change =
     cashReceived > 0
@@ -168,7 +174,10 @@ async function settlePayment(req, existing, body, { requireCash = true, paidAt }
       cashReceived: cashReceived || null,
       cardAmount: method === 'split' ? cardAmount : null,
       change: change > 0 ? change : 0,
+      paymentReference: paymentReference || null,
       inventoryApplied: Boolean(settings?.inventoryEnabled),
+      stockReview: stockShortages.length > 0,
+      stockShortages,
       items: existing.items || [],
     },
     req.tenantId
@@ -224,6 +233,7 @@ async function sale(req, res) {
       return res.status(200).json(existing);
     }
 
+    let createdHere = false;
     if (!existing) {
       if (typeof body.modality === 'number') {
         body.modality = body.modality === 2 ? 'takeaway' : 'dine-in';
@@ -248,6 +258,7 @@ async function sale(req, res) {
       }
       try {
         existing = await db.CreateOrder(payload);
+        createdHere = true;
       } catch (err) {
         if (err.code === 11000) {
           existing = await db.GetOrderByClientSaleId(clientSaleId, req.tenantId);
@@ -262,10 +273,17 @@ async function sale(req, res) {
     }
 
     const paidAt = parseSoldAt(body.soldAt) || existing.paidAt || new Date();
-    const updated = await settlePayment(req, existing, body, {
-      requireCash: false,
-      paidAt,
-    });
+    let updated;
+    try {
+      updated = await settlePayment(req, existing, body, {
+        requireCash: false,
+        paidAt,
+      });
+    } catch (err) {
+      // Si el cobro no procede (p. ej. sin existencias), no dejes un pedido huérfano por cobrar
+      if (createdHere && err.status) await db.DeleteOrder(existing.id, req.tenantId).catch(() => {});
+      throw err;
+    }
     return res.status(200).json(updated);
   } catch (err) {
     if (err.status) return res.status(err.status).send(err.message);

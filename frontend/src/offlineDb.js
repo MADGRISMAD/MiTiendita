@@ -256,6 +256,7 @@ export function saleToPrintOrder(sale) {
     paymentMethod: payload.paymentMethod || "cash",
     cashReceived: payload.cashReceived ?? null,
     cardAmount: payload.cardAmount ?? null,
+    paymentReference: payload.paymentReference || null,
     change: Number(payload.change) || 0,
     createdAt: soldAt,
     paidAt: soldAt,

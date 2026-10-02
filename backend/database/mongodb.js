@@ -1,6 +1,7 @@
 require('dotenv').config();
 const { MongoClient, ObjectId } = require('mongodb');
 const { createTenantDoc } = require('../models/tenant.model');
+const { reserveSaleStock } = require('../services/sale-stock.service');
 
 const _url = process.env.DATABASE_URI || 'mongodb://127.0.0.1:27017';
 const _dbName = process.env.DATABASE_NAME || 'timber';
@@ -394,50 +395,51 @@ async function UpdateFood(id, data, tenantId) {
   return GetFoodById(id, tenantId);
 }
 /** Resta existencias al cobrar. No bloquea la venta; el stock no baja de 0. */
-async function DecrementFoodStock(id, quantity, tenantId) {
-  const result = await ApplySaleDecrement(id, quantity, tenantId);
-  return result.food;
+/**
+ * Descuenta del stock lo vendido de forma atómica (ver services/sale-stock.service.js).
+ * Sin allowNegative lanza un error 409 y no descuenta nada si algún producto no alcanza.
+ */
+async function ReserveSaleStock(items, tenantId, { allowNegative = false } = {}) {
+  return reserveSaleStock(
+    dbConnection.collection('foods'),
+    (id) => oidFilter(id, tenantId),
+    items,
+    { allowNegative }
+  );
 }
 
-/** Descuenta stock y, si el producto lleva caducidad, consume lotes FEFO. */
-async function ApplySaleDecrement(id, quantity, tenantId) {
+/** Si el producto lleva caducidad, consume sus lotes FEFO. Devuelve lo tomado de cada lote. */
+async function ConsumeSaleLots(id, quantity, tenantId) {
   const filter = oidFilter(id, tenantId);
-  if (!filter) return { food: null, allocations: [] };
+  if (!filter) return [];
   const food = await dbConnection.collection('foods').findOne(filter);
-  if (!food) return { food: null, allocations: [] };
   const qty = Math.max(0, Number(quantity) || 0);
-  if (!qty) return { food: withId(food), allocations: [] };
+  if (!food || !qty || !food.tracksExpiry) return [];
 
   const allocations = [];
-  if (food.tracksExpiry) {
-    const lots = await dbConnection
-      .collection('lots')
-      .find({ tenantId, foodId: String(id), quantity: { $gt: 0 } })
-      .sort({ expiresAt: 1, createdAt: 1 })
-      .toArray();
-    let remaining = qty;
-    for (const lot of lots) {
-      if (remaining <= 0) break;
-      const take = Math.min(Math.max(0, Number(lot.quantity) || 0), remaining);
-      if (!take) continue;
-      await dbConnection.collection('lots').updateOne(
-        { _id: lot._id },
-        { $inc: { quantity: -take }, $set: { updatedAt: new Date() } }
-      );
-      allocations.push({
-        lotId: String(lot._id),
-        qty: take,
-        lot: lot.lot || '',
-        expiresAt: lot.expiresAt || null,
-      });
-      remaining -= take;
-    }
+  const lots = await dbConnection
+    .collection('lots')
+    .find({ tenantId, foodId: String(id), quantity: { $gt: 0 } })
+    .sort({ expiresAt: 1, createdAt: 1 })
+    .toArray();
+  let remaining = qty;
+  for (const lot of lots) {
+    if (remaining <= 0) break;
+    const take = Math.min(Math.max(0, Number(lot.quantity) || 0), remaining);
+    if (!take) continue;
+    await dbConnection.collection('lots').updateOne(
+      { _id: lot._id },
+      { $inc: { quantity: -take }, $set: { updatedAt: new Date() } }
+    );
+    allocations.push({
+      lotId: String(lot._id),
+      qty: take,
+      lot: lot.lot || '',
+      expiresAt: lot.expiresAt || null,
+    });
+    remaining -= take;
   }
-
-  const current = Math.max(0, Number(food.stock) || 0);
-  const next = Math.max(0, current - qty);
-  await dbConnection.collection('foods').updateOne(filter, { $set: { stock: next } });
-  return { food: await GetFoodById(id, tenantId), allocations };
+  return allocations;
 }
 
 /** Devuelve piezas al inventario y restaura lotes si la venta se anuló. */
@@ -465,8 +467,8 @@ async function IncrementFoodStock(id, quantity, tenantId) {
   if (!food) return null;
   const qty = Math.max(0, Math.floor(Number(quantity) || 0));
   if (!qty) return withId(food);
-  const current = Math.max(0, Number(food.stock) || 0);
-  await dbConnection.collection('foods').updateOne(filter, { $set: { stock: current + qty } });
+  // $inc: atómico y respeta un stock negativo (venta sin existencias) en lugar de saltarlo a 0
+  await dbConnection.collection('foods').updateOne(filter, { $inc: { stock: qty } });
   return GetFoodById(id, tenantId);
 }
 async function DeleteFood(id, tenantId) {
@@ -575,6 +577,11 @@ async function GetOrderByClientSaleId(clientSaleId, tenantId) {
 async function CreateOrder(data) {
   const result = await dbConnection.collection('orders').insertOne(data);
   return withId(await dbConnection.collection('orders').findOne({ _id: result.insertedId }));
+}
+async function DeleteOrder(id, tenantId) {
+  const filter = oidFilter(id, tenantId);
+  if (!filter) return { deletedCount: 0 };
+  return dbConnection.collection('orders').deleteOne(filter);
 }
 async function UpdateOrder(id, data, tenantId) {
   const filter = oidFilter(id, tenantId);
@@ -1214,9 +1221,9 @@ module.exports = {
   AddWaitList, GetWaitList, GetWaitListByNumber, DeleteWaitList,
   GetSettings, CreateSettings, UpdateSettings,
   GetMenus, GetMenuById, CreateMenu, UpdateMenu, DeleteMenu,
-  GetFoods, CountFoods, CountPaidOrders, CountCashSessions, GetFoodById, GetFoodByBarcode, CreateFood, UpdateFood, DecrementFoodStock, ApplySaleDecrement, RestoreSaleStock, IncrementFoodStock, DeleteFood, GetLowStockFoods, SearchFoods,
+  GetFoods, CountFoods, CountPaidOrders, CountCashSessions, GetFoodById, GetFoodByBarcode, CreateFood, UpdateFood, ReserveSaleStock, ConsumeSaleLots, RestoreSaleStock, IncrementFoodStock, DeleteFood, GetLowStockFoods, SearchFoods,
   CreateBillingEvent, ListBillingEvents,
-  GetOrders, GetOrderById, GetOrderByInvoiceToken, GetOrderByClientSaleId, CreateOrder, UpdateOrder, GetOrdersByCashSession,
+  GetOrders, GetOrderById, GetOrderByInvoiceToken, GetOrderByClientSaleId, CreateOrder, UpdateOrder, DeleteOrder, GetOrdersByCashSession,
   GetOrdersByDateRange, GetSalesReport,
   SaveSupportMail, FindSupportMailByMessageIds, ListSupportMail, ListSupportMailAll, ListSupportMailRaw, ListUnmatchedSupportMail, AssignUnassignedSupportMail,
   GetInvites, GetInviteByToken, CreateInvite, UpdateInvite, DeleteInvite,
