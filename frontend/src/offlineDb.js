@@ -250,6 +250,7 @@ export function saleToPrintOrder(sale) {
     subtotalNet: Number(payload.subtotalNet) || 0,
     discountAmount: Number(payload.discountAmount) || 0,
     tax: Number(payload.tax) || 0,
+    cardExtraTax: Number(payload.cardExtraTax) || 0,
     total: Number(payload.total) || 0,
     paymentStatus: "paid",
     paymentMethod: payload.paymentMethod || "cash",

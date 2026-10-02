@@ -22,6 +22,9 @@ const settingsSchema = Joi.object({
   costMethod: Joi.string().valid('last', 'average').default('last'),
   /** Tasa de IVA configurable por tenant (default 0.16 = 16% México) */
   taxRate: Joi.number().min(0).max(1).default(0.16),
+  /** Comisión que la tienda le suma al cliente cuando paga con tarjeta (compensa lo que cobra la terminal) */
+  cardFeeEnabled: Joi.boolean().default(false),
+  cardFeePercent: Joi.number().min(0).max(30).default(4),
   setupCompleted: Joi.boolean().default(true),
   updatedAt: Joi.date().optional(),
   createdAt: Joi.date().optional(),

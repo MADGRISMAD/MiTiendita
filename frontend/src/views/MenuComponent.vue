@@ -957,8 +957,10 @@
 
             <div class="pay-total">
               <span>Total a pagar</span>
-              <strong>{{ money(total) }}</strong>
-              <small>IVA incluido {{ money(tax) }}</small>
+              <strong>{{ money(chargeTotal) }}</strong>
+              <small>
+                IVA incluido {{ money(tax) }}<template v-if="cardFeeAmount"> · comisión por tarjeta {{ money(cardFeeAmount) }}</template>
+              </small>
             </div>
 
             <template v-if="!cashOpen">
@@ -1048,9 +1050,18 @@
                 </div>
               </template>
 
-              <p v-else-if="payMethod === 'card'" class="pay-note">
-                Cobra <strong>{{ money(total) }}</strong> en la terminal y confirma cuando salga aprobado.
-              </p>
+              <template v-else-if="payMethod === 'card'">
+                <label v-if="cardFeeOn" class="fee-row">
+                  <input v-model="cardFee" type="checkbox" />
+                  <span>
+                    <strong>Comisión por tarjeta ({{ feePctText }})</strong>
+                    <small>+{{ money(cardFeeFor(total)) }} para cubrir lo que cobra la terminal</small>
+                  </span>
+                </label>
+                <p class="pay-note">
+                  Cobra <strong>{{ money(chargeTotal) }}</strong> en la terminal y confirma cuando salga aprobado.
+                </p>
+              </template>
               <p v-else-if="payMethod === 'transfer'" class="pay-note">
                 Confirma que la transferencia de <strong>{{ money(total) }}</strong> ya llegó a la cuenta.
               </p>
@@ -1239,7 +1250,7 @@ import { apiService } from "../apiService";
 import { store } from "../store";
 import { venueStore, fetchVenueSettings } from "../venueStore";
 import { billingStore } from "../billingStore";
-import { cartTotals, lineBreakdown, rateOf } from "../tax";
+import { cardFeeRateOf, cartTotals, lineBreakdown, rateOf } from "../tax";
 import { apiService as apiSvc } from "../apiService";
 import { authStore } from "../authStore";
 import { isNetworkError, newClientSaleId } from "../net";
@@ -2000,6 +2011,19 @@ export default {
     );
     const tax = computed(() => totals.value.tax);
     const total = computed(() => totals.value.total);
+
+    // Comisión por pago con tarjeta (Configuración → Ventas e IVA). Viene marcada; el cajero la puede quitar
+    const cardFeeOn = computed(() => Boolean(venueStore.cardFeeEnabled));
+    const cardFee = ref(false);
+    const feeRate = computed(() => cardFeeRateOf(venueStore.cardFeePercent));
+    const feePctText = computed(() => `${Number((feeRate.value * 100).toFixed(2))}%`);
+    function cardFeeFor(amount) {
+      return round2(Number(amount || 0) * feeRate.value);
+    }
+    const cardFeeAmount = computed(() =>
+      payMethod.value === "card" && cardFeeOn.value && cardFee.value ? cardFeeFor(total.value) : 0
+    );
+    const chargeTotal = computed(() => round2(total.value + cardFeeAmount.value));
 
     const foodPricePreview = computed(() => {
       const p = Number(foodForm.price) || 0;
@@ -2771,6 +2795,7 @@ export default {
       }
       if (!lines.value.length || sending.value) return;
       payMethod.value = "cash";
+      cardFee.value = cardFeeOn.value;
       payCashReceived.value = "";
       payCardAmount.value = "";
       payError.value = "";
@@ -2843,12 +2868,14 @@ export default {
         paymentMethod: payMethod.value,
         cashReceived: takesCash.value ? Number(payCashReceived.value || 0) : undefined,
         cardAmount: payMethod.value === "split" ? Number(payCardAmount.value || 0) : undefined,
+        cardExtraIva: cardFeeAmount.value > 0,
+        cardExtraTax: cardFeeAmount.value,
         soldAt: new Date().toISOString(),
         subtotal: Number(totals.value?.subtotal || 0),
         subtotalNet: Number(totals.value?.subtotalNet || 0),
         discountAmount: Number(totals.value?.discountAmount || 0),
         tax: Number(tax.value || 0),
-        total: Number(total.value || 0),
+        total: Number(chargeTotal.value || 0),
         change: Number(payChange.value || 0),
       };
       try {
@@ -3615,6 +3642,12 @@ export default {
       showPayment,
       payMethods,
       payMethod,
+      cardFeeOn,
+      cardFee,
+      cardFeeAmount,
+      cardFeeFor,
+      feePctText,
+      chargeTotal,
       payCashReceived,
       payCardAmount,
       payChange,
@@ -5012,6 +5045,20 @@ html[data-theme="dark"] .avatar {
   background: var(--timber-surface);
   color: var(--timber-muted);
 }
+.fee-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  padding: 0.7rem 0.85rem;
+  border: 1.5px solid color-mix(in srgb, var(--timber-primary) 35%, var(--timber-line));
+  border-radius: 0.85rem;
+  background: color-mix(in srgb, var(--timber-primary) 6%, var(--timber-panel));
+  cursor: pointer;
+}
+.fee-row input { width: 1.25rem; height: 1.25rem; margin: 0.1rem 0 0; flex-shrink: 0; accent-color: var(--timber-primary); }
+.fee-row span { display: grid; gap: 0.1rem; }
+.fee-row strong { font-size: 0.95rem; }
+.fee-row small { font-size: 0.8rem; color: var(--timber-muted); }
 .pay-note {
   margin: 0;
   padding: 0.8rem 0.95rem;

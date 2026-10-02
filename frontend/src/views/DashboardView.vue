@@ -73,6 +73,7 @@
           </p>
           <p class="hero-sub">
             IVA incluido {{ money(cur.tax) }}
+            <template v-if="cur.cardFees"> · comisiones por tarjeta {{ money(cur.cardFees) }}</template>
             <template v-if="cur.voidCount"> · {{ cur.voidCount }} {{ cur.voidCount === 1 ? 'devuelta' : 'devueltas' }} por {{ money(cur.voidTotal) }}</template>
           </p>
         </div>
@@ -648,7 +649,9 @@ function summarize(list) {
     total,
     count: paid.length,
     avg: paid.length ? total / paid.length : 0,
-    tax: paid.reduce((s, o) => s + Number(o.tax || 0) + Number(o.cardExtraTax || 0), 0),
+    tax: paid.reduce((s, o) => s + Number(o.tax || 0), 0),
+    // Lo que la tienda cobró de más por pagos con tarjeta (no es IVA)
+    cardFees: paid.reduce((s, o) => s + Number(o.cardExtraTax || 0), 0),
     articles: paid.reduce((s, o) => s + articlesOf(o), 0),
     voidCount: voids.length,
     voidTotal: voids.reduce((s, o) => s + Number(o.total || 0), 0),
@@ -1110,14 +1113,15 @@ function exportSales() {
       articlesOf(o),
       Number(o.subtotal || 0).toFixed(2),
       Number(o.discountAmount || 0).toFixed(2),
-      (Number(o.tax || 0) + Number(o.cardExtraTax || 0)).toFixed(2),
+      Number(o.tax || 0).toFixed(2),
+      Number(o.cardExtraTax || 0).toFixed(2),
       Number(o.total || 0).toFixed(2),
       (o.items || []).map((i) => `${qty(i.quantity)} x ${i.name}`).join(" | "),
     ];
   });
   download(
     `ventas_${fileRange.value}.csv`,
-    ["Fecha", "Hora", "Folio", "Estado", "Forma de pago", "Articulos", "Subtotal", "Descuento", "IVA", "Total", "Productos"],
+    ["Fecha", "Hora", "Folio", "Estado", "Forma de pago", "Articulos", "Subtotal", "Descuento", "IVA", "Comision tarjeta", "Total", "Productos"],
     rows
   );
 }

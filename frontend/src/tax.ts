@@ -26,7 +26,17 @@ export function lineBreakdown(price, quantity, priceIncludesTax, taxRate = TAX_R
   return { net, tax, gross };
 }
 
-export function cartTotals(items = [], { discountPercent = 0, taxRate = TAX_RATE, cardExtraIva = false } = {}) {
+/** Porcentaje de comisión por tarjeta de la tienda (0 a 30) como fracción. */
+export function cardFeeRateOf(percent) {
+  const n = Number(percent);
+  return Number.isFinite(n) ? Math.min(30, Math.max(0, n)) / 100 : 0.04;
+}
+
+/**
+ * cardExtraIva: se cobra la comisión por pago con tarjeta.
+ * cardFeeRate: su porcentaje (0 a 0.3); sin dato usa la tasa de IVA, como antes.
+ */
+export function cartTotals(items = [], { discountPercent = 0, taxRate = TAX_RATE, cardExtraIva = false, cardFeeRate = null } = {}) {
   let subtotalNet = 0;
   let subtotalTax = 0;
   let subtotalGross = 0;
@@ -44,7 +54,8 @@ export function cartTotals(items = [], { discountPercent = 0, taxRate = TAX_RATE
   const net = subtotalNet * scale;
   const tax = subtotalTax * scale;
   const payable = subtotalGross - discountAmount;
-  const cardExtraTax = cardExtraIva ? payable * taxRate : 0;
+  const feeRate = cardFeeRate == null ? taxRate : Math.min(0.3, Math.max(0, Number(cardFeeRate) || 0));
+  const cardExtraTax = cardExtraIva ? Math.round(payable * feeRate * 100) / 100 : 0;
   const total = payable + cardExtraTax;
 
   return {

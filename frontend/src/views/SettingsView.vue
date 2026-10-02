@@ -176,6 +176,54 @@
                 </p>
               </div>
             </section>
+
+            <section class="adm-card cfg-card">
+              <div class="switch-head">
+                <div>
+                  <h3>Comisión por pago con tarjeta</h3>
+                  <p class="adm-hint">
+                    Para compensar lo que cobra la terminal (Mercado Pago u otra). Si la activas, al cobrar con tarjeta
+                    en Vender y en Caja ya sale marcada y el cajero puede quitarla para un cliente.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  class="adm-switch"
+                  :aria-checked="form.cardFeeEnabled"
+                  aria-label="Cobrar comisión por pago con tarjeta"
+                  @click="form.cardFeeEnabled = !form.cardFeeEnabled"
+                ></button>
+              </div>
+              <template v-if="form.cardFeeEnabled">
+                <div class="adm-choices fees">
+                  <button
+                    v-for="f in FEES"
+                    :key="f.value"
+                    type="button"
+                    class="adm-choice"
+                    :aria-pressed="feeChoice === f.value"
+                    @click="pickFee(f.value)"
+                  >
+                    <strong>{{ f.label }}</strong>
+                    <small>{{ f.hint }}</small>
+                  </button>
+                </div>
+                <label v-if="feeChoice === 'other'" class="adm-field tax-other">
+                  <span>Otro porcentaje (%)</span>
+                  <input v-model.number="form.cardFeePercent" class="adm-inp num" type="number" min="0" max="30" step="0.1" inputmode="decimal" />
+                </label>
+                <p v-if="feeError" class="adm-err">{{ feeError }}</p>
+                <div class="example">
+                  <span>Ejemplo</span>
+                  <p>
+                    En una venta de <b>{{ money(100) }}</b> pagada con tarjeta, el cliente paga
+                    <b>{{ money(100 * (1 + feeRate)) }}</b>. En el ticket sale como «Comisión por pago con tarjeta».
+                  </p>
+                </div>
+              </template>
+              <p v-else class="state-line off"><i></i>Apagada: con tarjeta se cobra lo mismo que en efectivo.</p>
+            </section>
           </template>
 
           <!-- ======= Inventario ======= -->
@@ -338,7 +386,7 @@
         <span><i class="cfg-dot"></i> Tienes cambios sin guardar</span>
         <div>
           <button type="button" class="adm-btn" :disabled="saving" @click="discard">Descartar</button>
-          <button type="button" class="adm-btn primary" :disabled="saving || Boolean(nameError || taxError)" @click="save">
+          <button type="button" class="adm-btn primary" :disabled="saving || Boolean(nameError || taxError || feeError)" @click="save">
             {{ saving ? 'Guardando…' : 'Guardar cambios' }}
           </button>
         </div>
@@ -364,7 +412,7 @@ import { prettyPhone } from "../phone";
 
 const SECTIONS = {
   negocio: { label: "Mi negocio", icon: "store", desc: "Nombre, giro, dirección y logo", lead: "Así te ven tus clientes en el ticket y en la app.", tone: "info" },
-  ventas: { label: "Ventas e IVA", icon: "percent", desc: "Tasa de impuesto", lead: "El impuesto con el que se desglosan tus ventas.", tone: "good" },
+  ventas: { label: "Ventas e IVA", icon: "percent", desc: "IVA y comisión por tarjeta", lead: "El impuesto de tus ventas y la comisión al pagar con tarjeta.", tone: "good" },
   inventario: { label: "Inventario", icon: "box", desc: "Existencias y costo de compras", lead: "Cómo se mueven tus existencias y tus costos.", tone: "warn" },
   apariencia: { label: "Apariencia", icon: "sun", desc: "Tema claro u oscuro", lead: "Cómo se ve la app en este dispositivo.", tone: "" },
   cuenta: { label: "Mi cuenta", icon: "lock", desc: "Contraseña y sesión", lead: "Tus datos de acceso.", tone: "" },
@@ -446,13 +494,15 @@ function fromStore() {
     inventoryEnabled: Boolean(s.inventoryEnabled),
     costMethod: s.costMethod === "average" ? "average" : "last",
     taxPercent: Number((Number(s.taxRate ?? 0.16) * 100).toFixed(2)),
+    cardFeeEnabled: Boolean(s.cardFeeEnabled),
+    cardFeePercent: Number(s.cardFeePercent ?? 4),
   };
 }
 const form = reactive(fromStore());
 const snapshot = ref(JSON.stringify(fromStore()));
 const FIELDS_BY_SECTION = {
   negocio: ["businessName", "businessType", "address", "phone", "logoUrl", "timezone"],
-  ventas: ["taxPercent"],
+  ventas: ["taxPercent", "cardFeeEnabled", "cardFeePercent"],
   inventario: ["inventoryEnabled", "costMethod"],
 };
 const dirty = computed(() => JSON.stringify({ ...form }) !== snapshot.value);
@@ -469,6 +519,7 @@ function reset() {
 function discard() {
   Object.assign(form, JSON.parse(snapshot.value));
   syncTaxChoice();
+  syncFeeChoice();
   saveErr.value = "";
 }
 
@@ -488,6 +539,29 @@ function pickTax(value) {
   if (value !== "other") form.taxPercent = Number(value);
 }
 const pctText = computed(() => `${Number((taxRate.value * 100).toFixed(2))}%`);
+
+// Comisión por pago con tarjeta
+const FEES = [
+  { value: "3.5", label: "3.5%", hint: "Terminal típica" },
+  { value: "4", label: "4%", hint: "Comisión con IVA" },
+  { value: "16", label: "16%", hint: "«IVA extra»" },
+  { value: "other", label: "Otro", hint: "Tú decides" },
+];
+const feeChoice = ref("4");
+function syncFeeChoice() {
+  const v = String(Number(form.cardFeePercent));
+  feeChoice.value = ["3.5", "4", "16"].includes(v) ? v : "other";
+}
+function pickFee(value) {
+  feeChoice.value = value;
+  if (value !== "other") form.cardFeePercent = Number(value);
+}
+const feeRate = computed(() => Math.min(30, Math.max(0, Number(form.cardFeePercent) || 0)) / 100);
+const feeError = computed(() => {
+  if (!form.cardFeeEnabled) return "";
+  const v = Number(form.cardFeePercent);
+  return !Number.isFinite(v) || v <= 0 || v > 30 ? "La comisión va de 0.1 a 30%." : "";
+});
 const thanksPreview = computed(() => closingLine(form.businessType));
 const moneyFmt = new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" });
 function money(n) {
@@ -511,8 +585,8 @@ function errText(e, fallback) {
   return fallback;
 }
 async function save() {
-  if (nameError.value || taxError.value) {
-    saveErr.value = nameError.value || taxError.value;
+  if (nameError.value || taxError.value || feeError.value) {
+    saveErr.value = nameError.value || taxError.value || feeError.value;
     return;
   }
   saving.value = true;
@@ -531,11 +605,14 @@ async function save() {
         inventoryEnabled: Boolean(form.inventoryEnabled),
         costMethod: form.costMethod === "average" ? "average" : "last",
         taxRate: taxRate.value,
+        cardFeeEnabled: Boolean(form.cardFeeEnabled),
+        cardFeePercent: Math.min(30, Math.max(0, Number(form.cardFeePercent) || 0)),
       },
       { strict: true }
     );
     reset();
     syncTaxChoice();
+    syncFeeChoice();
     say(
       form.inventoryEnabled && !wasInventory
         ? "Guardado. Desde ahora cada venta descuenta existencias."
@@ -716,12 +793,14 @@ onMounted(async () => {
   window.addEventListener("beforeunload", onBeforeUnload);
   tick = setInterval(() => (now.value = new Date()), 30000);
   syncTaxChoice();
+  syncFeeChoice();
   if (section.value === "soporte") loadSupport();
   await fetchVenueSettings().catch(() => {});
   // Solo refresca el formulario si no se ha empezado a editar
   if (!dirty.value) {
     reset();
     syncTaxChoice();
+    syncFeeChoice();
   }
 });
 onBeforeUnmount(() => {
@@ -873,6 +952,9 @@ onBeforeUnmount(() => {
 .taxes .adm-choice { justify-items: center; text-align: center; }
 .taxes .adm-choice strong { font-size: 1.15rem; }
 .tax-other { max-width: 12rem; }
+.fees { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.fees .adm-choice { justify-items: center; text-align: center; }
+.fees .adm-choice strong { font-size: 1.1rem; }
 .example {
   display: grid;
   gap: 0.2rem;
@@ -1013,7 +1095,7 @@ onBeforeUnmount(() => {
   .cfg-layout.section-open .cfg-nav { display: none; }
   .cfg-savebar > div { flex: 1; }
   .cfg-savebar .adm-btn { flex: 1; }
-  .taxes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .taxes, .fees { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .logo-row { flex-direction: column; }
 }
 @media (min-width: 768px) {

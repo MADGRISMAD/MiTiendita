@@ -87,7 +87,7 @@
                 <span>IVA incluido</span><i class="tk-dots"></i><span>{{ money(taxCollected) }}</span>
               </div>
               <div v-if="cardExtraTotal" class="tk-line">
-                <span>IVA extra por tarjeta</span><i class="tk-dots"></i><span>{{ money(cardExtraTotal) }}</span>
+                <span>Comisiones por tarjeta cobradas</span><i class="tk-dots"></i><span>{{ money(cardExtraTotal) }}</span>
               </div>
               <div v-if="voided.length" class="tk-line">
                 <span>Devueltas o canceladas ({{ voided.length }})</span><i class="tk-dots"></i><span>{{ money(voidedTotal) }}</span>

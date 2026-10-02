@@ -31,7 +31,11 @@ function lineBreakdown(price, quantity, priceIncludesTax, taxRate = DEFAULT_TAX_
   return { net, tax, gross, unitNet: unit, unitGross: qty ? gross / qty : 0 };
 }
 
-function cartTotals(items = [], { discountPercent = 0, taxRate = DEFAULT_TAX_RATE, cardExtraIva = false } = {}) {
+/**
+ * cardExtraIva: se cobra la comisión por pago con tarjeta.
+ * cardFeeRate: su porcentaje (0 a 0.3); sin dato usa la tasa de IVA, como antes.
+ */
+function cartTotals(items = [], { discountPercent = 0, taxRate = DEFAULT_TAX_RATE, cardExtraIva = false, cardFeeRate = null } = {}) {
   let subtotalNet = 0;
   let subtotalTax = 0;
   let subtotalGross = 0;
@@ -54,7 +58,8 @@ function cartTotals(items = [], { discountPercent = 0, taxRate = DEFAULT_TAX_RAT
   const tax = Number((subtotalTax * scale).toFixed(2));
   const payable = Number((subtotalGross - discountAmount).toFixed(2));
 
-  const cardExtraTax = cardExtraIva ? Number((payable * taxRate).toFixed(2)) : 0;
+  const feeRate = cardFeeRate == null ? taxRate : Math.min(0.3, Math.max(0, Number(cardFeeRate) || 0));
+  const cardExtraTax = cardExtraIva ? Number((payable * feeRate).toFixed(2)) : 0;
   const total = Number((payable + cardExtraTax).toFixed(2));
 
   return {

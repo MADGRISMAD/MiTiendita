@@ -67,7 +67,7 @@
               <span>Descuento {{ pct(order.discountPercent) }}</span><i class="tk-dots"></i><span>−{{ money(order.discountAmount) }}</span>
             </div>
             <div v-if="order.cardExtraTax" class="tk-line">
-              <span>IVA por pago con tarjeta</span><i class="tk-dots"></i><span>+{{ money(order.cardExtraTax) }}</span>
+              <span>Comisión por pago con tarjeta</span><i class="tk-dots"></i><span>+{{ money(order.cardExtraTax) }}</span>
             </div>
             <div v-if="order.deliveryFee" class="tk-line">
               <span>Envío</span><i class="tk-dots"></i><span>+{{ money(order.deliveryFee) }}</span>
