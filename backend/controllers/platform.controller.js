@@ -1,4 +1,5 @@
 const db = require('../database/mongodb');
+const { passwordProblem } = require('../utils/password-policy');
 const { PLANS, BILLING_STATUSES, trialEndsFrom } = require('../models/tenant.model');
 const { planAiQuota, planPrice, PLAN_CATALOG, isPerpetual, hasAiFeatures } = require('../services/plans.catalog');
 const mp = require('../services/mercadopago.service');
@@ -616,7 +617,8 @@ async function createStaff(req, res) {
     if (!/^[a-z0-9._-]{3,30}$/.test(username)) {
       return res.status(400).send('El usuario debe tener 3 a 30 letras, números, punto o guion.');
     }
-    if (password.length < 8) return res.status(400).send('La contraseña debe tener al menos 8 caracteres.');
+    const weak = passwordProblem(password, { email, username, name });
+    if (weak) return res.status(400).send(weak);
     if (await db.FindUserByUsername(username)) return res.status(400).send('Ese usuario ya existe.');
     if (await db.FindUserByEmail(email)) return res.status(400).send('Ese correo ya está registrado.');
 

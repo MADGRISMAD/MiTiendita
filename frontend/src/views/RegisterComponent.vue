@@ -125,7 +125,7 @@
                 v-model="password"
                 class="auth-input"
                 :type="showPass ? 'text' : 'password'"
-                placeholder="Mínimo 6 caracteres"
+                placeholder="Mínimo 10 caracteres (puede ser una frase)"
                 autocomplete="new-password"
                 :aria-invalid="Boolean(shown.password)"
                 aria-describedby="reg-pass-err"
@@ -197,6 +197,7 @@ import PosIcon from "../components/PosIcon.js";
 import { isNetworkError } from "../net";
 import { formatMxPhone, phoneDigits } from "../phone";
 import "../auth.css";
+import { MIN_PASSWORD, passwordProblem } from "../passwordPolicy";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const FIELD_ORDER = ["firstName", "lastName", "phone", "email", "username", "password", "confirm", "terms"];
@@ -244,7 +245,12 @@ export default {
       if (!EMAIL_RE.test(this.email)) e.email = this.email ? "Ese correo no parece válido." : "Escribe tu correo.";
       if (!this.username) e.username = "Elige un usuario.";
       else if (this.username.length < 3) e.username = "Usa al menos 3 caracteres.";
-      if (this.password.length < 6) e.password = "La contraseña debe tener al menos 6 caracteres.";
+      const weak = passwordProblem(this.password, {
+        email: this.email,
+        username: this.username,
+        name: this.firstName,
+      });
+      if (weak) e.password = weak;
       if (this.confirmPassword !== this.password) e.confirm = "Las contraseñas no coinciden.";
       if (!this.acceptedTerms) e.terms = "Acepta los términos para continuar.";
       return { ...e, ...this.serverErrors };
@@ -262,7 +268,8 @@ export default {
       if (p.length >= 8) score += 1;
       if (/[a-zA-Z]/.test(p) && /\d/.test(p)) score += 1;
       if (/[^a-zA-Z0-9]/.test(p) || (/[a-z]/.test(p) && /[A-Z]/.test(p))) score += 1;
-      if (p.length < 6) return { level: 1, label: "Muy corta" };
+      if (p.length < MIN_PASSWORD) return { level: 1, label: "Muy corta" };
+      if (passwordProblem(p)) return { level: 1, label: "Débil" };
       if (score <= 1) return { level: 1, label: "Débil" };
       if (score === 2) return { level: 2, label: "Aceptable" };
       return { level: 3, label: "Fuerte" };

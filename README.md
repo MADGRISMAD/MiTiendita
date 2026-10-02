@@ -86,6 +86,14 @@ cd backend && npm run seed:platform-admin
 - **Admin** — `platform` / `Platform123!` → `/platform`. Números, licencias (incluida **Perpetua**), gastos y **Equipo**.
 - **Soporte** — lo crea un admin en `/platform/equipo`. Solo ve clientes y responde correo.
 
+## Seguridad de las cuentas
+- **Sesión**: al entrar se entrega un access token de 15 min y un refresh token en cookie `HttpOnly` (`mt_rt`, 30 días, rota en cada uso). El front lo renueva solo cuando el access vence. Si alguien reusa un refresh ya rotado, se cierran todas las sesiones de esa persona. Cambiar o restablecer la contraseña cierra las demás sesiones al instante.
+- **Contraseñas**: mínimo 10 caracteres (una frase sirve), no de las más filtradas ni secuencias ni el propio correo (`backend/utils/password-policy.js` = `frontend/src/passwordPolicy.js`). Las cuentas existentes siguen entrando; la regla aplica al crear o cambiar contraseña.
+- **Bloqueo**: 5 intentos fallidos (contraseña o código) bloquean la cuenta 15 min.
+- **Verificación en dos pasos (TOTP)**: opcional en *Configuración → Mi cuenta*; obligatoria para `platform_admin` y `platform_support` (al entrar se les pide activarla con un QR). Da 8 códigos de respaldo de un solo uso. El secreto se guarda cifrado (`MFA_ENCRYPTION_KEY` o `SECRET_KEY`).
+- **Límites de peticiones** por IP, guardados en MongoDB (`rate_limits`, con TTL) para que valgan entre instancias/serverless: global, login, registro, recuperar contraseña, 2FA, refresh y rutas públicas (factura, invitaciones).
+- **Cabeceras de seguridad** (equivalentes a helmet) en todas las respuestas de la API.
+
 ## Docker
 ```bash
 docker compose up --build -d

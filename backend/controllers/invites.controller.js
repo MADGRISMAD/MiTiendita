@@ -1,9 +1,10 @@
 const db = require('../database/mongodb');
+const { passwordProblem } = require('../utils/password-policy');
+const sessions = require('../services/session.service');
 const { newToken } = require('../models/order.model');
 const { sendInviteEmail } = require('../utils/mail.utils');
 const { resolveAppUrl } = require('../utils/app-url.utils');
 const bcrypt = require('../utils/bcrypt.utils');
-const jwtCreator = require('../utils/jwt.utils');
 const { TENANT_ROLES } = require('../models/tenant.model');
 const limits = require('../services/plan-limits.service');
 
@@ -155,6 +156,8 @@ async function accept(req, res) {
     if (!invite || invite.status !== 'pending') {
       return res.status(404).send('Invitación no válida');
     }
+    const weak = passwordProblem(password, { email: invite.email, username, name });
+    if (weak) return res.status(400).send(weak);
     if (invite.expiresAt && new Date(invite.expiresAt) < new Date()) {
       return res.status(410).send('Invitación expirada');
     }
@@ -217,19 +220,13 @@ async function accept(req, res) {
       invite.tenantId
     );
 
-    const jwt = jwtCreator.generateJWT({
-      userId: username,
-      userRole: role,
-      tenantId: invite.tenantId,
-    });
+    const created = await db.FindUserByUsername(username);
+    const session = await sessions.startSession(req, res, created);
 
     return res.status(201).json({
       ok: true,
       email: invite.email,
-      token: jwt,
-      role,
-      tenantId: invite.tenantId,
-      username,
+      ...session,
     });
   } catch (err) {
     console.error(err);

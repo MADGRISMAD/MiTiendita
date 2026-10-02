@@ -26,6 +26,11 @@ function withMesaId(doc) {
   return withId(doc);
 }
 
+/** Colección cruda (para servicios como el límite de peticiones). */
+function getCollection(name) {
+  return dbConnection ? dbConnection.collection(name) : null;
+}
+
 function oidFilter(id, tenantId) {
   if (!ObjectId.isValid(id) || String(new ObjectId(id)) !== String(id)) return null;
   const filter = { _id: new ObjectId(id) };
@@ -210,6 +215,77 @@ async function UpdateUserById(id, data) {
   await dbConnection.collection('users').updateOne({ _id: new ObjectId(id) }, { $set: clean });
   return await dbConnection.collection('users').findOne({ _id: new ObjectId(id) });
 }
+/** Suma un intento fallido; al llegar a `max` bloquea la cuenta `lockMs` y reinicia la cuenta. */
+async function RecordLoginFailure(id, { max = 5, lockMs = 15 * 60 * 1000 } = {}) {
+  if (!ObjectId.isValid(String(id))) return null;
+  const col = dbConnection.collection('users');
+  const _id = new ObjectId(String(id));
+  const raw = await col.findOneAndUpdate(
+    { _id },
+    { $inc: { failedLogins: 1 }, $set: { lastFailedLoginAt: new Date() } },
+    { returnDocument: 'after' }
+  );
+  const user = raw && raw.value !== undefined ? raw.value : raw;
+  if (user && Number(user.failedLogins) >= max) {
+    const lockedUntil = new Date(Date.now() + lockMs);
+    await col.updateOne({ _id }, { $set: { failedLogins: 0, lockedUntil } });
+    return { ...user, failedLogins: 0, lockedUntil };
+  }
+  return user;
+}
+async function ClearLoginFailures(id) {
+  if (!ObjectId.isValid(String(id))) return;
+  await dbConnection
+    .collection('users')
+    .updateOne({ _id: new ObjectId(String(id)) }, { $set: { failedLogins: 0, lockedUntil: null, lastLoginAt: new Date() } });
+}
+async function FindUserById(id) {
+  if (!ObjectId.isValid(String(id))) return null;
+  return dbConnection.collection('users').findOne({ _id: new ObjectId(String(id)) });
+}
+/** Sube la versión de sesión: los tokens anteriores dejan de servir. */
+async function BumpUserTokenVersion(id) {
+  if (!ObjectId.isValid(String(id))) return null;
+  const raw = await dbConnection
+    .collection('users')
+    .findOneAndUpdate({ _id: new ObjectId(String(id)) }, { $inc: { tokenVersion: 1 } }, { returnDocument: 'after' });
+  return raw && raw.value !== undefined ? raw.value : raw;
+}
+
+// —— Sesiones (refresh tokens; se guarda solo el hash) ——
+let sessionsIndexed = false;
+function sessionsCol() {
+  const col = dbConnection.collection('sessions');
+  if (!sessionsIndexed) {
+    sessionsIndexed = true;
+    col.createIndex({ tokenHash: 1 }, { unique: true }).catch(() => {});
+    col.createIndex({ userId: 1 }).catch(() => {});
+    col.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }).catch(() => {});
+  }
+  return col;
+}
+async function CreateSession(data) {
+  const result = await sessionsCol().insertOne(data);
+  return { ...data, _id: result.insertedId };
+}
+async function FindSessionByHash(tokenHash) {
+  return sessionsCol().findOne({ tokenHash: String(tokenHash) });
+}
+/** Revoca una sesión solo si sigue activa. Devuelve true si la revocó esta llamada. */
+async function RevokeSession(id, data = {}) {
+  const res = await sessionsCol().updateOne(
+    { _id: id, revokedAt: null },
+    { $set: { revokedAt: new Date(), ...data } }
+  );
+  return res.modifiedCount === 1;
+}
+async function RevokeUserSessions(userId, reason = 'revoked') {
+  await sessionsCol().updateMany(
+    { userId: String(userId), revokedAt: null },
+    { $set: { revokedAt: new Date(), revokedReason: reason } }
+  );
+}
+
 async function FindUserByResetToken(token) {
   return await dbConnection.collection('users').findOne({
     resetToken: token,
@@ -1223,7 +1299,9 @@ module.exports = {
   GetSettings, CreateSettings, UpdateSettings,
   GetMenus, GetMenuById, CreateMenu, UpdateMenu, DeleteMenu,
   GetFoods, CountFoods, CountPaidOrders, CountCashSessions, GetFoodById, GetFoodByBarcode, CreateFood, UpdateFood, ReserveSaleStock, ConsumeSaleLots, RestoreSaleStock, IncrementFoodStock, DeleteFood, GetLowStockFoods, SearchFoods,
-  CreateBillingEvent, ListBillingEvents,
+  CreateBillingEvent, ListBillingEvents, getCollection,
+  RecordLoginFailure, ClearLoginFailures, FindUserById, BumpUserTokenVersion,
+  CreateSession, FindSessionByHash, RevokeSession, RevokeUserSessions,
   GetOrders, GetOrderById, GetOrderByInvoiceToken, GetOrderByClientSaleId, CreateOrder, UpdateOrder, DeleteOrder, GetOrdersByCashSession,
   GetOrdersByDateRange, GetSalesReport,
   SaveSupportMail, FindSupportMailByMessageIds, ListSupportMail, ListSupportMailAll, ListSupportMailRaw, ListUnmatchedSupportMail, AssignUnassignedSupportMail,

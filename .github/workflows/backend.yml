@@ -8,6 +8,7 @@ on:
       - "frontend/src/storeTime.js"
       - "frontend/src/escpos.js"
       - "frontend/src/bulk.js"
+      - "frontend/src/passwordPolicy.js"
       - "package.json"
       - "package-lock.json"
     branches:
@@ -19,6 +20,7 @@ on:
       - "frontend/src/storeTime.js"
       - "frontend/src/escpos.js"
       - "frontend/src/bulk.js"
+      - "frontend/src/passwordPolicy.js"
       - "package.json"
       - "package-lock.json"
     branches:
