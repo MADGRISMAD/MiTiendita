@@ -18,5 +18,6 @@ router.post('/purchases', requireAuth, requireActiveSubscription, writeRoles, in
 router.get('/lots/expiring', requireAuth, requireActiveSubscription, readRoles, inventory.expiringLots);
 router.get('/suggestions', requireAuth, requireActiveSubscription, readRoles, inventory.suggestions);
 router.get('/activity', requireAuth, requireActiveSubscription, readRoles, inventory.activity);
+router.post('/adjust', requireAuth, requireActiveSubscription, writeRoles, inventory.adjustStock);
 
 module.exports = router;

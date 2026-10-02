@@ -6,6 +6,7 @@ router.get('/token/:token', invites.getByToken);
 router.post('/accept', invites.accept);
 
 router.get('/', requireAuth, requireActiveSubscription, requireRoles('admin'), invites.list);
+router.get('/team', requireAuth, requireActiveSubscription, requireRoles('admin'), invites.team);
 router.post('/', requireAuth, requireActiveSubscription, requireRoles('admin'), invites.create);
 router.put('/:id/revoke', requireAuth, requireActiveSubscription, requireRoles('admin'), invites.revoke);
 router.delete('/:id', requireAuth, requireActiveSubscription, requireRoles('admin'), invites.remove);

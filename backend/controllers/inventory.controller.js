@@ -196,8 +196,50 @@ async function activity(req, res) {
   }
 }
 
+const ADJUST_REASONS = {
+  count: 'Conteo físico',
+  waste: 'Merma o caducado',
+  internal: 'Consumo o regalo',
+  other: 'Otro',
+};
+
+// Ajuste manual de existencia (conteo, merma). Queda en la bitácora.
+async function adjustStock(req, res) {
+  try {
+    const foodId = String(req.body?.foodId || '').trim();
+    const stock = Number(req.body?.stock);
+    const reason = ADJUST_REASONS[req.body?.reason] ? req.body.reason : 'other';
+    const note = String(req.body?.note || '').trim().slice(0, 140);
+    if (!foodId) return res.status(400).send('Falta el producto');
+    if (!Number.isFinite(stock) || stock < 0 || stock > 1_000_000) {
+      return res.status(400).send('La existencia debe ser un número de 0 en adelante');
+    }
+    const food = await db.GetFoodById(foodId, req.tenantId);
+    if (!food) return res.status(404).send('Producto no encontrado');
+    const before = Number(food.stock) || 0;
+    const after = Number(stock.toFixed(3));
+    const updated = await db.UpdateFood(food.id, { stock: after, updatedAt: new Date() }, req.tenantId);
+    if (after !== before) {
+      const diff = Number((after - before).toFixed(3));
+      await db.CreateActivityLog({
+        tenantId: req.tenantId,
+        type: 'stock_adjusted',
+        message: `Ajuste de ${food.name}: ${before} → ${after} (${diff > 0 ? '+' : ''}${diff}) · ${ADJUST_REASONS[reason]}${note ? ` · ${note}` : ''}`,
+        meta: { foodId: food.id, before, after, reason },
+        user: req.user?.username || '',
+        createdAt: new Date(),
+      }).catch(() => {});
+    }
+    return res.status(200).json(updated);
+  } catch (err) {
+    console.error(err);
+    return res.status(500).send(err.message || 'Error al ajustar la existencia');
+  }
+}
+
 module.exports = {
   listSuppliers,
+  adjustStock,
   getSupplier,
   createSupplier,
   updateSupplier,

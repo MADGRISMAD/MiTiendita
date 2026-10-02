@@ -16,6 +16,28 @@ async function list(req, res) {
   }
 }
 
+// Quiénes entran a la app y cuántos lugares quedan en el plan
+async function team(req, res) {
+  try {
+    const tenant = await db.GetTenantById(req.tenantId);
+    const plan = tenant?.plan || 'basic';
+    const [users, usage] = await Promise.all([
+      db.ListUsersByTenant(req.tenantId),
+      limits.usageFor(req.tenantId, plan),
+    ]);
+    return res.status(200).json({
+      users,
+      me: req.user?.username || '',
+      plan,
+      planName: limits.planName(plan),
+      seats: usage.users,
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).send(err.message || 'Error al listar el equipo');
+  }
+}
+
 async function create(req, res) {
   try {
     const email = String(req.body?.email || '').trim().toLowerCase();
@@ -215,4 +237,4 @@ async function accept(req, res) {
   }
 }
 
-module.exports = { list, create, revoke, remove, getByToken, accept };
+module.exports = { list, team, create, revoke, remove, getByToken, accept };

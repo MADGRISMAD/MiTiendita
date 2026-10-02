@@ -1,60 +1,296 @@
 <template>
   <AppShell>
-    <div class="staff-page">
-      <div class="toolbar">
-        <p>Gestiona empleados de la tienda y su disponibilidad en turno.</p>
-        <button type="button" class="btn-primary" @click="showForm = true">Agregar empleado</button>
-      </div>
+    <div class="adm stf">
+      <header class="adm-head">
+        <div>
+          <h1>Empleados</h1>
+          <p>{{ headline }}</p>
+        </div>
+        <div class="adm-acts">
+          <button v-if="tab === 'access'" type="button" class="adm-btn primary" :disabled="seatsFull" @click="openInvite">
+            <PosIcon name="mail" :size="18" /> <span>Invitar</span>
+          </button>
+          <button v-else type="button" class="adm-btn primary" @click="openPerson()">
+            <PosIcon name="user-plus" :size="18" /> <span>Agregar persona</span>
+          </button>
+        </div>
+      </header>
 
-      <div v-if="error" class="error">{{ error }}</div>
+      <p v-if="flash" class="adm-banner ok" role="status"><PosIcon name="check" :size="18" /> <span>{{ flash }}</span></p>
+      <p v-if="error" class="adm-banner err" role="alert">
+        <PosIcon name="alert" :size="18" /> <span>{{ error }}</span>
+        <button type="button" class="adm-x" aria-label="Cerrar aviso" @click="error = ''"><PosIcon name="x" :size="16" /></button>
+      </p>
 
-      <div class="grid">
-        <article v-for="w in waiters" :key="w.cellphone" class="card">
-          <div class="card-head">
-            <h3>{{ w.name }} {{ w.lastName }}</h3>
-            <span class="status" :class="w.status">{{ w.status === 'active' ? 'En turno' : 'Descanso' }}</span>
+      <nav class="adm-tabs main" role="tablist" aria-label="Secciones de empleados">
+        <button type="button" role="tab" :aria-selected="tab === 'access'" :class="{ on: tab === 'access' }" @click="setTab('access')">
+          Acceso<span class="hide-mobile"> a la app</span><em v-if="users.length">{{ users.length }}</em>
+        </button>
+        <button type="button" role="tab" :aria-selected="tab === 'staff'" :class="{ on: tab === 'staff' }" @click="setTab('staff')">
+          Personal<span class="hide-mobile"> y turnos</span><em v-if="people.length">{{ people.length }}</em>
+        </button>
+      </nav>
+
+      <!-- ============ Acceso a la app ============ -->
+      <section v-if="tab === 'access'" class="sec" :class="{ 'adm-loading': loading.team }">
+        <div v-if="seats" class="adm-card seats">
+          <div class="seats-top">
+            <div>
+              <h2>Lugares del plan {{ planName }}</h2>
+              <p>
+                {{ seats.used }} {{ seats.used === 1 ? 'persona entra' : 'personas entran' }}
+                <template v-if="seats.pending"> · {{ seats.pending }} {{ seats.pending === 1 ? 'invitación pendiente' : 'invitaciones pendientes' }}</template>
+              </p>
+            </div>
+            <strong>{{ seats.max == null ? 'Sin límite' : `${seats.used + seats.pending} de ${seats.max}` }}</strong>
           </div>
-          <p>Tel: {{ w.cellphone }}</p>
-          <p>Turno: {{ scheduleLabel(w.workSchedule) }}</p>
-          <div class="actions">
-            <button type="button" @click="toggleStatus(w)">
-              {{ w.status === 'active' ? 'Pasar a descanso' : 'Poner en turno' }}
+          <div v-if="seats.max != null" class="seats-bar" aria-hidden="true">
+            <i class="used" :style="{ width: `${pct(seats.used)}%` }"></i>
+            <i class="pend" :style="{ width: `${pct(seats.pending)}%` }"></i>
+          </div>
+          <p v-if="seatsFull" class="seats-full">
+            Ya usas todos los lugares. <router-link to="/billing">Cambia de plan</router-link> para invitar a más.
+          </p>
+        </div>
+
+        <div class="adm-card">
+          <div class="adm-card-head">
+            <div>
+              <h2>Quién entra a la app</h2>
+              <p>Cada quien con su usuario; así se sabe quién cobró y quién hizo el corte.</p>
+            </div>
+          </div>
+          <ul v-if="users.length" class="people">
+            <li v-for="u in sortedUsers" :key="u.id">
+              <span class="adm-avatar" :style="hueStyle(displayName(u))">{{ initials(displayName(u)) }}</span>
+              <div class="who">
+                <strong>{{ displayName(u) }}<span v-if="u.username === me" class="adm-pill info me">Tú</span></strong>
+                <small>{{ u.email || `@${u.username}` }}</small>
+              </div>
+              <span class="adm-pill role" :class="ROLE[u.role]?.tone">
+                <PosIcon v-if="u.role === 'admin'" name="shield" :size="13" /> {{ ROLE[u.role]?.label || u.role }}
+              </span>
+            </li>
+          </ul>
+          <p v-else-if="!loading.team" class="adm-hint">No se pudo leer el equipo.</p>
+          <p class="adm-hint foot">
+            Para quitarle el acceso a alguien o cambiar su rol, escríbenos desde
+            <router-link to="/settings">Ajustes → Soporte</router-link>.
+          </p>
+        </div>
+
+        <div class="adm-card">
+          <div class="adm-card-head">
+            <div>
+              <h2>Invitaciones</h2>
+              <p>Le llega un correo con el enlace para crear su usuario. Vence en 7 días.</p>
+            </div>
+            <button type="button" class="adm-btn sm" :disabled="seatsFull" @click="openInvite">
+              <PosIcon name="add" :size="16" /> Invitar
             </button>
-            <button type="button" class="danger" @click="remove(w)">Eliminar</button>
           </div>
-        </article>
-        <p v-if="!waiters.length && !loading" class="empty">No hay personal registrado.</p>
-      </div>
+          <ul v-if="invites.length" class="invites">
+            <li v-for="i in sortedInvites" :key="i.id">
+              <span class="inv-ico"><PosIcon name="mail" :size="17" /></span>
+              <div class="who">
+                <strong>{{ i.email }}</strong>
+                <small>{{ ROLE[i.role]?.label || i.role }} · {{ inviteWhen(i) }}</small>
+              </div>
+              <span class="adm-pill" :class="INVITE[i.status]?.tone">{{ INVITE[i.status]?.label || i.status }}</span>
+              <div class="inv-acts">
+                <button v-if="i.status === 'pending'" type="button" class="adm-btn sm" :disabled="busyId === i.id" @click="revoke(i)">
+                  {{ confirmId === `r${i.id}` ? '¿Revocar?' : 'Revocar' }}
+                </button>
+                <button type="button" class="adm-btn sm danger-ghost" :disabled="busyId === i.id" :aria-label="`Eliminar invitación de ${i.email}`" @click="removeInvite(i)">
+                  <PosIcon v-if="confirmId !== `d${i.id}`" name="trash" :size="16" />
+                  <template v-else>¿Eliminar?</template>
+                </button>
+              </div>
+            </li>
+          </ul>
+          <p v-else-if="!loading.team" class="adm-hint">Sin invitaciones. Invita a tu cajero o a quien te ayude a vender.</p>
+        </div>
+      </section>
 
+      <!-- ============ Personal y turnos ============ -->
+      <section v-else class="sec" :class="{ 'adm-loading': loading.staff }">
+        <p class="adm-hint">Lista del personal de la tienda con su turno. No necesitan cuenta para estar aquí.</p>
+        <div v-if="people.length" class="adm-kpis">
+          <div class="adm-kpi good">
+            <span>En turno</span>
+            <strong>{{ counts.active }}</strong>
+            <small>trabajando ahora</small>
+          </div>
+          <div class="adm-kpi">
+            <span>Descansando</span>
+            <strong>{{ counts.rest }}</strong>
+            <small>fuera de turno</small>
+          </div>
+        </div>
+        <div v-if="people.length" class="adm-tools">
+          <div class="adm-tabs" role="group" aria-label="Filtrar por turno">
+            <button type="button" :class="{ on: shift === 'all' }" @click="shift = 'all'">Todos<em>{{ people.length }}</em></button>
+            <button v-for="s in SHIFTS" :key="s.id" type="button" :class="{ on: shift === s.id }" @click="shift = s.id">
+              {{ s.label }}<em>{{ people.filter((p) => p.workSchedule === s.id).length }}</em>
+            </button>
+          </div>
+        </div>
+        <div v-if="shownPeople.length" class="crew">
+          <article v-for="p in shownPeople" :key="p.cellphone" class="adm-card mate" :class="{ resting: p.status !== 'active' }">
+            <div class="mate-top">
+              <span class="adm-avatar" :style="hueStyle(fullName(p))">{{ initials(fullName(p)) }}</span>
+              <div class="who">
+                <strong>{{ fullName(p) }}</strong>
+                <small>{{ prettyPhone(p.cellphone) }}</small>
+              </div>
+              <button type="button" class="adm-btn icon sm" :aria-label="`Editar a ${fullName(p)}`" @click="openPerson(p)">
+                <PosIcon name="edit" :size="17" />
+              </button>
+            </div>
+            <div class="mate-shift">
+              <span class="adm-pill" :class="SHIFT[p.workSchedule]?.tone">{{ SHIFT[p.workSchedule]?.label || 'Sin turno' }}</span>
+              <small>{{ SHIFT[p.workSchedule]?.hours }}</small>
+            </div>
+            <div class="mate-status">
+              <span>{{ p.status === 'active' ? 'En turno' : 'Descansando' }}</span>
+              <button
+                type="button"
+                role="switch"
+                class="adm-switch"
+                :aria-checked="p.status === 'active'"
+                :aria-label="`${fullName(p)} en turno`"
+                :disabled="busyId === p.cellphone"
+                @click="toggleStatus(p)"
+              ></button>
+            </div>
+            <div class="mate-acts">
+              <a class="adm-btn wa sm" :href="waLink(p.cellphone)" target="_blank" rel="noopener"><PosIcon name="chat" :size="16" /> WhatsApp</a>
+              <a class="adm-btn sm" :href="`tel:${p.cellphone}`"><PosIcon name="phone" :size="16" /> Llamar</a>
+            </div>
+          </article>
+        </div>
+        <div v-else-if="!loading.staff" class="adm-empty">
+          <PosIcon name="users" :size="30" />
+          <h3>{{ people.length ? 'Nadie en ese turno' : 'Sin personal registrado' }}</h3>
+          <p v-if="!people.length">Anota a quien te ayuda en la tienda con su celular y turno para tenerlos a la mano.</p>
+          <button v-if="!people.length" type="button" class="adm-btn primary" @click="openPerson()">
+            <PosIcon name="user-plus" :size="18" /> Agregar persona
+          </button>
+        </div>
+      </section>
+
+      <!-- ============ Diálogo: invitar ============ -->
       <Teleport to="body">
-        <div v-if="showForm" class="modal-bg">
-          <form class="modal" @submit.prevent="create" role="dialog" aria-modal="true" aria-labelledby="staff-form-title">
-            <h3 id="staff-form-title">Nuevo empleado</h3>
-            <div class="modal-body">
-              <label>Nombre<input v-model="form.name" required autocomplete="given-name" /></label>
-              <label>Apellido<input v-model="form.lastName" required autocomplete="family-name" /></label>
-              <label>Celular (10 dígitos)
-                <input v-model="form.cellphone" maxlength="10" pattern="\d{10}" inputmode="numeric" required />
+        <div v-if="showInvite" class="adm-dlg-bg" @click.self="showInvite = false">
+          <form class="adm-dlg" role="dialog" aria-modal="true" aria-labelledby="inv-title" @submit.prevent="sendInvite">
+            <div class="adm-dlg-head">
+              <span class="adm-dlg-ico"><PosIcon name="mail" :size="22" /></span>
+              <div>
+                <h3 id="inv-title">Invitar al equipo</h3>
+                <p>Le mandamos un correo para que cree su usuario y contraseña.</p>
+              </div>
+              <button type="button" class="adm-dlg-x" aria-label="Cerrar" @click="showInvite = false"><PosIcon name="x" :size="18" /></button>
+            </div>
+            <label class="adm-field">
+              <span>Correo</span>
+              <input ref="inviteInput" v-model="inviteForm.email" class="adm-inp" type="email" required maxlength="120" autocomplete="off" placeholder="persona@correo.com" />
+            </label>
+            <div class="adm-field">
+              <span>¿Qué puede hacer?</span>
+              <div class="adm-choices">
+                <button
+                  v-for="r in INVITE_ROLES"
+                  :key="r"
+                  type="button"
+                  class="adm-choice"
+                  :aria-pressed="inviteForm.role === r"
+                  @click="inviteForm.role = r"
+                >
+                  <strong>{{ ROLE[r].label }}</strong>
+                  <small>{{ ROLE[r].can }}</small>
+                </button>
+              </div>
+            </div>
+            <p v-if="inviteErr" class="adm-err">{{ inviteErr }}</p>
+            <div class="adm-dlg-acts">
+              <button type="button" class="adm-btn" @click="showInvite = false">Cancelar</button>
+              <button type="submit" class="adm-btn primary" :disabled="saving">{{ saving ? 'Enviando…' : 'Enviar invitación' }}</button>
+            </div>
+          </form>
+        </div>
+      </Teleport>
+
+      <!-- ============ Diálogo: persona ============ -->
+      <Teleport to="body">
+        <div v-if="showPerson" class="adm-dlg-bg" @click.self="showPerson = false">
+          <form class="adm-dlg" role="dialog" aria-modal="true" aria-labelledby="per-title" @submit.prevent="savePerson">
+            <div class="adm-dlg-head">
+              <span class="adm-dlg-ico"><PosIcon name="user-plus" :size="22" /></span>
+              <div>
+                <h3 id="per-title">{{ editingPhone ? 'Editar persona' : 'Agregar persona' }}</h3>
+                <p>{{ editingPhone ? 'El celular no se puede cambiar.' : 'Se identifica por su celular.' }}</p>
+              </div>
+              <button type="button" class="adm-dlg-x" aria-label="Cerrar" @click="showPerson = false"><PosIcon name="x" :size="18" /></button>
+            </div>
+            <div class="adm-row2">
+              <label class="adm-field">
+                <span>Nombre</span>
+                <input ref="personInput" v-model="personForm.name" class="adm-inp" required maxlength="80" autocomplete="off" />
               </label>
-              <label>Turno
-                <select v-model="form.workSchedule">
-                  <option value="morning">Mañana</option>
-                  <option value="afternoon">Tarde</option>
-                  <option value="evening">Noche</option>
-                </select>
-              </label>
-              <label>Estado
-                <select v-model="form.status">
-                  <option value="active">En turno</option>
-                  <option value="rest">Descanso</option>
-                </select>
+              <label class="adm-field">
+                <span>Apellido</span>
+                <input v-model="personForm.lastName" class="adm-inp" required maxlength="80" autocomplete="off" />
               </label>
             </div>
-            <div class="modal-actions">
-              <button type="button" @click="showForm = false">Cancelar</button>
-              <button type="submit" class="btn-primary" :disabled="saving">
-                {{ saving ? 'Guardando…' : 'Guardar' }}
+            <label class="adm-field">
+              <span>Celular</span>
+              <input
+                v-model="personForm.cellphone"
+                class="adm-inp"
+                type="tel"
+                inputmode="numeric"
+                maxlength="10"
+                pattern="\d{10}"
+                title="10 dígitos"
+                required
+                :disabled="Boolean(editingPhone)"
+                placeholder="10 dígitos"
+              />
+            </label>
+            <div class="adm-field">
+              <span>Turno</span>
+              <div class="adm-choices cols3">
+                <button
+                  v-for="s in SHIFTS"
+                  :key="s.id"
+                  type="button"
+                  class="adm-choice"
+                  :aria-pressed="personForm.workSchedule === s.id"
+                  @click="personForm.workSchedule = s.id"
+                >
+                  <strong>{{ s.label }}</strong>
+                  <small>{{ s.hours }}</small>
+                </button>
+              </div>
+            </div>
+            <div class="switch-row">
+              <span>{{ personForm.status === 'active' ? 'En turno ahora' : 'Descansando ahora' }}</span>
+              <button
+                type="button"
+                role="switch"
+                class="adm-switch"
+                :aria-checked="personForm.status === 'active'"
+                aria-label="En turno"
+                @click="personForm.status = personForm.status === 'active' ? 'rest' : 'active'"
+              ></button>
+            </div>
+            <p v-if="personErr" class="adm-err">{{ personErr }}</p>
+            <div class="adm-dlg-acts" :class="{ three: editingPhone }">
+              <button v-if="editingPhone" type="button" class="adm-btn danger-ghost" :disabled="saving" @click="removePerson">
+                {{ confirmId === `p${editingPhone}` ? '¿Seguro?' : 'Eliminar' }}
               </button>
+              <button type="button" class="adm-btn" @click="showPerson = false">Cancelar</button>
+              <button type="submit" class="adm-btn primary" :disabled="saving">{{ saving ? 'Guardando…' : 'Guardar' }}</button>
             </div>
           </form>
         </div>
@@ -64,204 +300,383 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from "vue";
+import { computed, nextTick, onMounted, reactive, ref } from "vue";
+import { useRoute, useRouter } from "vue-router";
+import "../admin.css";
 import AppShell from "../components/AppShell.vue";
+import PosIcon from "../components/PosIcon.js";
 import { apiService } from "../apiService";
 
-const waiters = ref([]);
-const loading = ref(false);
-const saving = ref(false);
-const showForm = ref(false);
-const error = ref("");
+const ROLE = {
+  admin: { label: "Admin", tone: "info", can: "Todo: productos, precios, reportes, ajustes y equipo." },
+  cashier: { label: "Cajero", tone: "good", can: "Vende, cobra, abre y cierra caja. Ve Resumen, Clientes e Inventario." },
+  waiter: { label: "Vendedor", tone: "", can: "Vende en el punto de venta. No abre caja ni ve reportes." },
+  kitchen: { label: "Almacén", tone: "" },
+  hosstess: { label: "Recepción", tone: "" },
+};
+const INVITE_ROLES = ["cashier", "waiter", "admin"];
+const INVITE = {
+  pending: { label: "Pendiente", tone: "warn" },
+  accepted: { label: "Aceptada", tone: "good" },
+  revoked: { label: "Revocada", tone: "" },
+  expired: { label: "Vencida", tone: "" },
+};
+const SHIFTS = [
+  { id: "morning", label: "Mañana", hours: "7 a 14 h", tone: "warn" },
+  { id: "afternoon", label: "Tarde", hours: "14 a 21 h", tone: "info" },
+  { id: "evening", label: "Noche", hours: "21 a 7 h", tone: "" },
+];
+const SHIFT = Object.fromEntries(SHIFTS.map((s) => [s.id, s]));
 
-const form = reactive({
-  name: "",
-  lastName: "",
-  cellphone: "",
-  workSchedule: "morning",
-  status: "active",
-});
-
-function scheduleLabel(s) {
-  return { morning: "Mañana", afternoon: "Tarde", evening: "Noche" }[s] || s || "—";
+const route = useRoute();
+const router = useRouter();
+const tab = ref(route.query.tab === "staff" ? "staff" : "access");
+function setTab(id) {
+  tab.value = id;
+  router.replace({ query: { ...route.query, tab: id } }).catch(() => {});
 }
 
-async function load() {
-  loading.value = true;
-  error.value = "";
+const loading = reactive({ team: true, staff: true });
+const saving = ref(false);
+const error = ref("");
+const flash = ref("");
+let flashTimer = null;
+function say(msg) {
+  flash.value = msg;
+  clearTimeout(flashTimer);
+  flashTimer = setTimeout(() => (flash.value = ""), 4000);
+}
+const busyId = ref("");
+const confirmId = ref("");
+let confirmTimer = null;
+// Botones de borrar: el primer toque pide confirmación y se olvida a los 4 s
+function needsConfirm(id) {
+  if (confirmId.value === id) {
+    confirmId.value = "";
+    return false;
+  }
+  confirmId.value = id;
+  clearTimeout(confirmTimer);
+  confirmTimer = setTimeout(() => (confirmId.value = ""), 4000);
+  return true;
+}
+function errText(e, fallback) {
+  const d = e?.response?.data;
+  if (typeof d === "string" && d) return d;
+  if (d?.message) return d.message;
+  return fallback;
+}
+
+// ---------- Utilidades ----------
+function initials(name) {
+  const parts = String(name || "?").trim().split(/\s+/).filter(Boolean);
+  return ((parts[0]?.[0] || "?") + (parts[1]?.[0] || "")).toUpperCase();
+}
+function hueStyle(name) {
+  let h = 0;
+  for (const ch of String(name || "")) h = (h * 31 + ch.charCodeAt(0)) % 360;
+  return { "--h": h };
+}
+function prettyPhone(p) {
+  const d = String(p || "").replace(/\D/g, "");
+  return d.length === 10 ? `${d.slice(0, 3)} ${d.slice(3, 6)} ${d.slice(6)}` : p;
+}
+function waLink(p) {
+  const d = String(p || "").replace(/\D/g, "");
+  return `https://wa.me/${d.length === 10 ? `52${d}` : d}`;
+}
+
+// ---------- Acceso ----------
+const users = ref([]);
+const me = ref("");
+const planName = ref("");
+const seats = ref(null);
+const invites = ref([]);
+function displayName(u) {
+  const full = `${u.name || ""} ${u.lastName || ""}`.trim();
+  return full || u.username || u.email || "Usuario";
+}
+const sortedUsers = computed(() => {
+  const order = { admin: 0, cashier: 1, waiter: 2 };
+  return [...users.value].sort(
+    (a, b) => (a.username === me.value ? -1 : b.username === me.value ? 1 : 0) || (order[a.role] ?? 9) - (order[b.role] ?? 9) || displayName(a).localeCompare(displayName(b), "es")
+  );
+});
+const sortedInvites = computed(() => {
+  const order = { pending: 0, accepted: 1, expired: 2, revoked: 3 };
+  return [...invites.value].sort((a, b) => (order[a.status] ?? 9) - (order[b.status] ?? 9) || new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+});
+const seatsFull = computed(() => Boolean(seats.value && seats.value.max != null && seats.value.used + seats.value.pending >= seats.value.max));
+function pct(n) {
+  const max = seats.value?.max;
+  return max ? Math.min(100, (Number(n || 0) / max) * 100) : 0;
+}
+function inviteWhen(i) {
+  if (i.status === "pending" && i.expiresAt) {
+    const days = Math.ceil((new Date(i.expiresAt) - Date.now()) / 86400000);
+    if (days <= 0) return "vence hoy";
+    return `vence en ${days} ${days === 1 ? "día" : "días"}`;
+  }
+  const d = new Date(i.acceptedAt || i.createdAt);
+  return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString("es-MX", { day: "numeric", month: "short" });
+}
+
+const showInvite = ref(false);
+const inviteErr = ref("");
+const inviteInput = ref(null);
+const inviteForm = reactive({ email: "", role: "cashier" });
+function openInvite() {
+  inviteForm.email = "";
+  inviteForm.role = "cashier";
+  inviteErr.value = "";
+  showInvite.value = true;
+  nextTick(() => inviteInput.value?.focus());
+}
+async function sendInvite() {
+  saving.value = true;
+  inviteErr.value = "";
   try {
-    waiters.value = (await apiService.getWaiters()) || [];
+    const email = inviteForm.email.trim().toLowerCase();
+    await apiService.createInvite({ email, role: inviteForm.role });
+    showInvite.value = false;
+    say(`Invitación enviada a ${email}.`);
+    loadTeam();
   } catch (e) {
-    error.value = "No se pudo cargar el personal.";
-    waiters.value = [];
+    inviteErr.value = errText(e, "No se pudo enviar la invitación.");
   } finally {
-    loading.value = false;
+    saving.value = false;
+  }
+}
+async function revoke(i) {
+  if (needsConfirm(`r${i.id}`)) return;
+  busyId.value = i.id;
+  try {
+    await apiService.revokeInvite(i.id);
+    say(`Invitación de ${i.email} revocada: el enlace ya no sirve.`);
+    await loadTeam();
+  } catch (e) {
+    error.value = errText(e, "No se pudo revocar.");
+  } finally {
+    busyId.value = "";
+  }
+}
+async function removeInvite(i) {
+  if (needsConfirm(`d${i.id}`)) return;
+  busyId.value = i.id;
+  try {
+    await apiService.deleteInvite(i.id);
+    invites.value = invites.value.filter((x) => x.id !== i.id);
+    say("Invitación eliminada.");
+    loadTeam();
+  } catch (e) {
+    error.value = errText(e, "No se pudo eliminar.");
+  } finally {
+    busyId.value = "";
   }
 }
 
-async function create() {
-  saving.value = true;
-  error.value = "";
+// ---------- Personal ----------
+const people = ref([]);
+const shift = ref("all");
+const counts = computed(() => ({
+  active: people.value.filter((p) => p.status === "active").length,
+  rest: people.value.filter((p) => p.status !== "active").length,
+}));
+function fullName(p) {
+  return `${p.name || ""} ${p.lastName || ""}`.trim() || "Sin nombre";
+}
+const shownPeople = computed(() =>
+  people.value
+    .filter((p) => shift.value === "all" || p.workSchedule === shift.value)
+    .sort((a, b) => (a.status === "active" ? 0 : 1) - (b.status === "active" ? 0 : 1) || fullName(a).localeCompare(fullName(b), "es"))
+);
+
+async function toggleStatus(p) {
+  const next = p.status === "active" ? "rest" : "active";
+  busyId.value = p.cellphone;
   try {
-    const created = await apiService.createWaiter({ ...form, role: "waiter" });
-    waiters.value = [...waiters.value, created];
-    showForm.value = false;
-    form.name = "";
-    form.lastName = "";
-    form.cellphone = "";
+    await apiService.updateWaiter(p.cellphone, { status: next });
+    p.status = next;
   } catch (e) {
-    error.value = e.response?.data || "No se pudo crear el empleado.";
+    error.value = errText(e, "No se pudo cambiar el estado.");
+  } finally {
+    busyId.value = "";
+  }
+}
+
+const showPerson = ref(false);
+const editingPhone = ref("");
+const personErr = ref("");
+const personInput = ref(null);
+const personForm = reactive({ name: "", lastName: "", cellphone: "", workSchedule: "morning", status: "active" });
+function openPerson(p = null) {
+  editingPhone.value = p?.cellphone || "";
+  personForm.name = p?.name || "";
+  personForm.lastName = p?.lastName || "";
+  personForm.cellphone = p?.cellphone || "";
+  personForm.workSchedule = p?.workSchedule || "morning";
+  personForm.status = p ? p.status || "rest" : "active";
+  personErr.value = "";
+  confirmId.value = "";
+  showPerson.value = true;
+  nextTick(() => personInput.value?.focus());
+}
+async function savePerson() {
+  const data = {
+    name: personForm.name.trim(),
+    lastName: personForm.lastName.trim(),
+    workSchedule: personForm.workSchedule,
+    status: personForm.status,
+  };
+  const phone = String(personForm.cellphone).replace(/\D/g, "");
+  if (!editingPhone.value && phone.length !== 10) {
+    personErr.value = "El celular lleva 10 dígitos.";
+    return;
+  }
+  saving.value = true;
+  personErr.value = "";
+  try {
+    if (editingPhone.value) {
+      await apiService.updateWaiter(editingPhone.value, data);
+      const idx = people.value.findIndex((x) => x.cellphone === editingPhone.value);
+      if (idx >= 0) people.value[idx] = { ...people.value[idx], ...data };
+      say(`${data.name} actualizado.`);
+    } else {
+      const created = await apiService.createWaiter({ ...data, cellphone: phone, role: "waiter" });
+      people.value = [...people.value, created && typeof created === "object" ? created : { ...data, cellphone: phone }];
+      say(`${data.name} agregado al personal.`);
+    }
+    showPerson.value = false;
+  } catch (e) {
+    personErr.value = errText(e, "No se pudo guardar.");
+  } finally {
+    saving.value = false;
+  }
+}
+async function removePerson() {
+  const phone = editingPhone.value;
+  if (needsConfirm(`p${phone}`)) return;
+  saving.value = true;
+  try {
+    await apiService.deleteWaiter(phone);
+    people.value = people.value.filter((x) => x.cellphone !== phone);
+    showPerson.value = false;
+    say(`${personForm.name} quitado del personal.`);
+  } catch (e) {
+    personErr.value = errText(e, "No se pudo eliminar.");
   } finally {
     saving.value = false;
   }
 }
 
-async function toggleStatus(w) {
-  const next = w.status === "active" ? "rest" : "active";
+// ---------- Carga ----------
+const headline = computed(() => {
+  if (loading.team && loading.staff) return "Cargando…";
+  const parts = [];
+  if (users.value.length) parts.push(`${users.value.length} con acceso`);
+  if (people.value.length) parts.push(`${counts.value.active} en turno`);
+  return parts.join(" · ") || "Tu equipo de trabajo";
+});
+async function loadTeam() {
+  loading.team = true;
   try {
-    await apiService.updateWaiter(w.cellphone, { status: next });
-    w.status = next;
+    const [team, inv] = await Promise.allSettled([apiService.getTeam(), apiService.getInvites()]);
+    if (team.status === "fulfilled" && team.value) {
+      users.value = Array.isArray(team.value.users) ? team.value.users : [];
+      me.value = team.value.me || "";
+      planName.value = team.value.planName || "";
+      seats.value = team.value.seats || null;
+    }
+    if (inv.status === "fulfilled") invites.value = Array.isArray(inv.value) ? inv.value : [];
+    if (team.status === "rejected" && inv.status === "rejected") error.value = "No se pudo cargar el equipo.";
+  } finally {
+    loading.team = false;
+  }
+}
+async function loadStaff() {
+  loading.staff = true;
+  try {
+    const list = await apiService.getWaiters();
+    people.value = Array.isArray(list) ? list : [];
   } catch {
-    error.value = "No se pudo actualizar el estado.";
+    error.value = "No se pudo cargar el personal.";
+  } finally {
+    loading.staff = false;
   }
 }
 
-async function remove(w) {
-  if (!confirm(`¿Eliminar a ${w.name} ${w.lastName}?`)) return;
-  try {
-    await apiService.deleteWaiter(w.cellphone);
-    waiters.value = waiters.value.filter((x) => x.cellphone !== w.cellphone);
-  } catch {
-    error.value = "No se pudo eliminar.";
-  }
-}
-
-onMounted(load);
+onMounted(() => {
+  loadTeam();
+  loadStaff();
+});
 </script>
 
 <style scoped>
-.staff-page { animation: t-fade-up .45s ease both; }
-.toolbar { display:flex; justify-content:space-between; align-items:center; gap:1rem; margin-bottom:1.2rem; flex-wrap:wrap; }
-.toolbar p { margin:0; color:var(--timber-muted); }
-.btn-primary { background:var(--timber-primary); color:var(--timber-on-primary); border:none; border-radius:.7rem; padding:.65rem 1.05rem; font-weight:600; cursor:pointer; box-shadow:var(--timber-shadow); }
-.grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(16.5rem,1fr)); gap:1rem; }
-.card { background:var(--timber-panel); border:1px solid var(--timber-line); border-radius:1.1rem; padding:1.15rem; box-shadow:var(--timber-shadow); transition:transform .18s ease; color:var(--timber-ink); }
-.card:hover { transform:translateY(-2px); }
-.card-head { display:flex; justify-content:space-between; gap:.5rem; align-items:start; }
-.card h3 { margin:0; font-family:var(--font-display); font-size:1.2rem; font-weight:700; letter-spacing:-0.01em; }
-.card p { margin:.4rem 0 0; font-size:.88rem; color:var(--timber-muted); }
-.status {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 1.7rem;
-  padding: 0 0.75rem;
-  border-radius: 999px;
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.01em;
-  line-height: 1;
-  white-space: nowrap;
-}
-.status.active { background:var(--timber-success-soft); color:var(--timber-success); }
-.status.rest { background:var(--timber-surface); color:var(--timber-muted); }
-.actions { display:flex; gap:.45rem; margin-top:.95rem; flex-wrap:wrap; }
-.actions button { border:1px solid var(--timber-line); background:var(--timber-panel-elevated); color:var(--timber-ink); border-radius:.6rem; padding:.45rem .7rem; cursor:pointer; font-size:.8rem; font-weight:600; }
-.actions .danger { color:var(--timber-danger); border-color:color-mix(in srgb, var(--timber-danger) 35%, transparent); }
-.empty, .error { color:var(--timber-muted); }
-.error { color:var(--timber-danger); margin-bottom:.75rem; }
+.sec > * + * { margin-top: 0.75rem; }
+.who { flex: 1; min-width: 0; display: grid; }
+.who strong { display: flex; align-items: center; gap: 0.4rem; min-width: 0; overflow: hidden; font-size: 0.95rem; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+.who small { overflow: hidden; font-size: 0.8rem; color: var(--timber-muted); text-overflow: ellipsis; white-space: nowrap; }
+.me { padding: 0.1rem 0.45rem; font-size: 0.68rem; }
 
-.modal-bg {
-  position: fixed;
-  inset: 0;
-  z-index: 200;
-  background: rgba(10, 16, 14, 0.55);
-  backdrop-filter: blur(6px);
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  padding: 0.75rem;
-  padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
-  box-sizing: border-box;
-}
-.modal {
-  background: var(--timber-panel);
-  color: var(--timber-ink);
-  border-radius: 1.15rem 1.15rem 0.85rem 0.85rem;
-  padding: 1.15rem 1.15rem 0.85rem;
-  width: min(26rem, 100%);
-  max-height: min(90dvh, 40rem);
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  border: 1px solid var(--timber-line);
-  box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.22);
-  overflow: hidden;
-}
-.modal h3 {
-  margin: 0;
-  flex-shrink: 0;
-  font-family: var(--font-display);
-  font-size: 1.3rem;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-}
-.modal-body {
-  display: grid;
-  gap: 0.7rem;
-  overflow: auto;
-  min-height: 0;
-  padding-right: 0.15rem;
-  -webkit-overflow-scrolling: touch;
-}
-.modal label { display: grid; gap: 0.3rem; font-size: 0.88rem; font-weight: 600; }
-.modal input,
-.modal select {
-  min-height: 3rem;
-  border: 1px solid var(--timber-line);
-  border-radius: 0.7rem;
-  padding: 0.65rem 0.8rem;
-  font: inherit;
-  background: var(--timber-panel-elevated);
-  color: var(--timber-ink);
-}
-.modal-actions {
+/* Lugares del plan */
+.seats { display: grid; gap: 0.6rem; }
+.seats-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.75rem; }
+.seats-top h2 { margin: 0; font-size: 1rem; font-weight: 800; }
+.seats-top p { margin: 0.15rem 0 0; font-size: 0.82rem; color: var(--timber-muted); }
+.seats-top strong { font-size: 1.15rem; font-weight: 800; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.seats-bar { display: flex; height: 0.6rem; overflow: hidden; border-radius: 999px; background: var(--timber-surface); }
+.seats-bar .used { background: var(--timber-primary); }
+.seats-bar .pend { background: repeating-linear-gradient(45deg, var(--timber-warning), var(--timber-warning) 4px, color-mix(in srgb, var(--timber-warning) 50%, transparent) 4px, color-mix(in srgb, var(--timber-warning) 50%, transparent) 8px); }
+.seats-full { margin: 0; font-size: 0.85rem; font-weight: 700; color: var(--timber-warning); }
+
+/* Listas de personas e invitaciones */
+.people, .invites { list-style: none; margin: 0; padding: 0; }
+.people li, .invites li { display: flex; align-items: center; gap: 0.7rem; padding: 0.6rem 0; }
+.people li + li, .invites li + li { border-top: 1px solid var(--timber-line); }
+.role { flex-shrink: 0; }
+.foot { margin-top: 0.75rem; padding-top: 0.7rem; border-top: 1px dashed var(--timber-line); }
+.inv-ico {
+  width: 2.6rem;
+  height: 2.6rem;
   flex-shrink: 0;
   display: grid;
-  grid-template-columns: 1fr 1.2fr;
-  gap: 0.55rem;
-  padding-top: 0.25rem;
-  padding-bottom: env(safe-area-inset-bottom, 0px);
-  border-top: 1px solid var(--timber-line);
-  margin-top: 0.15rem;
-}
-.modal-actions button {
-  min-height: 3.15rem;
+  place-items: center;
   border-radius: 0.85rem;
-  border: 1px solid var(--timber-line);
   background: var(--timber-surface);
-  color: var(--timber-ink);
-  font-weight: 700;
-  font-size: 1rem;
-  cursor: pointer;
+  color: var(--timber-muted);
 }
-.modal-actions .btn-primary {
-  border: none;
-  background: var(--timber-primary);
-  color: var(--timber-on-primary);
-  box-shadow: var(--timber-shadow);
-}
-.modal-actions .btn-primary:disabled { opacity: 0.65; cursor: wait; }
+.inv-acts { display: flex; gap: 0.35rem; flex-shrink: 0; }
 
-@media (min-width: 720px) {
-  .modal-bg {
-    align-items: center;
-    padding: 1.5rem;
-  }
-  .modal {
-    border-radius: 1.15rem;
-    padding: 1.35rem;
-    max-height: min(88vh, 36rem);
-  }
+/* Personal */
+.crew {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr));
+  gap: 0.65rem;
+}
+.mate { display: grid; align-content: start; gap: 0.65rem; padding: 0.85rem; border-left: 4px solid var(--timber-success); }
+.mate.resting { border-left-color: var(--timber-line); }
+.mate-top { display: flex; align-items: center; gap: 0.65rem; }
+.mate-shift { display: flex; align-items: center; gap: 0.5rem; }
+.mate-shift small { font-size: 0.8rem; color: var(--timber-muted); }
+.mate-status,
+.switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.5rem 0.7rem;
+  border-radius: 0.75rem;
+  background: var(--timber-surface);
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+.mate-acts { display: flex; gap: 0.35rem; }
+.mate-acts .adm-btn { flex: 1; }
+
+@media (max-width: 767.98px) {
+  .invites li { flex-wrap: wrap; }
+  .invites .who { flex-basis: calc(100% - 3.3rem); }
+  .invites .adm-pill { margin-left: 3.3rem; }
+  .inv-acts { margin-left: auto; }
 }
 </style>
