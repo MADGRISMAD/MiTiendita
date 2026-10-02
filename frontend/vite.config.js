@@ -30,23 +30,29 @@ export default defineConfig({
     vue(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['logo.svg'],
+      includeAssets: ['logo.svg', 'icons/apple-touch-icon.png', 'icons/favicon-32.png'],
       manifest: {
+        id: '/pos',
         name: 'Mi Tiendita',
         short_name: 'Mi Tiendita',
-        description: 'POS en la nube para tiendas de abarrotes',
+        description: 'Punto de venta para abarrotes, farmacias y ferreterías. Cobra aunque se vaya el internet.',
         theme_color: '#1E5AA8',
         background_color: '#F4F1EA',
         display: 'standalone',
+        scope: '/',
         start_url: '/pos',
+        orientation: 'any',
         lang: 'es-MX',
+        categories: ['business', 'finance', 'productivity'],
         icons: [
-          {
-            src: '/logo.svg',
-            sizes: 'any',
-            type: 'image/svg+xml',
-            purpose: 'any',
-          },
+          { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+          { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+          { src: '/icons/maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+          { src: '/logo.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
+        ],
+        shortcuts: [
+          { name: 'Vender', short_name: 'Vender', url: '/pos', icons: [{ src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' }] },
+          { name: 'Caja', short_name: 'Caja', url: '/orders', icons: [{ src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' }] },
         ],
       },
       workbox: {
