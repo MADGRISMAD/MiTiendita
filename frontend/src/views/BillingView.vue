@@ -37,6 +37,11 @@
         </div>
       </header>
 
+      <div class="wa-strip">
+        <p><strong>¿Dudas con tu plan o tu pago?</strong> Escríbenos y lo resolvemos contigo.</p>
+        <WhatsAppHelp compact />
+      </div>
+
       <div v-if="loading" class="state">Cargando…</div>
       <div v-else-if="err" class="state err">{{ err }}</div>
       <template v-else>
@@ -211,6 +216,7 @@ import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import AppShell from "../components/AppShell.vue";
 import InventarioMagicoTerm from "../components/InventarioMagicoTerm.vue";
+import WhatsAppHelp from "../components/WhatsAppHelp.vue";
 import { apiService } from "../apiService";
 import { hasRole } from "../authStore";
 import { applyBillingStatus, billingStore } from "../billingStore";
@@ -479,6 +485,22 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.wa-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem 1rem;
+  margin: 0 0 1rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--timber-line);
+  border-radius: 1rem;
+  background: var(--timber-panel);
+}
+.wa-strip p {
+  margin: 0;
+  font-size: 0.92rem;
+}
 .billing {
   width: 100%;
   max-width: none;

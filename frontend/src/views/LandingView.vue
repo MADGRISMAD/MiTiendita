@@ -537,10 +537,9 @@
               ¿Prefieres pagar una sola vez? Hay <strong>licencia perpetua</strong>,
               sin Inventario Mágico ni Precio Mágico.
             </p>
-            <router-link :to="loggedIn ? { name: 'billing' } : '/register?plan=perpetual'">
-              Preguntar por ella →
-            </router-link>
-            <p v-if="!loggedIn" class="perpetual-note">Regístrate y escríbenos desde Configuración → Soporte.</p>
+            <button type="button" class="perpetual-more" @click="showPerpetual = true">
+              Más información →
+            </button>
           </aside>
         </div>
       </section>
@@ -613,6 +612,44 @@
       </section>
     </main>
 
+    <!-- Licencia perpetua: qué es, antes de pedir una cuenta -->
+    <Teleport to="body">
+      <div v-if="showPerpetual" class="lp-modal-bg" @click.self="showPerpetual = false">
+        <div class="lp-modal" role="dialog" aria-modal="true" aria-labelledby="perpetual-title">
+          <button type="button" class="lp-modal-x" aria-label="Cerrar" @click="showPerpetual = false">×</button>
+          <p class="lp-modal-kicker">Pago único</p>
+          <h3 id="perpetual-title">Licencia perpetua</h3>
+          <p>Pagas una vez y usas la caja, el catálogo y los tickets sin cuota mensual.</p>
+          <div class="lp-modal-cols">
+            <div>
+              <h4>Incluye</h4>
+              <ul>
+                <li>Cobrar desde celular, tablet o PC en el navegador</li>
+                <li>Sin instalar nada · 1 sucursal</li>
+                <li>Hasta 20 usuarios</li>
+                <li>Productos ilimitados</li>
+                <li>Tickets de 80 mm, corte de caja e inventario</li>
+              </ul>
+            </div>
+            <div>
+              <h4>No incluye</h4>
+              <ul>
+                <li>Inventario Mágico ni Precio Mágico (la IA)</li>
+              </ul>
+              <h4>Soporte y actualizaciones</h4>
+              <p class="lp-modal-small">Te explicamos precio y condiciones por WhatsApp antes de que decidas.</p>
+            </div>
+          </div>
+          <div class="lp-modal-acts">
+            <WhatsAppHelp label="Pregúntanos por WhatsApp" :message="PERPETUAL_MESSAGE" />
+            <router-link v-if="loggedIn" class="lp-modal-link" :to="{ name: 'billing' }" @click="showPerpetual = false">
+              Ver mi plan actual
+            </router-link>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
     <footer class="foot">
       <div class="foot-brand">
         <BrandName />
@@ -624,6 +661,7 @@
         <router-link to="/terminos">Términos</router-link>
         <router-link to="/privacidad">Privacidad</router-link>
       </div>
+      <WhatsAppHelp class="foot-wa" label="¿Dudas? Escríbenos por WhatsApp" :message="PRESALE_MESSAGE" compact />
     </footer>
   </div>
 </template>
@@ -636,6 +674,8 @@ import { apiService } from "../apiService";
 import { authStore, homeForRole } from "../authStore";
 import InventarioMagicoTerm from "../components/InventarioMagicoTerm.vue";
 import { useLandingMotion, vTilt } from "../landingMotion";
+import WhatsAppHelp from "../components/WhatsAppHelp.vue";
+import { PERPETUAL_MESSAGE, PRESALE_MESSAGE } from "../support";
 
 const route = useRoute();
 const root = ref(null);
@@ -643,6 +683,7 @@ const { refresh } = useLandingMotion(root);
 const plans = ref([]);
 const billingInterval = ref("month");
 const loggedIn = computed(() => Boolean(authStore.token));
+const showPerpetual = ref(false);
 const homeRoute = computed(() => homeForRole());
 const planCtaTo = computed(() => {
   if (loggedIn.value) {
@@ -2911,7 +2952,65 @@ main,
   text-decoration: none;
 }
 .plan-extra a:hover { text-decoration: underline; }
-.perpetual-note { margin: 0.25rem 0 0; font-size: 0.78rem; color: var(--timber-muted); }
+.perpetual-more {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--timber-primary);
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+.perpetual-more:hover { text-decoration: underline; }
+.foot-wa { margin-top: 0.5rem; }
+.lp-modal-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgb(0 0 0 / 0.45);
+}
+.lp-modal {
+  position: relative;
+  width: min(36rem, 100%);
+  max-height: 92dvh;
+  overflow-y: auto;
+  display: grid;
+  gap: 0.75rem;
+  padding: 1.5rem 1.4rem;
+  border-radius: 1.25rem;
+  background: var(--timber-panel, #fff);
+  color: var(--timber-ink, #111);
+  box-shadow: 0 24px 60px rgb(0 0 0 / 0.25);
+}
+.lp-modal h3 { margin: 0; font-size: 1.5rem; }
+.lp-modal h4 { margin: 0.4rem 0 0.3rem; font-size: 0.95rem; font-weight: 800; }
+.lp-modal p { margin: 0; }
+.lp-modal ul { margin: 0; padding-left: 1.1rem; display: grid; gap: 0.25rem; font-size: 0.92rem; list-style: disc; }
+.lp-modal li { display: list-item; }
+.lp-modal-kicker { font-size: 0.78rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--timber-muted); }
+.lp-modal-small { font-size: 0.88rem; color: var(--timber-muted); }
+.lp-modal-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.lp-modal-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 0.8rem 1.2rem; margin-top: 0.4rem; }
+.lp-modal-link { font-weight: 700; color: var(--timber-primary); }
+.lp-modal-x {
+  position: absolute;
+  top: 0.6rem;
+  right: 0.7rem;
+  width: 2.2rem;
+  height: 2.2rem;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  font-size: 1.5rem;
+  cursor: pointer;
+}
+@media (max-width: 560px) {
+  .lp-modal-cols { grid-template-columns: minmax(0, 1fr); }
+}
 
 /* ═══════════════════════════════════════════
    HARDWARE — carrusel 3D que gira con el scroll
