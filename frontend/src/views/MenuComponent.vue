@@ -864,13 +864,13 @@
             <div
               v-if="weighByScale"
               class="scale-panel"
-              :class="[scaleRead.state, { mute: !scaleHasData, clear: scaleRead.waitingClear }]"
+              :class="[scaleRead.state, { clear: scaleRead.waitingClear }]"
               role="status"
               aria-live="polite"
             >
               <p class="scale-hint">{{ weighHint }}</p>
-              <strong class="scale-kg">{{ scaleHasData ? formatQtyUnit(weighQty, weighUnit) : '— — —' }}</strong>
-              <span class="scale-amount">{{ scaleHasData && weighQty > 0 ? money(weighAmount) : '' }}</span>
+              <strong class="scale-kg">{{ formatQtyUnit(weighQty, weighUnit) }}</strong>
+              <span class="scale-amount">{{ weighQty > 0 ? money(weighAmount) : '' }}</span>
               <div class="scale-bar" aria-hidden="true">
                 <i :style="{ width: `${Math.min(100, (scaleRead.heldMs / 2000) * 100)}%` }"></i>
               </div>
@@ -902,7 +902,7 @@
               <strong>{{ formatQtyUnit(weighQty, weighUnit) }}</strong> × {{ money(lineUnit(weighItem)) }}{{ perUnit(weighUnit) }}
               = <strong>{{ money(weighAmount) }}</strong>
             </p>
-            <div class="keypad hide-pc">
+            <div v-if="!weighByScale" class="keypad">
               <button v-for="k in ['7', '8', '9', '4', '5', '6', '1', '2', '3', '.', '0']" :key="k" type="button" @click="weighKey(k)">
                 {{ k }}
               </button>
@@ -2429,27 +2429,34 @@ export default {
     const scaleNow = ref(Date.now());
     let scaleDetector = null;
     let scaleTimer = null;
-    /** El diálogo está pesando con la báscula (no escribiendo a mano). */
+    const scaleHasData = computed(() => scaleNow.value && scaleLive(scaleNow.value));
+    /**
+     * El diálogo está pesando con la báscula. Sin báscula (o si no manda peso) se usa el teclado
+     * de peso o importe, igual que antes.
+     */
     const weighByScale = computed(
       () =>
         showWeigh.value &&
-        scaleStore.enabled &&
-        scaleStore.connected &&
+        scaleHasData.value &&
         (weighUnit.value === "kg" || weighUnit.value === "g") &&
         weighMode.value === "qty" &&
         !String(weighDraft.value || "").trim()
     );
-    const scaleHasData = computed(() => scaleNow.value && scaleLive(scaleNow.value));
     function scaleQtyOf(kg) {
       return weighUnit.value === "g" ? Math.round((Number(kg) || 0) * 1000) : roundQty(kg, "kg");
     }
     const weighHint = computed(() => {
-      if (!scaleHasData.value) return "La báscula no manda peso. Revisa el cable o escribe el peso abajo.";
       const r = scaleRead.value;
       if (r.waitingClear) return "Retira lo que hay en la báscula.";
       if (r.state === "empty") return `Pon ${weighItem.value?.name || "el producto"} en la báscula`;
       if (r.state === "stable") return "¡Listo!";
       return "Pesando… no lo muevas";
+    });
+    // Si la báscula deja de mandar peso (o nunca conectó), pasa al teclado
+    watch(weighByScale, (on, was) => {
+      if (showWeigh.value && was && !on && !String(weighDraft.value || "").trim()) {
+        nextTick(() => weighInput.value?.focus());
+      }
     });
     function stopScaleWatch() {
       clearInterval(scaleTimer);
@@ -2491,7 +2498,7 @@ export default {
     const weighQty = computed(() => {
       const p = weighItem.value;
       if (!p) return 0;
-      if (weighByScale.value) return scaleHasData.value ? Math.max(0, scaleQtyOf(scaleRead.value.kg)) : 0;
+      if (weighByScale.value) return Math.max(0, scaleQtyOf(scaleRead.value.kg));
       const v = Number(String(weighDraft.value || "").replace(",", ".")) || 0;
       if (v <= 0) return 0;
       return weighMode.value === "amount" ? qtyForAmount(v, lineUnit(p), weighUnit.value) : roundQty(v, weighUnit.value);
@@ -2509,8 +2516,9 @@ export default {
       clearScanField();
       showWeigh.value = true;
       startScaleWatch();
-      // Con báscula no se enfoca el campo: el teclado del celular taparía el peso
-      if (!scaleStore.enabled) nextTick(() => weighInput.value?.focus());
+      // Con la báscula mandando peso no se enfoca el campo (el teclado del celular taparía el peso);
+      // sin báscula se escribe de inmediato
+      if (!scaleLive()) nextTick(() => weighInput.value?.focus());
     }
     function closeWeigh() {
       stopScaleWatch();
@@ -5466,7 +5474,6 @@ html[data-theme="dark"] .avatar {
   background: color-mix(in srgb, var(--timber-primary) 7%, var(--timber-panel));
   text-align: center;
 }
-.scale-panel.mute,
 .scale-panel.clear {
   border-color: var(--timber-warning);
   background: var(--timber-warning-soft);
@@ -5480,7 +5487,7 @@ html[data-theme="dark"] .avatar {
   font-size: 1rem;
   font-weight: 800;
 }
-.scale-panel.empty:not(.mute):not(.clear) .scale-hint {
+.scale-panel.empty:not(.clear) .scale-hint {
   animation: scale-pulse 1.4s ease-in-out infinite;
 }
 @keyframes scale-pulse {
