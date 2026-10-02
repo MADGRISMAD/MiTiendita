@@ -5,6 +5,7 @@ on:
     paths:
       - "backend/**"
       - "frontend/src/tax.ts"
+      - "frontend/src/storeTime.js"
       - "package.json"
       - "package-lock.json"
     branches:
@@ -13,6 +14,7 @@ on:
     paths:
       - "backend/**"
       - "frontend/src/tax.ts"
+      - "frontend/src/storeTime.js"
       - "package.json"
       - "package-lock.json"
     branches:

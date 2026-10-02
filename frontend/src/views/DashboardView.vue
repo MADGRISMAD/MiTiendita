@@ -398,6 +398,7 @@ import { apiService } from "../apiService";
 import { venueStore } from "../venueStore";
 import { hasRole } from "../authStore";
 import { lineBreakdown, rateOf } from "../tax";
+import { fromStoreWall, storeClock, toStoreWall } from "../storeTime";
 
 const PERIOD_KEY = "timber_report_period";
 const PERIODS = [
@@ -438,7 +439,16 @@ function setPeriod(id) {
   }
 }
 
-// ---------- Fechas (hora local del dispositivo) ----------
+// ---------- Fechas ----------
+// Las cuentas de calendario usan la «hora de pared» de la tienda (toStoreWall): un Date cuyos
+// getHours()/getDate() dan la hora de la tienda aunque el equipo esté en otra zona.
+// Al servidor se manda el instante real (fromStoreWall).
+function storeNow() {
+  return toStoreWall(new Date(), venueStore.timezone);
+}
+function toServer(wall) {
+  return fromStoreWall(wall, venueStore.timezone).toISOString();
+}
 function dayStart(d) {
   const x = new Date(d);
   x.setHours(0, 0, 0, 0);
@@ -465,14 +475,13 @@ function spanDays(a, b) {
   return Math.round((dayStart(b) - dayStart(a)) / DAY) + 1;
 }
 function stampOf(o) {
-  const t = new Date(o.paidAt || o.createdAt);
-  return Number.isNaN(t.getTime()) ? null : t;
+  return toStoreWall(o.paidAt || o.createdAt, venueStore.timezone);
 }
 
-const loadedAt = ref(new Date());
+const loadedAt = ref(storeNow());
 const todayKey = computed(() => keyOf(loadedAt.value));
-const customFrom = ref(keyOf(addDays(new Date(), -6)));
-const customTo = ref(keyOf(new Date()));
+const customFrom = ref(keyOf(addDays(storeNow(), -6)));
+const customTo = ref(keyOf(storeNow()));
 
 const range = computed(() => {
   const now = loadedAt.value;
@@ -585,14 +594,14 @@ const cashTotals = ref({ total: 0 });
 let seq = 0;
 async function load() {
   const my = ++seq;
-  loadedAt.value = new Date();
+  loadedAt.value = storeNow();
   const r = range.value;
   loading.value = true;
   err.value = "";
   try {
     const [a, b] = await Promise.all([
-      apiService.getOrdersReport(r.from.toISOString(), r.to.toISOString()),
-      apiService.getOrdersReport(r.prevFrom.toISOString(), r.prevTo.toISOString()).catch(() => []),
+      apiService.getOrdersReport(toServer(r.from), toServer(r.to)),
+      apiService.getOrdersReport(toServer(r.prevFrom), toServer(r.prevTo)).catch(() => []),
     ]);
     if (my !== seq) return;
     orders.value = Array.isArray(a) ? a : [];
@@ -1068,8 +1077,7 @@ function minOf(item) {
 
 // ---------- Caja ----------
 const cashSince = computed(() => {
-  const d = new Date(cashSession.value?.openedAt || cashSession.value?.createdAt);
-  return Number.isNaN(d.getTime()) ? "" : `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  return storeClock(cashSession.value?.openedAt || cashSession.value?.createdAt, venueStore.timezone);
 });
 const cashLong = computed(() => {
   if (!cashOpen.value) return false;

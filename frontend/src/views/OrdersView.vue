@@ -407,6 +407,7 @@ import AppShell from "../components/AppShell.vue";
 import PosIcon from "../components/PosIcon.js";
 import { apiService } from "../apiService";
 import { venueStore } from "../venueStore";
+import { formatStoreDate, storeClock, storeDayKey } from "../storeTime";
 import { offlineStore } from "../offlineFlags";
 import { flushOfflineSales, listDeviceSales, retrySales } from "../offlineSync";
 import { isNetworkError } from "../net";
@@ -578,15 +579,12 @@ function formatQty(n) {
   return Number.isInteger(v) ? String(v) : String(Math.round(v * 1000) / 1000);
 }
 function time(d) {
-  if (!d) return "";
-  return new Date(d).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
+  return storeClock(d, venueStore.timezone);
 }
 function when(d) {
   if (!d) return "";
-  const date = new Date(d);
-  const today = new Date();
-  if (date.toDateString() === today.toDateString()) return time(date);
-  return date.toLocaleString("es-MX", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  if (storeDayKey(d, venueStore.timezone) === storeDayKey(new Date(), venueStore.timezone)) return time(d);
+  return formatStoreDate(d, venueStore.timezone, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 }
 function folio(o) {
   return String(o?.id || "").slice(-6).toUpperCase();
