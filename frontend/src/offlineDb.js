@@ -55,9 +55,10 @@ async function kvDel(key) {
 
 export async function saveCatalog(tenantId, { foods, menus }) {
   if (!tenantId) return;
+  // Copia plana: IndexedDB no puede clonar los Proxy reactivos de Vue (DataCloneError)
   await kvSet(`catalog:${tenantId}`, {
-    foods: Array.isArray(foods) ? foods : [],
-    menus: Array.isArray(menus) ? menus : [],
+    foods: Array.isArray(foods) ? JSON.parse(JSON.stringify(foods)) : [],
+    menus: Array.isArray(menus) ? JSON.parse(JSON.stringify(menus)) : [],
     at: Date.now(),
   });
 }

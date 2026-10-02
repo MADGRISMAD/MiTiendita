@@ -16,6 +16,7 @@
               <option value="abarrotes">Abarrotes / tienda</option>
               <option value="convenience">Conveniencia</option>
               <option value="pharmacy">Farmacia</option>
+              <option value="hardware">Ferretería / tlapalería</option>
               <option value="other">Otro comercio</option>
             </select>
           </label>

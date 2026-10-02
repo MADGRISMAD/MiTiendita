@@ -16,15 +16,25 @@ npm run dev
 Copia `backend/.env.example` → `backend/.env`.
 
 ## Flujo de la tienda
-1. **Vender** (`/pos`) — categorías + productos → ticket → *Registrar venta*
+1. **Vender** (`/pos`) — buscador/escáner + categorías → ticket → *Cobrar* (ver abajo)
 2. **Caja** (`/orders`) — abrir turno, cobrar, imprimir ticket, corte
 3. **Productos** (`/products`) — categorías y artículos (solo admin)
 4. **Más** — resumen, empleados, facturación SaaS, configuración
 
 Rutas antiguas de restaurante (`/main`, `/kitchen`, `/waitlist`) redirigen al POS.
 
+## Pantalla de venta
+Pensada para abarrotes, farmacia y ferretería. A la izquierda el buscador y el catálogo (mosaicos por categoría con existencias); a la derecha el ticket con totales y **Cobrar**. En el celular el ticket se abre desde la barra inferior.
+
+- **Buscar**: por nombre, código o descripción, sin acentos y con varias palabras (`para 500` encuentra *Paracetamol 500 mg*). ↑ ↓ eligen y Enter agrega.
+- **Cantidad**: `3*` antes del código agrega 3 piezas; **F3** (o tocar la cantidad) acepta decimales para kilos o metros; `+` / `−` suman o quitan una pieza.
+- **Artículo varios** (**Ins**): cobra algo sin código o que aún no está en el catálogo; no toca el inventario.
+- **En espera** (**F6**): aparta el ticket para atender a otro cliente y retómalo después. Se guarda en ese equipo.
+- **Cobrar** (**F12**): efectivo con billetes sugeridos y cambio, tarjeta, transferencia o mixto. Enter o F12 confirman.
+- Otros atajos: **F2** quitar renglón, **F4** consultar precio, **F9** descuento, **Esc** cerrar o limpiar la búsqueda.
+
 ## Configuración inicial
-Tras registrarte, el wizard pide nombre de tienda, tipo (abarrotes / conveniencia / farmacia) y logo. Puedes cargar 8 productos de ejemplo para cobrar el mismo día. Términos: `/terminos` · Privacidad: `/privacidad`.
+Tras registrarte, el wizard pide nombre de tienda, tipo (abarrotes / conveniencia / farmacia / ferretería) y logo. Puedes cargar 8 productos de ejemplo para cobrar el mismo día. Términos: `/terminos` · Privacidad: `/privacidad`.
 
 ## Billing (suscripción Mi Tiendita)
 SaaS **100% nube** (sin instalar). Prueba **14 días**. **Básico** $349 · **Crecimiento** $599 · **Pro** $899 /mes. Incluyen **Inventario Mágico** y **Precio Mágico** (50 / 150 / 500 usos al mes). En `/billing` se paga, se ve el historial y se cancela la renovación (sigues activo hasta el fin del periodo).

@@ -111,6 +111,7 @@ const typeLabel = computed(() => {
     abarrotes: "ABARROTES / MINISÚPER",
     convenience: "TIENDA DE CONVENIENCIA",
     pharmacy: "FARMACIA",
+    hardware: "FERRETERÍA",
     other: "COMERCIO",
     restaurant: "RESTAURANTE",
     cafe: "CAFÉ",

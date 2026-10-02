@@ -3,7 +3,7 @@ const Joi = require('joi');
 const settingsSchema = Joi.object({
   businessName: Joi.string().min(2).max(80).required(),
   businessType: Joi.string()
-    .valid('abarrotes', 'convenience', 'pharmacy', 'other', 'restaurant', 'cafe', 'bar', 'hotel')
+    .valid('abarrotes', 'convenience', 'pharmacy', 'hardware', 'other', 'restaurant', 'cafe', 'bar', 'hotel')
     .default('abarrotes'),
   address: Joi.string().allow('').max(200).optional(),
   phone: Joi.string().allow('').max(30).optional(),
