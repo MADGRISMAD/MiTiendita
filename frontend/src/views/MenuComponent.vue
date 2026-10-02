@@ -367,33 +367,31 @@
           <header class="cat-head">
             <div class="cat-title">
               <h1>Productos</h1>
-              <p>{{ pickFoods.length }} productos · {{ menus.length }} {{ menus.length === 1 ? 'categoría' : 'categorías' }}</p>
+              <p>
+                {{ pickFoods.length }} {{ pickFoods.length === 1 ? 'producto' : 'productos' }} ·
+                {{ menus.length }} {{ menus.length === 1 ? 'categoría' : 'categorías' }}
+              </p>
             </div>
             <div class="cat-head-acts">
               <router-link to="/inventory" class="btn">Compras e inventario</router-link>
               <button type="button" class="btn" :disabled="!pickFoods.length" @click="exportCatalog">
                 Exportar CSV
               </button>
+              <button
+                v-if="aiEnabled"
+                type="button"
+                class="btn magic-btn"
+                :disabled="cashBlocked"
+                :title="cashBlocked ? 'Bloqueado hasta el corte de caja' : 'Inventario Mágico · Precio Mágico: con una foto o el texto de la nota del proveedor registra la compra, suma existencias y te avisa si subió el costo'"
+                @click="openMagic"
+              >
+                <PosIcon name="spark" :size="18" /> Registro mágico
+              </button>
               <button type="button" class="btn primary hide-mobile" @click="openNewFood">
                 <PosIcon name="plus" :size="18" /> Nuevo producto
               </button>
             </div>
           </header>
-
-          <button v-if="aiEnabled" type="button" class="magic-card" :disabled="cashBlocked" @click="openMagic">
-            <span class="magic-ico" aria-hidden="true">✨</span>
-            <span class="magic-copy">
-              <strong>Registrar compra y precios</strong>
-              <span>
-                {{
-                  cashBlocked
-                    ? 'Bloqueado hasta el corte de caja'
-                    : 'Inventario Mágico · Precio Mágico — foto o texto de la nota del proveedor: suma existencias y te avisa si subió el costo.'
-                }}
-              </span>
-            </span>
-            <span class="magic-go">Abrir</span>
-          </button>
 
           <div class="kpis hide-mobile">
             <button type="button" class="kpi" :class="{ on: statusFilter === 'all' }" @click="statusFilter = 'all'">
@@ -1279,6 +1277,7 @@ const ICONS = {
   transfer: '<path d="M4 8h15l-3.5-3.5M20 16H5l3.5 3.5"/>',
   split: '<rect x="2" y="4" width="13" height="10" rx="2"/><path d="M9 14v4a2 2 0 002 2h9a2 2 0 002-2v-6a2 2 0 00-2-2h-5"/>',
   alert: '<path d="M12 3.5l9.5 16.5h-19L12 3.5z"/><path d="M12 10v4.5M12 17.5v.01"/>',
+  spark: '<path d="M11 3l1.7 5.3L18 10l-5.3 1.7L11 17l-1.7-5.3L4 10l5.3-1.7L11 3z"/><path d="M18.5 14.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/>',
 };
 
 const PosIcon = {
@@ -5488,54 +5487,14 @@ html[data-theme="dark"] .avatar {
 }
 .price-trio .strong { font-weight: 800; }
 .dup-link { color: var(--timber-primary) !important; }
-.magic-card {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: 0.85rem;
-  width: 100%;
-  padding: 0.8rem 1rem;
-  border: none;
-  border-radius: 1rem;
-  background: linear-gradient(120deg, var(--timber-primary), color-mix(in srgb, var(--timber-primary) 55%, var(--timber-accent)));
+.btn.magic-btn {
+  border-color: transparent;
+  background: linear-gradient(120deg, var(--timber-primary), color-mix(in srgb, var(--timber-primary) 55%, #8b5cf6));
   color: #fff;
-  text-align: left;
-  cursor: pointer;
-  box-shadow: 0 10px 24px color-mix(in srgb, var(--timber-primary) 30%, transparent);
+  white-space: nowrap;
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--timber-primary) 25%, transparent);
 }
-.magic-card:disabled { opacity: 0.55; cursor: not-allowed; }
-.magic-ico {
-  width: 2.6rem;
-  height: 2.6rem;
-  flex-shrink: 0;
-  display: grid;
-  place-items: center;
-  border-radius: 0.8rem;
-  background: rgba(255, 255, 255, 0.18);
-  font-size: 1.3rem;
-}
-.magic-copy {
-  flex: 1;
-  min-width: 0;
-  display: grid;
-  gap: 0.1rem;
-}
-.magic-copy strong { font-size: 1rem; font-weight: 800; }
-.magic-copy span { font-size: 0.82rem; opacity: 0.92; line-height: 1.35; }
-.magic-go {
-  flex-shrink: 0;
-  padding: 0.5rem 0.95rem;
-  border-radius: 0.7rem;
-  background: #fff;
-  color: var(--timber-primary);
-  font-weight: 800;
-  font-size: 0.88rem;
-}
-@media (max-width: 767.98px) {
-  .magic-card { width: auto; margin: 0.25rem 0.85rem 0.5rem; padding: 0.7rem 0.8rem; }
-  .magic-go { display: none; }
-  .magic-copy span { font-size: 0.76rem; }
-}
+.btn.magic-btn:hover:not(:disabled) { filter: brightness(1.06); }
 .chip-count {
   margin-left: 0.35rem;
   font-style: normal;
@@ -5624,7 +5583,12 @@ html[data-theme="dark"] .avatar {
   .cat-head { padding: 0.75rem 0.85rem 0.35rem; }
   .cat-title h1 { font-size: 1.25rem; }
   .cat-title p { font-size: 0.8rem; }
-  .cat-head-acts { display: none; }
+  .cat-head { flex-wrap: nowrap; }
+  .cat-title { min-width: 0; }
+  .cat-title p { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cat-head-acts { flex-shrink: 0; }
+  .cat-head-acts .btn:not(.magic-btn) { display: none; }
+  .cat-head-acts .magic-btn { min-height: 2.5rem; padding: 0 0.85rem; font-size: 0.85rem; }
   .cat-body { display: block; }
   .cat-rail {
     flex-direction: row;
