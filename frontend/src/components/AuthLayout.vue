@@ -1,5 +1,5 @@
 <template>
-  <div class="auth">
+  <div class="auth" :class="{ wide }">
     <aside class="auth-brand">
       <router-link to="/" class="auth-logo" aria-label="Mi Tiendita, ir al inicio">
         <img src="/logo.svg" alt="" width="44" height="44" />
@@ -43,6 +43,11 @@
 
 <script setup>
 import BrandName from "./BrandName.vue";
+
+defineProps({
+  // Formularios largos (registro): tarjeta ancha con campos en dos columnas
+  wide: { type: Boolean, default: false },
+});
 </script>
 
 <style scoped>
@@ -162,6 +167,16 @@ import BrandName from "./BrandName.vue";
   text-decoration: none;
 }
 .auth-legal a:hover { text-decoration: underline; }
+
+/* Pantallas anchas: el registro cabe completo sin desplazar */
+@media (min-width: 1024px) {
+  .auth.wide { grid-template-columns: minmax(18rem, 0.75fr) minmax(0, 1.25fr); }
+  .auth.wide .auth-main { padding: 1.25rem 2rem; gap: 0.6rem; }
+  .auth.wide .auth-card {
+    width: min(38rem, 100%);
+    padding: 1.5rem 1.75rem 1.25rem;
+  }
+}
 
 /* Tablet vertical: marca más angosta */
 @media (max-width: 1023.98px) {

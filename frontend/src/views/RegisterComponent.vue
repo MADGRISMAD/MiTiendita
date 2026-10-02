@@ -1,5 +1,5 @@
 <template>
-  <AuthLayout>
+  <AuthLayout wide>
     <header class="auth-head">
       <h1>Crea tu tienda</h1>
       <p>14 días gratis. Toma menos de un minuto y puedes cobrar hoy mismo.</p>
@@ -12,19 +12,7 @@
       </p>
 
       <fieldset class="auth-group">
-        <legend>Tu negocio</legend>
-        <div class="auth-field">
-          <label for="reg-shop">Nombre de la tienda <em>(opcional)</em></label>
-          <input
-            id="reg-shop"
-            v-model="businessName"
-            class="auth-input"
-            type="text"
-            maxlength="80"
-            placeholder="Ej. Abarrotes Doña Lupe"
-            autocomplete="organization"
-          />
-        </div>
+        <legend>Tus datos</legend>
         <div class="auth-row">
           <div class="auth-field">
             <label for="reg-name">Nombre</label>
@@ -55,106 +43,123 @@
             <p v-if="shown.lastName" id="reg-last-err" class="auth-err">{{ shown.lastName }}</p>
           </div>
         </div>
-        <div class="auth-field">
-          <label for="reg-phone">Celular</label>
-          <input
-            id="reg-phone"
-            :value="phoneDisplay"
-            class="auth-input"
-            type="tel"
-            inputmode="numeric"
-            placeholder="(664) 123-4567"
-            autocomplete="tel-national"
-            :aria-invalid="Boolean(shown.phone)"
-            aria-describedby="reg-phone-err"
-            @input="onPhone"
-            @blur="touch('phone')"
-          />
-          <p v-if="shown.phone" id="reg-phone-err" class="auth-err">{{ shown.phone }}</p>
+        <div class="auth-row">
+          <div class="auth-field">
+            <label for="reg-shop">Nombre de la tienda <em>(opcional)</em></label>
+            <input
+              id="reg-shop"
+              v-model="businessName"
+              class="auth-input"
+              type="text"
+              maxlength="80"
+              placeholder="Ej. Abarrotes Lupe"
+              autocomplete="organization"
+            />
+          </div>
+          <div class="auth-field">
+            <label for="reg-phone">Celular</label>
+            <input
+              id="reg-phone"
+              :value="phoneDisplay"
+              class="auth-input"
+              type="tel"
+              inputmode="numeric"
+              placeholder="(664) 123-4567"
+              autocomplete="tel-national"
+              :aria-invalid="Boolean(shown.phone)"
+              aria-describedby="reg-phone-err"
+              @input="onPhone"
+              @blur="touch('phone')"
+            />
+            <p v-if="shown.phone" id="reg-phone-err" class="auth-err">{{ shown.phone }}</p>
+          </div>
         </div>
       </fieldset>
 
       <fieldset class="auth-group">
         <legend>Tu acceso</legend>
-        <div class="auth-field">
-          <label for="reg-email">Correo electrónico</label>
-          <input
-            id="reg-email"
-            v-model.trim="email"
-            class="auth-input"
-            type="email"
-            placeholder="tu@negocio.com"
-            autocomplete="email"
-            autocapitalize="none"
-            spellcheck="false"
-            :aria-invalid="Boolean(shown.email)"
-            aria-describedby="reg-email-err"
-            @blur="touch('email')"
-          />
-          <p v-if="shown.email" id="reg-email-err" class="auth-err">{{ shown.email }}</p>
-        </div>
-        <div class="auth-field">
-          <label for="reg-user">Usuario</label>
-          <input
-            id="reg-user"
-            :value="username"
-            class="auth-input"
-            type="text"
-            placeholder="lupe"
-            autocomplete="username"
-            autocapitalize="none"
-            autocorrect="off"
-            spellcheck="false"
-            :aria-invalid="Boolean(shown.username)"
-            aria-describedby="reg-user-err reg-user-note"
-            @input="onUsername"
-            @blur="touch('username')"
-          />
-          <p v-if="shown.username" id="reg-user-err" class="auth-err">{{ shown.username }}</p>
-          <p v-else id="reg-user-note" class="auth-note">Con esto o con tu correo entras después.</p>
-        </div>
-        <div class="auth-field">
-          <label for="reg-pass">Contraseña</label>
-          <div class="auth-pass">
+        <div class="auth-row">
+          <div class="auth-field">
+            <label for="reg-email">Correo electrónico</label>
             <input
-              id="reg-pass"
-              v-model="password"
+              id="reg-email"
+              v-model.trim="email"
+              class="auth-input"
+              type="email"
+              placeholder="tu@negocio.com"
+              autocomplete="email"
+              autocapitalize="none"
+              spellcheck="false"
+              :aria-invalid="Boolean(shown.email)"
+              aria-describedby="reg-email-err"
+              @blur="touch('email')"
+            />
+            <p v-if="shown.email" id="reg-email-err" class="auth-err">{{ shown.email }}</p>
+          </div>
+          <div class="auth-field">
+            <label for="reg-user">Usuario <em>(para entrar)</em></label>
+            <input
+              id="reg-user"
+              :value="username"
+              class="auth-input"
+              type="text"
+              placeholder="lupe"
+              autocomplete="username"
+              autocapitalize="none"
+              autocorrect="off"
+              spellcheck="false"
+              :aria-invalid="Boolean(shown.username)"
+              aria-describedby="reg-user-err"
+              @input="onUsername"
+              @blur="touch('username')"
+            />
+            <p v-if="shown.username" id="reg-user-err" class="auth-err">{{ shown.username }}</p>
+          </div>
+        </div>
+        <div class="auth-row">
+          <div class="auth-field">
+            <label for="reg-pass">Contraseña</label>
+            <div class="auth-pass">
+              <input
+                id="reg-pass"
+                v-model="password"
+                class="auth-input"
+                :type="showPass ? 'text' : 'password'"
+                placeholder="Mínimo 6 caracteres"
+                autocomplete="new-password"
+                :aria-invalid="Boolean(shown.password)"
+                aria-describedby="reg-pass-err"
+                @blur="touch('password')"
+              />
+              <button
+                type="button"
+                class="auth-eye"
+                :aria-label="showPass ? 'Ocultar contraseñas' : 'Mostrar contraseñas'"
+                :aria-pressed="showPass"
+                @click="showPass = !showPass"
+              >
+                <PosIcon :name="showPass ? 'eye-off' : 'eye'" :size="20" />
+              </button>
+            </div>
+            <div v-if="password" class="auth-strength" :class="`s${strength.level}`" aria-live="polite">
+              <i></i><i></i><i></i><span>{{ strength.label }}</span>
+            </div>
+            <p v-if="shown.password" id="reg-pass-err" class="auth-err">{{ shown.password }}</p>
+          </div>
+          <div class="auth-field">
+            <label for="reg-pass2">Confirmar contraseña</label>
+            <input
+              id="reg-pass2"
+              v-model="confirmPassword"
               class="auth-input"
               :type="showPass ? 'text' : 'password'"
-              placeholder="Mínimo 6 caracteres"
               autocomplete="new-password"
-              :aria-invalid="Boolean(shown.password)"
-              aria-describedby="reg-pass-err"
-              @blur="touch('password')"
+              :aria-invalid="Boolean(shown.confirm)"
+              aria-describedby="reg-pass2-err"
+              @blur="touch('confirm')"
             />
-            <button
-              type="button"
-              class="auth-eye"
-              :aria-label="showPass ? 'Ocultar contraseñas' : 'Mostrar contraseñas'"
-              :aria-pressed="showPass"
-              @click="showPass = !showPass"
-            >
-              <PosIcon :name="showPass ? 'eye-off' : 'eye'" :size="20" />
-            </button>
+            <p v-if="shown.confirm" id="reg-pass2-err" class="auth-err">{{ shown.confirm }}</p>
           </div>
-          <div v-if="password" class="auth-strength" :class="`s${strength.level}`" aria-live="polite">
-            <i></i><i></i><i></i><span>{{ strength.label }}</span>
-          </div>
-          <p v-if="shown.password" id="reg-pass-err" class="auth-err">{{ shown.password }}</p>
-        </div>
-        <div class="auth-field">
-          <label for="reg-pass2">Confirmar contraseña</label>
-          <input
-            id="reg-pass2"
-            v-model="confirmPassword"
-            class="auth-input"
-            :type="showPass ? 'text' : 'password'"
-            autocomplete="new-password"
-            :aria-invalid="Boolean(shown.confirm)"
-            aria-describedby="reg-pass2-err"
-            @blur="touch('confirm')"
-          />
-          <p v-if="shown.confirm" id="reg-pass2-err" class="auth-err">{{ shown.confirm }}</p>
         </div>
       </fieldset>
 
@@ -173,10 +178,13 @@
       </button>
     </form>
 
-    <div class="auth-alt">
-      <span>¿Ya tienes cuenta? <router-link to="/login" class="inline">Inicia sesión</router-link></span>
+    <div class="auth-alt compact">
+      <span>
+        ¿Ya tienes cuenta? <router-link to="/login" class="inline">Inicia sesión</router-link>
+        <span aria-hidden="true"> · </span>
+        <router-link to="/" class="inline muted">Volver al inicio</router-link>
+      </span>
     </div>
-    <router-link to="/" class="auth-back">← Volver al inicio</router-link>
   </AuthLayout>
 </template>
 
