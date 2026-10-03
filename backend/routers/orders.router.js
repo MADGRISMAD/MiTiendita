@@ -5,7 +5,7 @@ const { requireAuth, requireActiveSubscription, requireRoles } = require('../mid
 router.get(
   '/',
   requireAuth, requireActiveSubscription,
-  requireRoles('admin', 'cashier', 'waiter', 'kitchen', 'hosstess'),
+  requireRoles('admin', 'cashier'),
   orders.list
 );
 // Reportes de ventas por rango de fechas (va antes de /:id para evitar conflicto)
@@ -23,15 +23,15 @@ router.get(
 router.get(
   '/:id',
   requireAuth, requireActiveSubscription,
-  requireRoles('admin', 'cashier', 'waiter', 'kitchen', 'hosstess'),
+  requireRoles('admin', 'cashier'),
   orders.getById
 );
-router.post('/', requireAuth, requireActiveSubscription, requireRoles('admin', 'cashier', 'waiter'), orders.create);
-router.post('/sale', requireAuth, requireActiveSubscription, requireRoles('admin', 'cashier', 'waiter'), orders.sale);
+router.post('/', requireAuth, requireActiveSubscription, requireRoles('admin', 'cashier'), orders.create);
+router.post('/sale', requireAuth, requireActiveSubscription, requireRoles('admin', 'cashier'), orders.sale);
 router.put(
   '/:id/status',
   requireAuth, requireActiveSubscription,
-  requireRoles('admin', 'cashier', 'kitchen', 'waiter'),
+  requireRoles('admin', 'cashier'),
   orders.updateStatus
 );
 router.put('/:id/pay', requireAuth, requireActiveSubscription, requireRoles('admin', 'cashier'), orders.pay);

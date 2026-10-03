@@ -3,6 +3,11 @@ import { clearBillingStatus } from "./billingStore";
 
 const STORAGE_KEY = "timber_auth";
 
+// Los roles de restaurante ya no existen: una sesión guardada con uno de ellos pasa a cajero
+function normalizeRole(role) {
+  return ["hosstess", "waiter", "kitchen"].includes(role) ? "cashier" : role || null;
+}
+
 function load() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -10,7 +15,7 @@ function load() {
     const parsed = JSON.parse(raw);
     return {
       token: parsed.token || null,
-      role: parsed.role || null,
+      role: normalizeRole(parsed.role),
       tenantId: parsed.tenantId || null,
       username: parsed.username || null,
       email: parsed.email || null,
@@ -39,7 +44,7 @@ function persist() {
 
 export function setSession({ token, role, tenantId, username, email }) {
   authStore.token = token || null;
-  authStore.role = role || null;
+  authStore.role = normalizeRole(role);
   authStore.tenantId = tenantId || null;
   authStore.username = username || null;
   authStore.email = email || null;
@@ -80,9 +85,6 @@ export function isPlatformStaff() {
 /** Home y permisos orientados a POS de abarrotes */
 export const roleHome = {
   admin: "pos",
-  hosstess: "pos",
-  waiter: "pos",
-  kitchen: "pos",
   cashier: "pos",
   platform_admin: "platform",
   platform_support: "platformClients",
@@ -90,9 +92,9 @@ export const roleHome = {
 
 export const routeRoles = {
   dashboard: ["admin", "cashier"],
-  pos: ["admin", "cashier", "waiter", "hosstess", "kitchen"],
+  pos: ["admin", "cashier"],
   products: ["admin"],
-  menu: ["admin", "cashier", "waiter"],
+  menu: ["admin", "cashier"],
   main: ["admin", "cashier"],
   staff: ["admin"],
   orders: ["admin", "cashier"],
@@ -108,7 +110,7 @@ export const routeRoles = {
   platformAi: ["platform_admin"],
   platformExpenses: ["platform_admin"],
   printOrder: ["admin", "cashier"],
-  printOffline: ["admin", "cashier", "waiter", "hosstess", "kitchen"],
+  printOffline: ["admin", "cashier"],
   printCash: ["admin", "cashier"],
   customers: ["admin", "cashier"],
   inventory: ["admin", "cashier"],

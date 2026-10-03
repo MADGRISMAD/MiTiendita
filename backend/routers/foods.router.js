@@ -2,7 +2,7 @@ const router = require('express').Router();
 const menus = require('../controllers/menus.controller');
 const { requireAuth, requireActiveSubscription, requireRoles } = require('../middleware/auth.middleware');
 
-const readRoles = requireRoles('admin', 'cashier', 'waiter', 'kitchen');
+const readRoles = requireRoles('admin', 'cashier');
 const writeRoles = requireRoles('admin');
 
 router.get('/', requireAuth, requireActiveSubscription, readRoles, menus.listFoods);

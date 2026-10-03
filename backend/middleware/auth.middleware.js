@@ -18,7 +18,7 @@ async function requireAuth(req, res, next) {
     return res.status(401).send('No autorizado');
   }
 
-  const role = payload.userRole;
+  let role = payload.userRole;
   const isPlatform = isPlatformStaff(role);
 
   if (!isPlatform && !payload.tenantId) {
@@ -27,6 +27,8 @@ async function requireAuth(req, res, next) {
 
   try {
     const state = await sessions.currentUserState(payload.userId);
+    // El rol que manda es el de la base (un cambio o la migración de roles viejos aplica de inmediato)
+    if (state.exists && state.role && !isPlatform) role = state.role;
     if (!state.exists || state.disabled || (Number(payload.tv) || 0) !== state.tokenVersion) {
       return res.status(401).send('Tu sesión terminó. Vuelve a entrar.');
     }

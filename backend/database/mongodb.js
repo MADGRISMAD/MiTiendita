@@ -68,6 +68,11 @@ async function ensureIndexes() {
   await dbConnection.collection('purchases').createIndex({ tenantId: 1, date: -1 }).catch(() => {});
   await dbConnection.collection('lots').createIndex({ tenantId: 1, foodId: 1, expiresAt: 1 }).catch(() => {});
   await dbConnection.collection('activity_log').createIndex({ tenantId: 1, createdAt: -1 }).catch(() => {});
+  // Roles de restaurante (recepción, vendedor, almacén) → cajero. Es idempotente.
+  await dbConnection
+    .collection('users')
+    .updateMany({ role: { $in: ['hosstess', 'waiter', 'kitchen'] } }, { $set: { role: 'cashier' }, $inc: { tokenVersion: 1 } })
+    .catch(() => {});
 }
 
 async function migrateLegacyTenant() {
@@ -155,8 +160,19 @@ async function ListTenants() {
   const list = await dbConnection.collection('tenants').find({}).sort({ createdAt: -1 }).toArray();
   return list.map(withId);
 }
+/** Cuentas que ocupan un lugar del plan: las desactivadas lo liberan. */
 async function CountUsersByTenant(tenantId) {
-  return dbConnection.collection('users').countDocuments({ tenantId: String(tenantId) });
+  return dbConnection.collection('users').countDocuments({ tenantId: String(tenantId), disabled: { $ne: true } });
+}
+async function CountActiveAdmins(tenantId) {
+  return dbConnection
+    .collection('users')
+    .countDocuments({ tenantId: String(tenantId), role: 'admin', disabled: { $ne: true } });
+}
+/** Una cuenta de la tienda por id (nunca de otra tienda). */
+async function FindUserInTenant(id, tenantId) {
+  if (!ObjectId.isValid(String(id))) return null;
+  return dbConnection.collection('users').findOne({ _id: new ObjectId(String(id)), tenantId: String(tenantId) });
 }
 async function CountPendingInvites(tenantId) {
   return dbConnection.collection('invites').countDocuments({
@@ -177,8 +193,15 @@ async function ListUsersByTenant(tenantId) {
     username: user.username || '',
     email: user.email || '',
     cellphone: user.cellphone || '',
-    role: user.role || '',
+    role: normalizeRoleValue(user.role),
+    disabled: Boolean(user.disabled),
+    disabledAt: user.disabledAt || null,
+    lastLoginAt: user.lastLoginAt || null,
+    mfaEnabled: Boolean(user.mfaEnabled),
   }));
+}
+function normalizeRoleValue(role) {
+  return ['hosstess', 'waiter', 'kitchen'].includes(role) ? 'cashier' : role || '';
 }
 async function GetTenantByMpPreapprovalId(preapprovalId) {
   if (!preapprovalId) return null;
@@ -1300,7 +1323,7 @@ module.exports = {
   GetMenus, GetMenuById, CreateMenu, UpdateMenu, DeleteMenu,
   GetFoods, CountFoods, CountPaidOrders, CountCashSessions, GetFoodById, GetFoodByBarcode, CreateFood, UpdateFood, ReserveSaleStock, ConsumeSaleLots, RestoreSaleStock, IncrementFoodStock, DeleteFood, GetLowStockFoods, SearchFoods,
   CreateBillingEvent, ListBillingEvents, getCollection,
-  RecordLoginFailure, ClearLoginFailures, FindUserById, BumpUserTokenVersion,
+  RecordLoginFailure, ClearLoginFailures, FindUserById, BumpUserTokenVersion, CountActiveAdmins, FindUserInTenant,
   CreateSession, FindSessionByHash, RevokeSession, RevokeUserSessions,
   GetOrders, GetOrderById, GetOrderByInvoiceToken, GetOrderByClientSaleId, CreateOrder, UpdateOrder, DeleteOrder, GetOrdersByCashSession,
   GetOrdersByDateRange, GetSalesReport,

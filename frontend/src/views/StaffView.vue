@@ -24,7 +24,7 @@
 
       <nav class="adm-tabs main" role="tablist" aria-label="Secciones de empleados">
         <button type="button" role="tab" :aria-selected="tab === 'access'" :class="{ on: tab === 'access' }" @click="setTab('access')">
-          Acceso<span class="hide-mobile"> a la app</span><em v-if="users.length">{{ users.length }}</em>
+          Acceso<span class="hide-mobile"> a la app</span><em v-if="activeUsers">{{ activeUsers }}</em>
         </button>
         <button type="button" role="tab" :aria-selected="tab === 'staff'" :class="{ on: tab === 'staff' }" @click="setTab('staff')">
           Personal<span class="hide-mobile"> y turnos</span><em v-if="people.length">{{ people.length }}</em>
@@ -61,21 +61,37 @@
             </div>
           </div>
           <ul v-if="users.length" class="people">
-            <li v-for="u in sortedUsers" :key="u.id">
+            <li v-for="u in sortedUsers" :key="u.id" :class="{ off: u.disabled }">
               <span class="adm-avatar" :style="hueStyle(displayName(u))">{{ initials(displayName(u)) }}</span>
               <div class="who">
                 <strong>{{ displayName(u) }}<span v-if="u.username === me" class="adm-pill info me">Tú</span></strong>
-                <small>{{ u.email || `@${u.username}` }}</small>
+                <small>{{ u.email || `@${u.username}` }} · {{ lastAccess(u) }}</small>
               </div>
-              <span class="adm-pill role" :class="ROLE[u.role]?.tone">
+              <span v-if="u.disabled" class="adm-pill">Desactivado</span>
+              <span v-else class="adm-pill role" :class="ROLE[u.role]?.tone">
                 <PosIcon v-if="u.role === 'admin'" name="shield" :size="13" /> {{ ROLE[u.role]?.label || u.role }}
               </span>
+              <div v-if="u.username !== me" class="inv-acts">
+                <button
+                  v-if="!u.disabled"
+                  type="button"
+                  class="adm-btn sm danger-ghost"
+                  :disabled="busyId === u.id"
+                  :aria-label="confirmId === `x${u.id}` ? `¿Desactivar a ${displayName(u)}? Toca otra vez para confirmar` : `Desactivar a ${displayName(u)}`"
+                  @click="deactivate(u)"
+                >
+                  {{ confirmId === `x${u.id}` ? '¿Desactivar?' : 'Desactivar' }}
+                </button>
+                <button v-else type="button" class="adm-btn sm" :disabled="busyId === u.id || seatsFull" @click="reactivate(u)">
+                  Reactivar
+                </button>
+              </div>
             </li>
           </ul>
           <p v-else-if="!loading.team" class="adm-hint">No se pudo leer el equipo.</p>
           <p class="adm-hint foot">
-            Para quitarle el acceso a alguien o cambiar su rol, escríbenos desde
-            <router-link to="/settings">Ajustes → Soporte</router-link>.
+            Si alguien se va, desactívalo: deja de poder entrar y cobrar al instante, aunque tenga la sesión abierta.
+            Libera su lugar en el plan y puedes reactivarlo cuando quieras.
           </p>
         </div>
 
@@ -94,7 +110,7 @@
               <span class="inv-ico"><PosIcon name="mail" :size="17" /></span>
               <div class="who">
                 <strong>{{ i.email }}</strong>
-                <small>{{ ROLE[i.role]?.label || i.role }} · {{ inviteWhen(i) }}</small>
+                <small>{{ ROLE[roleKey(i.role)]?.label || i.role }} · {{ inviteWhen(i) }}</small>
               </div>
               <span class="adm-pill" :class="INVITE[i.status]?.tone">{{ INVITE[i.status]?.label || i.status }}</span>
               <div class="inv-acts">
@@ -310,11 +326,8 @@ import { formatMxPhone, phoneDigits, prettyPhone } from "../phone";
 const ROLE = {
   admin: { label: "Admin", tone: "info", can: "Todo: productos, precios, reportes, ajustes y equipo." },
   cashier: { label: "Cajero", tone: "good", can: "Vende, cobra, abre y cierra caja. Ve Resumen, Clientes e Inventario." },
-  waiter: { label: "Vendedor", tone: "", can: "Vende en el punto de venta. No abre caja ni ve reportes." },
-  kitchen: { label: "Almacén", tone: "" },
-  hosstess: { label: "Recepción", tone: "" },
 };
-const INVITE_ROLES = ["cashier", "waiter", "admin"];
+const INVITE_ROLES = ["cashier", "admin"];
 const INVITE = {
   pending: { label: "Pendiente", tone: "warn" },
   accepted: { label: "Aceptada", tone: "good" },
@@ -396,10 +409,15 @@ function displayName(u) {
   const full = `${u.name || ""} ${u.lastName || ""}`.trim();
   return full || u.username || u.email || "Usuario";
 }
+const activeUsers = computed(() => users.value.filter((u) => !u.disabled).length);
 const sortedUsers = computed(() => {
-  const order = { admin: 0, cashier: 1, waiter: 2 };
+  const order = { admin: 0, cashier: 1 };
   return [...users.value].sort(
-    (a, b) => (a.username === me.value ? -1 : b.username === me.value ? 1 : 0) || (order[a.role] ?? 9) - (order[b.role] ?? 9) || displayName(a).localeCompare(displayName(b), "es")
+    (a, b) =>
+      (a.username === me.value ? -1 : b.username === me.value ? 1 : 0) ||
+      Number(a.disabled) - Number(b.disabled) ||
+      (order[a.role] ?? 9) - (order[b.role] ?? 9) ||
+      displayName(a).localeCompare(displayName(b), "es")
   );
 });
 const sortedInvites = computed(() => {
@@ -410,6 +428,45 @@ const seatsFull = computed(() => Boolean(seats.value && seats.value.max != null 
 function pct(n) {
   const max = seats.value?.max;
   return max ? Math.min(100, (Number(n || 0) / max) * 100) : 0;
+}
+// Invitaciones viejas con roles de restaurante se muestran (y aceptan) como cajero
+function roleKey(r) {
+  return ["hosstess", "waiter", "kitchen"].includes(r) ? "cashier" : r;
+}
+function lastAccess(u) {
+  if (!u.lastLoginAt) return "aún no ha entrado";
+  const d = new Date(u.lastLoginAt);
+  if (Number.isNaN(d.getTime())) return "aún no ha entrado";
+  const days = Math.floor((Date.now() - d.getTime()) / 86400000);
+  if (days <= 0) return "entró hoy";
+  if (days === 1) return "entró ayer";
+  if (days < 30) return `entró hace ${days} días`;
+  return `entró el ${d.toLocaleDateString("es-MX", { day: "numeric", month: "short", year: "numeric" })}`;
+}
+async function deactivate(u) {
+  if (needsConfirm(`x${u.id}`)) return;
+  busyId.value = u.id;
+  try {
+    await apiService.deactivateUser(u.id);
+    say(`${displayName(u)} ya no puede entrar. Su lugar quedó libre.`);
+    await loadTeam();
+  } catch (e) {
+    error.value = errText(e, "No se pudo desactivar la cuenta.");
+  } finally {
+    busyId.value = "";
+  }
+}
+async function reactivate(u) {
+  busyId.value = u.id;
+  try {
+    await apiService.reactivateUser(u.id);
+    say(`${displayName(u)} puede volver a entrar.`);
+    await loadTeam();
+  } catch (e) {
+    error.value = errText(e, "No se pudo reactivar la cuenta.");
+  } finally {
+    busyId.value = "";
+  }
 }
 function inviteWhen(i) {
   if (i.status === "pending" && i.expiresAt) {
@@ -573,7 +630,7 @@ async function removePerson() {
 const headline = computed(() => {
   if (loading.team && loading.staff) return "Cargando…";
   const parts = [];
-  if (users.value.length) parts.push(`${users.value.length} con acceso`);
+  if (activeUsers.value) parts.push(`${activeUsers.value} con acceso`);
   if (people.value.length) parts.push(`${counts.value.active} en turno`);
   return parts.join(" · ") || "Tu equipo de trabajo";
 });
@@ -646,6 +703,8 @@ onMounted(() => {
   color: var(--timber-muted);
 }
 .inv-acts { display: flex; gap: 0.35rem; flex-shrink: 0; }
+.people li.off .who strong, .people li.off .who small { opacity: 0.55; }
+.people li.off .adm-avatar { filter: grayscale(1); opacity: 0.6; }
 
 /* Personal */
 .crew {
@@ -674,9 +733,9 @@ onMounted(() => {
 .mate-acts .adm-btn { flex: 1; }
 
 @media (max-width: 767.98px) {
-  .invites li { flex-wrap: wrap; }
-  .invites .who { flex-basis: calc(100% - 3.3rem); }
-  .invites .adm-pill { margin-left: 3.3rem; }
+  .invites li, .people li { flex-wrap: wrap; }
+  .invites .who, .people .who { flex-basis: calc(100% - 3.3rem); }
+  .invites .adm-pill, .people .adm-pill { margin-left: 3.3rem; }
   .inv-acts { margin-left: auto; }
 }
 </style>

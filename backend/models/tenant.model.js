@@ -4,8 +4,16 @@ const crypto = require('crypto');
 const { ALL_PLANS } = require('../services/plans.catalog');
 
 const PLATFORM_ROLES = ['platform_admin', 'platform_support'];
-const ROLES = ['admin', 'hosstess', 'waiter', 'kitchen', 'cashier', ...PLATFORM_ROLES];
-const TENANT_ROLES = ['admin', 'hosstess', 'waiter', 'kitchen', 'cashier'];
+// Una tienda solo tiene dueño (admin) y cajeros. Los roles de restaurante ya no existen.
+const TENANT_ROLES = ['admin', 'cashier'];
+const ROLES = [...TENANT_ROLES, ...PLATFORM_ROLES];
+const LEGACY_ROLES = ['hosstess', 'waiter', 'kitchen'];
+
+/** Rol vigente de una cuenta: los roles de restaurante pasan a cajero. */
+function normalizeRole(role) {
+  const r = String(role || '');
+  return LEGACY_ROLES.includes(r) ? 'cashier' : r;
+}
 
 function isPlatformStaff(role) {
   return PLATFORM_ROLES.includes(String(role || ''));
@@ -63,6 +71,8 @@ function newResetToken() {
 module.exports = {
   ROLES,
   TENANT_ROLES,
+  LEGACY_ROLES,
+  normalizeRole,
   PLATFORM_ROLES,
   isPlatformStaff,
   PLANS,

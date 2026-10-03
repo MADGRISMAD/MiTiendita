@@ -9,6 +9,8 @@ router.post('/accept', limits.publicWrite(), invites.accept);
 router.get('/', requireAuth, requireActiveSubscription, requireRoles('admin'), invites.list);
 router.get('/team', requireAuth, requireActiveSubscription, requireRoles('admin'), invites.team);
 router.post('/', requireAuth, requireActiveSubscription, requireRoles('admin'), invites.create);
+router.put('/team/:id/deactivate', requireAuth, requireActiveSubscription, requireRoles('admin'), invites.deactivateUser);
+router.put('/team/:id/reactivate', requireAuth, requireActiveSubscription, requireRoles('admin'), invites.reactivateUser);
 router.put('/:id/revoke', requireAuth, requireActiveSubscription, requireRoles('admin'), invites.revoke);
 router.delete('/:id', requireAuth, requireActiveSubscription, requireRoles('admin'), invites.remove);
 
