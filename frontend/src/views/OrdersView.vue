@@ -66,6 +66,19 @@
         <PosIcon name="alert" :size="18" /> {{ cashErr }}
       </p>
 
+      <!-- Falló la impresión del corte (el corte sí quedó registrado) -->
+      <div v-if="printIssue" class="banner err print-issue" role="alert">
+        <PosIcon name="alert" :size="18" />
+        <span><strong>No se imprimió el corte.</strong> {{ printIssue }} El corte sí quedó registrado.</span>
+        <button type="button" class="btn sm" :disabled="printBusy" @click="printCorte(lastClosedId)">
+          {{ printBusy ? 'Imprimiendo…' : 'Reintentar' }}
+        </button>
+        <a class="btn sm" :href="`/print/cash/${lastClosedId}?autoprint=1`" target="_blank" rel="noopener">
+          Imprimir con el navegador
+        </a>
+        <button type="button" class="btn sm" @click="printIssue = ''">Cerrar</button>
+      </div>
+
       <!-- Caja cerrada -->
       <section v-if="loaded && !cashOpen" class="open-card">
         <span class="open-ico"><PosIcon name="cash" :size="28" /></span>
@@ -402,7 +415,6 @@
 
 <script setup>
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
-import { useRouter } from "vue-router";
 import AppShell from "../components/AppShell.vue";
 import PosIcon from "../components/PosIcon.js";
 import { apiService } from "../apiService";
@@ -413,6 +425,8 @@ import { offlineStore } from "../offlineFlags";
 import { flushOfflineSales, listDeviceSales, retrySales } from "../offlineSync";
 import { isNetworkError } from "../net";
 import { cardFeeRateOf, lineBreakdown, rateOf } from "../tax";
+import { directPrinting } from "../thermalPrinter";
+import { printCashCloseById } from "../cashCloseData";
 
 const vSelectOnFocus = {
   mounted(el) {
@@ -423,7 +437,6 @@ const vSelectOnFocus = {
 // Billetes y monedas de México, de mayor a menor
 const DENOMS = [1000, 500, 200, 100, 50, 20, 10, 5, 2, 1, 0.5];
 
-const router = useRouter();
 const orders = ref([]);
 const loaded = ref(false);
 const tab = ref("shift");
@@ -441,6 +454,11 @@ const openingFloat = ref("");
 const cashBusy = ref(false);
 const cashMsg = ref("");
 const cashErr = ref("");
+
+// Impresión del corte
+const printIssue = ref("");
+const printBusy = ref(false);
+const lastClosedId = ref("");
 
 const showClose = ref(false);
 const countMode = ref("bills");
@@ -749,6 +767,29 @@ function prepClose() {
   showClose.value = true;
 }
 
+/**
+ * Imprime el corte de un turno.
+ * Con térmica configurada (USB, COM o Bluetooth) sale directo, sin abrir otra ventana.
+ * En modo «Navegador» abre la vista de impresión en una pestaña nueva.
+ */
+async function printCorte(id) {
+  if (!id || printBusy.value) return;
+  printIssue.value = "";
+  lastClosedId.value = id;
+  if (directPrinting()) {
+    printBusy.value = true;
+    try {
+      await printCashCloseById(id);
+    } catch (e) {
+      printIssue.value = e?.message || "La impresora no respondió.";
+    } finally {
+      printBusy.value = false;
+    }
+  } else {
+    window.open(`/print/cash/${id}?autoprint=1`, "_blank", "noopener");
+  }
+}
+
 async function closeCash() {
   if (offlineStore.pending > 0) {
     cashErr.value = `Hay ${offlineStore.pending} ${offlineStore.pending === 1 ? "venta" : "ventas"} de este dispositivo por subir. No cierres caja todavía.`;
@@ -764,21 +805,22 @@ async function closeCash() {
   cashBusy.value = true;
   cashErr.value = "";
   cashMsg.value = "";
+  printIssue.value = "";
+  let closedId = "";
   try {
     const res = await apiService.closeCashSession(counted.value, String(closeNotes.value || "").trim());
     showClose.value = false;
     const diff = Number(res.session?.difference || 0);
     cashMsg.value = diff === 0 ? "Turno cerrado. El corte cuadró." : `Turno cerrado. Diferencia: ${money(diff)}.`;
-    if (res.session?.id) {
-      router.push(`/print/cash/${res.session.id}?autoprint=1`);
-      return;
-    }
+    closedId = res.session?.id || "";
     await load();
   } catch (e) {
     cashErr.value = errText(e, "No se pudo cerrar la caja.");
   } finally {
     cashBusy.value = false;
   }
+  // Ya con el turno cerrado y la pantalla actualizada, se imprime sin salir de aquí
+  if (closedId) printCorte(closedId);
 }
 
 function openPay(o) {
@@ -922,6 +964,10 @@ onUnmounted(() => {
 .banner.warn svg { color: var(--timber-warning); }
 .banner.ok { background: var(--timber-success-soft); color: var(--timber-success); }
 .banner.err { background: var(--timber-danger-soft); color: var(--timber-danger); }
+.print-issue { flex-wrap: wrap; }
+.print-issue span { flex: 1 1 14rem; min-width: 0; font-weight: 600; }
+.print-issue strong { font-weight: 800; }
+.print-issue .btn { color: var(--timber-ink); }
 
 /* Botones y campos */
 .btn {
@@ -1013,7 +1059,6 @@ onUnmounted(() => {
 .open-copy p { margin: 0.2rem 0 0; color: var(--timber-muted); font-size: 0.9rem; line-height: 1.4; }
 .open-form { display: grid; gap: 0.55rem; }
 
-/* Resumen del turno */
 /* Ventas de este dispositivo sin subir */
 .device {
   flex-shrink: 0;
@@ -1052,6 +1097,7 @@ onUnmounted(() => {
   .device-acts .btn { flex: 1; }
 }
 
+/* Resumen del turno */
 .kpis {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
