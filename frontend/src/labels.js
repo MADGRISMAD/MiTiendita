@@ -22,9 +22,6 @@ export const modalityLabel = {
 
 export const roleLabel = {
   admin: "Admin",
-  hosstess: "Hostess",
-  waiter: "Vendedor",
-  kitchen: "Almacén",
   cashier: "Cajero",
   platform_admin: "Admin",
   platform_support: "Soporte",

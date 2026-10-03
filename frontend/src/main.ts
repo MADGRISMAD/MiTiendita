@@ -58,7 +58,7 @@ const routes: RouteRecordRaw[] = [
   { path: "/setup", name: "setup", component: SetupWizard, meta: { requiresAuth: true } },
   { path: "/dashboard", name: "dashboard", component: DashboardView, meta: authMeta(["admin", "cashier"]) },
   // POS abarrotes
-  { path: "/pos", name: "pos", component: MenuView, meta: authMeta(["admin", "cashier", "waiter", "hosstess", "kitchen"]), props: { initialMode: "pos" } },
+  { path: "/pos", name: "pos", component: MenuView, meta: authMeta(["admin", "cashier"]), props: { initialMode: "pos" } },
   { path: "/products", name: "products", component: MenuView, meta: authMeta(["admin"]), props: { initialMode: "manage" } },
   // Redirects legacy restaurant routes
   { path: "/main", redirect: "/pos" },
@@ -124,7 +124,7 @@ const routes: RouteRecordRaw[] = [
     path: "/print/offline/:clientSaleId",
     name: "printOffline",
     component: PrintOrderView,
-    meta: { requiresAuth: true, roles: ["admin", "cashier", "waiter", "hosstess", "kitchen"] },
+    meta: { requiresAuth: true, roles: ["admin", "cashier"] },
   },
   {
     path: "/print/cash/:id",

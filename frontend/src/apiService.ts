@@ -337,6 +337,13 @@ export const apiService = {
   createInvite(data: { email: string; role: string }) {
     return axios.post('/invites', data).then((r) => r.data);
   },
+  /** Desactiva una cuenta de la tienda: ya no entra y su sesión abierta deja de servir. */
+  deactivateUser(id: string) {
+    return axios.put(`/invites/team/${id}/deactivate`).then((r) => r.data);
+  },
+  reactivateUser(id: string) {
+    return axios.put(`/invites/team/${id}/reactivate`).then((r) => r.data);
+  },
   revokeInvite(id: string) {
     return axios.put(`/invites/${id}/revoke`).then((r) => r.data);
   },

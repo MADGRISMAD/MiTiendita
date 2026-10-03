@@ -7,6 +7,7 @@
 const crypto = require('crypto');
 const db = require('../database/mongodb');
 const { generateJWT } = require('../utils/jwt.utils');
+const { normalizeRole } = require('../models/tenant.model');
 
 const ACCESS_TTL = '15m';
 const REFRESH_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -56,7 +57,7 @@ function readRefreshCookie(req) {
 
 function profileOf(user) {
   return {
-    role: user.role,
+    role: normalizeRole(user.role),
     tenantId: user.tenantId || null,
     username: user.username,
     email: String(user.email || '').trim().toLowerCase(),
@@ -67,7 +68,7 @@ function accessTokenFor(user) {
   return generateJWT(
     {
       userId: user.username,
-      userRole: user.role,
+      userRole: normalizeRole(user.role),
       tenantId: user.tenantId || null,
       email: String(user.email || '').trim().toLowerCase(),
       tv: Number(user.tokenVersion) || 0,
@@ -168,6 +169,7 @@ async function currentUserState(username) {
     ? {
         exists: true,
         tokenVersion: Number(user.tokenVersion) || 0,
+        role: normalizeRole(user.role),
         disabled: Boolean(user.disabled),
         mfaEnabled: Boolean(user.mfaEnabled),
       }

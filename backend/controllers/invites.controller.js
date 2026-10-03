@@ -5,7 +5,7 @@ const { newToken } = require('../models/order.model');
 const { sendInviteEmail } = require('../utils/mail.utils');
 const { resolveAppUrl } = require('../utils/app-url.utils');
 const bcrypt = require('../utils/bcrypt.utils');
-const { TENANT_ROLES } = require('../models/tenant.model');
+const { TENANT_ROLES, normalizeRole } = require('../models/tenant.model');
 const limits = require('../services/plan-limits.service');
 
 async function list(req, res) {
@@ -36,6 +36,57 @@ async function team(req, res) {
   } catch (err) {
     console.error(err);
     return res.status(500).send(err.message || 'Error al listar el equipo');
+  }
+}
+
+/**
+ * Desactiva una cuenta: ya no entra y su sesión abierta deja de servir enseguida.
+ * No se puede desactivar a uno mismo ni al último dueño activo.
+ */
+async function deactivateUser(req, res) {
+  try {
+    const target = await db.FindUserInTenant(req.params.id, req.tenantId);
+    if (!target) return res.status(404).send('Cuenta no encontrada');
+    if (target.username === req.user?.username) {
+      return res.status(400).send('No puedes desactivar tu propia cuenta.');
+    }
+    if (target.disabled) return res.status(200).json({ ok: true, already: true });
+    if (target.role === 'admin' && (await db.CountActiveAdmins(req.tenantId)) <= 1) {
+      return res.status(400).send('Debe quedar al menos un dueño activo en la tienda.');
+    }
+    await db.UpdateUserById(String(target._id), { disabled: true, disabledAt: new Date() });
+    // Cierra sus sesiones y sube la versión: su token deja de servir
+    await sessions.revokeAll(target, 'disabled');
+    return res.status(200).json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).send(err.message || 'No se pudo desactivar la cuenta');
+  }
+}
+
+async function reactivateUser(req, res) {
+  try {
+    const target = await db.FindUserInTenant(req.params.id, req.tenantId);
+    if (!target) return res.status(404).send('Cuenta no encontrada');
+    if (!target.disabled) return res.status(200).json({ ok: true, already: true });
+    const tenant = await db.GetTenantById(req.tenantId);
+    try {
+      await limits.assertUserRoom(req.tenantId, tenant?.plan || 'basic', 1, { includePending: true });
+    } catch (limitErr) {
+      if (limits.sendLimit(res, limitErr)) return;
+      throw limitErr;
+    }
+    await db.UpdateUserById(String(target._id), {
+      disabled: false,
+      disabledAt: null,
+      failedLogins: 0,
+      lockedUntil: null,
+    });
+    sessions.forgetUser(target.username);
+    return res.status(200).json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).send(err.message || 'No se pudo reactivar la cuenta');
   }
 }
 
@@ -182,7 +233,7 @@ async function accept(req, res) {
       throw limitErr;
     }
 
-    const role = TENANT_ROLES.includes(invite.role) ? invite.role : 'cashier';
+    const role = TENANT_ROLES.includes(normalizeRole(invite.role)) ? normalizeRole(invite.role) : 'cashier';
     const hashed = await bcrypt.hashPassword(password);
     await db.CreateUser({
       name,
@@ -195,24 +246,6 @@ async function accept(req, res) {
       role,
       tenantId: invite.tenantId,
     });
-
-    if (role === 'waiter') {
-      await db.AddWaiter({
-        name,
-        lastName,
-        birthDate: new Date(),
-        startDate: new Date(),
-        cellphone: String(cellphone || Date.now())
-          .replace(/\D/g, '')
-          .slice(0, 10)
-          .padEnd(10, '0'),
-        mesa: [],
-        role: 'waiter',
-        workSchedule: 'morning',
-        status: 'rest',
-        tenantId: invite.tenantId,
-      });
-    }
 
     await db.UpdateInvite(
       String(invite.id || invite._id),
@@ -234,4 +267,4 @@ async function accept(req, res) {
   }
 }
 
-module.exports = { list, team, create, revoke, remove, getByToken, accept };
+module.exports = { list, team, create, revoke, remove, getByToken, accept, deactivateUser, reactivateUser };
