@@ -54,7 +54,6 @@
                 <input
                   type="file"
                   accept="image/jpeg,image/png,image/webp,image/*"
-                  capture="environment"
                   class="sr-only"
                   :disabled="busy || photoBusy"
                   @change="onPhoto"
@@ -65,9 +64,9 @@
                 </template>
                 <template v-else>
                   <span class="mg-photo-ico"><PosIcon :name="photoBusy ? 'clock' : 'image'" :size="30" /></span>
-                  <strong>{{ photoBusy ? 'Preparando la foto…' : 'Toma foto a la nota' }}</strong>
+                  <strong>{{ photoBusy ? 'Preparando la foto…' : 'Toma o elige la foto de la nota' }}</strong>
                   <small>
-                    {{ photoBusy ? 'La hacemos más ligera para leerla rápido.' : 'O arrastra la imagen aquí. Que se lean bien los renglones.' }}
+                    {{ photoBusy ? 'La hacemos más ligera para leerla rápido.' : 'Cámara o galería, o arrastra la imagen aquí. Que se lean bien los renglones.' }}
                   </small>
                 </template>
               </label>
