@@ -3,8 +3,13 @@
 //  - usb:       WebUSB (Chrome PC y Android con OTG). En Windows la impresora debe usar el driver WinUSB.
 //  - serial:    Web Serial (Chrome/Edge PC) para impresoras USB que aparecen como puerto COM.
 //  - bluetooth: Web Bluetooth (Chrome Android/PC) para impresoras Bluetooth LE.
+//
+// Estilo del ticket (printerStore.style):
+//  - "image": imprime el mismo diseño de la ventana de impresión (se convierte en imagen). Es el valor por defecto.
+//  - "text":  ticket en texto plano ESC/POS (más rápido, sin diseño).
 import { reactive } from "vue";
 import { buildReceipt, buildTestPage, buildCashClose, money } from "./escpos";
+import { renderTicketBitmap, buildRasterTicket } from "./ticketRaster";
 import { lineBreakdown, rateOf, round2 } from "./tax";
 import { storeParts } from "./storeTime";
 import { formatQtyUnit, isBulk, perUnit, unitOf } from "./bulk";
@@ -35,9 +40,11 @@ function readSettings() {
       baudRate: Number(raw.baudRate) || 9600,
       deviceName: String(raw.deviceName || ""),
       portInfo: raw.portInfo && typeof raw.portInfo === "object" ? raw.portInfo : null,
+      style: raw.style === "text" ? "text" : "image",
+      dots: Number(raw.dots) || 0, // 0 = automático (80 mm → 512, 58 mm → 384)
     };
   } catch {
-    return { mode: "browser", paper: "80", drawer: false, baudRate: 9600, deviceName: "" };
+    return { mode: "browser", paper: "80", drawer: false, baudRate: 9600, deviceName: "", portInfo: null, style: "image", dots: 0 };
   }
 }
 
@@ -57,6 +64,8 @@ export function savePrinterSettings(patch = {}) {
         baudRate: printerStore.baudRate,
         deviceName: printerStore.deviceName,
         portInfo: printerStore.portInfo,
+        style: printerStore.style,
+        dots: printerStore.dots,
       })
     );
   } catch {
@@ -258,7 +267,7 @@ function withTimeout(promise, ms) {
 }
 
 /** Manda bytes a la impresora; si la conexión se cayó, reconecta una vez. */
-export async function printBytes(bytes, { prompt = false } = {}) {
+export async function printBytes(bytes, { prompt = false, timeoutMs = PRINT_TIMEOUT_MS } = {}) {
   printerStore.busy = true;
   try {
     await withTimeout(
@@ -271,7 +280,7 @@ export async function printBytes(bytes, { prompt = false } = {}) {
           await (await connectPrinter({ prompt: false })).write(bytes);
         }
       })(),
-      PRINT_TIMEOUT_MS
+      timeoutMs
     );
   } catch (error) {
     disconnect();
@@ -284,6 +293,34 @@ export async function printBytes(bytes, { prompt = false } = {}) {
 // 80 mm = 42 columnas en la TM-T88V (58 mm = 32)
 function cols() {
   return printerStore.paper === "58" ? 32 : 42;
+}
+
+// Ancho de la imagen en puntos. 512 sirve en 80 mm de casi todas; si tu impresora es de 576, usa savePrinterSettings({ dots: 576 })
+function dotsWide() {
+  return printerStore.dots || (printerStore.paper === "58" ? 384 : 512);
+}
+
+// Una imagen es mucho más grande que un ticket de texto: por Bluetooth tarda bastante más
+function imageTimeout(bytes) {
+  return 15000 + (printerStore.mode === "bluetooth" ? Math.ceil(bytes.length / 4000) * 1000 : 0);
+}
+
+/**
+ * Convierte la vista de impresión `path` en bytes de imagen para la térmica.
+ * Devuelve null si el estilo es «texto» o si no se pudo generar (así se imprime en texto y no se pierde el ticket).
+ */
+async function designBytes(path, { openDrawer = false } = {}) {
+  if (printerStore.style !== "image") return null;
+  printerStore.busy = true;
+  try {
+    const bitmap = await renderTicketBitmap(path, { paper: printerStore.paper, dots: dotsWide() });
+    return buildRasterTicket(bitmap, { openDrawer });
+  } catch (error) {
+    console.warn("No se pudo armar el ticket con diseño, se imprime en texto:", error);
+    return null;
+  } finally {
+    printerStore.busy = false;
+  }
 }
 
 export function printTestPage({ prompt = false } = {}) {
@@ -373,14 +410,30 @@ export function receiptData(order) {
   };
 }
 
-/** Imprime el ticket de una venta en la térmica. openDrawer abre el cajón (pago en efectivo). */
-export function printReceiptDirect(order, { openDrawer = false } = {}) {
-  const bytes = buildReceipt(receiptData(order), { cols: cols(), openDrawer: openDrawer && printerStore.drawer });
-  return printBytes(bytes);
+/**
+ * Imprime el ticket de una venta en la térmica. openDrawer abre el cajón (pago en efectivo).
+ * offline=true cuando la venta solo existe en este dispositivo (ruta /print/offline/…).
+ * Con estilo «image» sale con el mismo diseño de la ventana de impresión; si eso falla, sale en texto.
+ */
+export async function printReceiptDirect(order, { openDrawer = false, offline = false } = {}) {
+  const drawer = openDrawer && printerStore.drawer;
+  if (order?.id) {
+    const path = offline ? `/print/offline/${order.id}` : `/print/order/${order.id}?mode=receipt`;
+    const bytes = await designBytes(path, { openDrawer: drawer });
+    if (bytes) return printBytes(bytes, { timeoutMs: imageTimeout(bytes) });
+  }
+  return printBytes(buildReceipt(receiptData(order), { cols: cols(), openDrawer: drawer }));
 }
 
-/** Imprime el corte de caja en la térmica. `data` lo arma PrintCashCloseView (corteData). */
-export function printCashCloseDirect(data) {
+/**
+ * Imprime el corte de caja en la térmica. `data` lo arma buildCashCloseData (cashCloseData.js).
+ * Si se pasa `id` (del turno) y el estilo es «image», sale con el diseño de la vista /print/cash/:id.
+ */
+export async function printCashCloseDirect(data, { id = "" } = {}) {
+  if (id) {
+    const bytes = await designBytes(`/print/cash/${id}`);
+    if (bytes) return printBytes(bytes, { timeoutMs: imageTimeout(bytes) });
+  }
   const bytes = buildCashClose(
     {
       shop: venueStore.businessName || "Mi Tiendita",

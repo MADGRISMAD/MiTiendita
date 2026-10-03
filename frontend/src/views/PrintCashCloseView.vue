@@ -113,7 +113,7 @@
             <!-- Cuadre del cajón, como cuenta hecha a mano -->
             <p class="tk-sec">Cuadre del cajón</p>
             <div class="cc-sum">
-              <div class="cc-row"><i></i><span>Fondo inicial</span><b>{{ money(session.openingFloat) }}</b></div>
+              <div class="cc-row"><i></i><span>Fondo inicial</span><b>{{ money(opening) }}</b></div>
               <div class="cc-row"><i>+</i><span>Ventas en efectivo</span><b>{{ money(cashSales) }}</b></div>
               <div v-if="cashRefunds" class="cc-row"><i>−</i><span>Devoluciones en efectivo</span><b>{{ money(cashRefunds) }}</b></div>
               <div class="cc-row eq"><i>=</i><span>Debe haber</span><b>{{ money(expectedCash) }}</b></div>
@@ -176,12 +176,17 @@ import {
   savePrinterSettings,
   printCashCloseDirect,
 } from "../thermalPrinter";
+import { buildCashCloseData } from "../cashCloseData";
 import PosIcon from "../components/PosIcon.js";
 import TicketHeader from "../components/TicketHeader.vue";
 import TicketBarcode from "../components/TicketBarcode.vue";
 
 const route = useRoute();
 const { paper, setPaper, print, close } = useTicketShell("/orders");
+
+// capture=1: la abre el iframe oculto que convierte el ticket en imagen para la térmica.
+// En ese caso no debe tocar la impresora (la está usando la ventana principal).
+const capture = route.query.capture === "1";
 
 const session = ref(null);
 const orders = ref([]);
@@ -324,50 +329,14 @@ function changePaper(p) {
   savePrinterSettings({ paper: p });
 }
 
-function corteData() {
-  const s = session.value;
-  return {
-    closed: closed.value,
-    folio: folio.value,
-    dateText: shortDate(s.openedAt),
-    openedClock: clock(s.openedAt),
-    openedBy: s.openedBy || "-",
-    closedClock: clock(s.closedAt || printedAt),
-    closedBy: s.closedBy || "-",
-    deliveredBy: s.closedBy || s.openedBy || "",
-    duration: duration.value,
-    salesCount: paidOrders.value.length,
-    articles: articles.value,
-    average: average.value,
-    methods: methods.value.map((m) => ({ label: m.label, amount: m.amount })),
-    totalSold: totalSold.value,
-    taxCollected: taxCollected.value,
-    cardExtraTotal: cardExtraTotal.value,
-    voidedCount: voided.value.length,
-    voidedTotal: voidedTotal.value,
-    opening: opening.value,
-    cashSales: cashSales.value,
-    cashRefunds: cashRefunds.value,
-    expectedCash: expectedCash.value,
-    countedCash: Number(s.countedCash || 0),
-    verdictWord: verdict.value.word,
-    verdictSub: verdict.value.sub,
-    notes: s.notes || "",
-    tickets: orders.value.map((o) => ({
-      clock: clock(o.paidAt || o.createdAt),
-      folio: folioOf(o.id),
-      kind: isVoid(o) ? "DEV" : o.paymentStatus === "paid" ? methodShort(o.paymentMethod) : "PEND",
-      amount: num(o.total),
-      void: isVoid(o),
-    })),
-    printedText: `${shortDate(printedAt)} ${clock(printedAt)}`,
-  };
-}
-
 async function printDirect() {
   printMsg.value = "";
   try {
-    await printCashCloseDirect(corteData());
+    // Los datos salen del mismo módulo que usa Caja al cerrar el turno.
+    // Con estilo «image» se imprime el diseño de esta misma vista; si no, ticket de texto.
+    await printCashCloseDirect(buildCashCloseData(session.value, orders.value, printedAt), {
+      id: String(route.params.id),
+    });
   } catch (e) {
     printMsg.value = e?.message || "No se pudo imprimir.";
   }
@@ -395,19 +364,24 @@ onMounted(async () => {
   try {
     await fetchVenueSettings().catch(() => {});
     const id = String(route.params.id);
-    session.value = await apiService.getCashSessionById(id);
-    const all = await apiService.getOrders().catch(() => []);
-    orders.value = (Array.isArray(all) ? all : [])
-      .filter((o) => String(o.cashSessionId || "") === id)
-      .sort((a, b) => new Date(a.paidAt || a.createdAt) - new Date(b.paidAt || b.createdAt));
+
+    // El servidor responde { session, totals, orders }; se aceptan también las formas ya desenvueltas
+    const raw = await apiService.getCashSessionById(id);
+    session.value = raw?.session || raw;
+    let list = Array.isArray(raw?.orders) ? raw.orders : null;
+    if (!list) {
+      const all = await apiService.getOrders().catch(() => []);
+      list = (Array.isArray(all) ? all : []).filter((o) => String(o.cashSessionId || "") === id);
+    }
+    orders.value = [...list].sort((a, b) => new Date(a.paidAt || a.createdAt) - new Date(b.paidAt || b.createdAt));
 
     if (directPrinting()) {
       setPaper(printerStore.paper);
-      // Reconexión silenciosa si la impresora ya tiene permiso
-      await connectPrinter({ prompt: false }).catch(() => {});
+      // Reconexión silenciosa si la impresora ya tiene permiso (no en el iframe de captura)
+      if (!capture) await connectPrinter({ prompt: false }).catch(() => {});
     }
 
-    if (route.query.autoprint === "1") {
+    if (!capture && route.query.autoprint === "1") {
       if (directPrinting()) setTimeout(printDirect, 300);
       else setTimeout(() => window.print(), 400);
     }

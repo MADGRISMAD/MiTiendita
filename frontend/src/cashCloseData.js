@@ -174,5 +174,5 @@ export async function printCashCloseById(id, hint = {}) {
     orders = (Array.isArray(all) ? all : []).filter((o) => String(o.cashSessionId || "") === sid);
   }
   orders = [...orders].sort((x, y) => new Date(x.paidAt || x.createdAt) - new Date(y.paidAt || y.createdAt));
-  await printCashCloseDirect(buildCashCloseData(session, orders, new Date(), hint));
+  await printCashCloseDirect(buildCashCloseData(session, orders, new Date(), hint), { id: sid });
 }
