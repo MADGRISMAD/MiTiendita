@@ -44,32 +44,36 @@
           <!-- ========== Paso 1: la nota ========== -->
           <template v-if="step === 1">
             <div class="mg-inputs">
-              <label
-                class="mg-photo"
-                :class="{ has: photoUrl && !photoBusy, busy: photoBusy, drag: dragging }"
-                @dragover.prevent="dragging = true"
-                @dragleave="dragging = false"
-                @drop.prevent="onDrop"
-              >
-                <input
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp,image/*"
-                  class="sr-only"
-                  :disabled="busy || photoBusy"
-                  @change="onPhoto"
-                />
-                <template v-if="photoUrl && !photoBusy">
-                  <img :src="photoUrl" alt="Foto de la nota" />
-                  <span class="mg-chip">Cambiar foto</span>
-                </template>
-                <template v-else>
-                  <span class="mg-photo-ico"><PosIcon :name="photoBusy ? 'clock' : 'image'" :size="30" /></span>
-                  <strong>{{ photoBusy ? 'Preparando la foto…' : 'Toma o elige la foto de la nota' }}</strong>
-                  <small>
-                    {{ photoBusy ? 'La hacemos más ligera para leerla rápido.' : 'Cámara o galería, o arrastra la imagen aquí. Que se lean bien los renglones.' }}
-                  </small>
-                </template>
-              </label>
+              <div class="mg-photo-col">
+                <div
+                  class="mg-photo"
+                  :class="{ has: photoUrl && !photoBusy, busy: photoBusy, drag: dragging }"
+                  @dragover.prevent="dragging = true"
+                  @dragleave="dragging = false"
+                  @drop.prevent="onDrop"
+                >
+                  <template v-if="photoUrl && !photoBusy">
+                    <img :src="photoUrl" alt="Foto de la nota" />
+                  </template>
+                  <template v-else>
+                    <span class="mg-photo-ico"><PosIcon :name="photoBusy ? 'clock' : 'image'" :size="30" /></span>
+                    <strong>{{ photoBusy ? 'Preparando la foto…' : 'Foto de la nota' }}</strong>
+                    <small>
+                      {{ photoBusy ? 'La hacemos más ligera para leerla rápido.' : 'Que se lean bien los renglones. También puedes arrastrar la imagen aquí.' }}
+                    </small>
+                  </template>
+                </div>
+                <div class="mg-photo-btns">
+                  <button type="button" class="mg-photo-btn" :disabled="busy || photoBusy" @click="cameraInput?.click()">
+                    <PosIcon name="camera" :size="18" /> Tomar foto
+                  </button>
+                  <button type="button" class="mg-photo-btn" :disabled="busy || photoBusy" @click="galleryInput?.click()">
+                    <PosIcon name="image" :size="18" /> Elegir de la galería
+                  </button>
+                </div>
+                <input ref="cameraInput" type="file" accept="image/*" capture="environment" class="sr-only" tabindex="-1" @change="onPhoto" />
+                <input ref="galleryInput" type="file" accept="image/jpeg,image/png,image/webp,image/*" class="sr-only" tabindex="-1" @change="onPhoto" />
+              </div>
               <div class="mg-or" aria-hidden="true"><span>o</span></div>
               <label class="mg-text">
                 <span>Pega o escribe la lista, como la tengas</span>
@@ -629,6 +633,9 @@ async function compressPhoto(file) {
   const base64 = await blobToBase64(blob);
   return { url: previewUrl, base64, mimeType: "image/jpeg", objectUrl: previewUrl };
 }
+
+const cameraInput = ref(null);
+const galleryInput = ref(null);
 
 async function onPhoto(event) {
   const file = event.target.files?.[0];
@@ -1203,6 +1210,17 @@ onMounted(async () => {
   align-items: stretch;
   gap: 0.75rem;
 }
+.mg-photo-col { display: grid; gap: 0.6rem; align-content: start; }
+.mg-photo-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+.mg-photo-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem;
+  min-height: 2.75rem; padding: 0 0.6rem;
+  border: 1px solid var(--timber-line); border-radius: 0.8rem;
+  background: var(--timber-panel); color: var(--timber-ink);
+  font: inherit; font-size: 0.88rem; font-weight: 800; cursor: pointer;
+}
+.mg-photo-btn:hover:not(:disabled) { border-color: var(--timber-primary); }
+.mg-photo-btn:disabled { opacity: 0.55; cursor: default; }
 .mg-photo {
   position: relative;
   display: grid;
