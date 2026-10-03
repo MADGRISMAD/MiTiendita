@@ -7,6 +7,7 @@ const { resolveAppUrl } = require('../utils/app-url.utils');
 const bcrypt = require('../utils/bcrypt.utils');
 const { TENANT_ROLES, normalizeRole } = require('../models/tenant.model');
 const limits = require('../services/plan-limits.service');
+const team = require('../services/team.service');
 
 async function list(req, res) {
   try {
@@ -18,7 +19,7 @@ async function list(req, res) {
 }
 
 // Quiénes entran a la app y cuántos lugares quedan en el plan
-async function team(req, res) {
+async function listTeam(req, res) {
   try {
     const tenant = await db.GetTenantById(req.tenantId);
     const plan = tenant?.plan || 'basic';
@@ -39,54 +40,43 @@ async function team(req, res) {
   }
 }
 
-/**
- * Desactiva una cuenta: ya no entra y su sesión abierta deja de servir enseguida.
- * No se puede desactivar a uno mismo ni al último dueño activo.
- */
+/** Responde un error del servicio de equipo (o uno inesperado). */
+function teamFail(res, err, fallback) {
+  if (err instanceof team.TeamError) return res.status(err.status).send(err.message);
+  if (limits.sendLimit(res, err)) return res;
+  console.error(err);
+  return res.status(500).send(fallback);
+}
+
 async function deactivateUser(req, res) {
   try {
-    const target = await db.FindUserInTenant(req.params.id, req.tenantId);
-    if (!target) return res.status(404).send('Cuenta no encontrada');
-    if (target.username === req.user?.username) {
-      return res.status(400).send('No puedes desactivar tu propia cuenta.');
-    }
-    if (target.disabled) return res.status(200).json({ ok: true, already: true });
-    if (target.role === 'admin' && (await db.CountActiveAdmins(req.tenantId)) <= 1) {
-      return res.status(400).send('Debe quedar al menos un dueño activo en la tienda.');
-    }
-    await db.UpdateUserById(String(target._id), { disabled: true, disabledAt: new Date() });
-    // Cierra sus sesiones y sube la versión: su token deja de servir
-    await sessions.revokeAll(target, 'disabled');
-    return res.status(200).json({ ok: true });
+    const out = await team.deactivate({ tenantId: req.tenantId, actor: req.user, targetId: req.params.id });
+    return res.status(200).json(out);
   } catch (err) {
-    console.error(err);
-    return res.status(500).send(err.message || 'No se pudo desactivar la cuenta');
+    return teamFail(res, err, 'No se pudo desactivar la cuenta');
   }
 }
 
 async function reactivateUser(req, res) {
   try {
-    const target = await db.FindUserInTenant(req.params.id, req.tenantId);
-    if (!target) return res.status(404).send('Cuenta no encontrada');
-    if (!target.disabled) return res.status(200).json({ ok: true, already: true });
-    const tenant = await db.GetTenantById(req.tenantId);
-    try {
-      await limits.assertUserRoom(req.tenantId, tenant?.plan || 'basic', 1, { includePending: true });
-    } catch (limitErr) {
-      if (limits.sendLimit(res, limitErr)) return;
-      throw limitErr;
-    }
-    await db.UpdateUserById(String(target._id), {
-      disabled: false,
-      disabledAt: null,
-      failedLogins: 0,
-      lockedUntil: null,
-    });
-    sessions.forgetUser(target.username);
-    return res.status(200).json({ ok: true });
+    const out = await team.reactivate({ tenantId: req.tenantId, actor: req.user, targetId: req.params.id });
+    return res.status(200).json(out);
   } catch (err) {
-    console.error(err);
-    return res.status(500).send(err.message || 'No se pudo reactivar la cuenta');
+    return teamFail(res, err, 'No se pudo reactivar la cuenta');
+  }
+}
+
+async function changeUserRole(req, res) {
+  try {
+    const out = await team.changeRole({
+      tenantId: req.tenantId,
+      actor: req.user,
+      targetId: req.params.id,
+      role: req.body?.role,
+    });
+    return res.status(200).json(out);
+  } catch (err) {
+    return teamFail(res, err, 'No se pudo cambiar el rol');
   }
 }
 
@@ -267,4 +257,4 @@ async function accept(req, res) {
   }
 }
 
-module.exports = { list, team, create, revoke, remove, getByToken, accept, deactivateUser, reactivateUser };
+module.exports = { list, team: listTeam, create, revoke, remove, getByToken, accept, deactivateUser, reactivateUser, changeUserRole };

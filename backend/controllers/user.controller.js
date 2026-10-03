@@ -1,7 +1,6 @@
 const schema = require('../models/usuario.model');
 const service = require('../services/usuario.service');
 const hasher = require('../utils/bcrypt.utils');
-const waitlist = require('../models/waitlist.model');
 const jwtCreator = require('../utils/jwt.utils');
 const db = require('../database/mongodb');
 const { createTenantDoc, newResetToken, ROLES, TRIAL_DAYS, isPlatformStaff } = require('../models/tenant.model');
@@ -121,16 +120,6 @@ const CreateUser = async (req, res) => {
     });
   } catch (error) {
     return res.status(500).send(error.message);
-  }
-};
-
-const FindUserByEmail = async (req, res) => {
-  try {
-    const search = await service.FindUserByEmail(req.body.email);
-    if (search) return res.status(200).send(search);
-    return res.status(404).send('Usuario no encontrado');
-  } catch (error) {
-    return res.status(500).send(error);
   }
 };
 
@@ -304,60 +293,6 @@ const MfaDisable = async (req, res) => {
   }
 };
 
-const FindUserByUsername = async (req, res) => {
-  try {
-    const search = await service.FindUserByUsername(req.body.username);
-    if (search) return res.status(200).send(search);
-    return res.status(404).send('Usuario no encontrado');
-  } catch (err) {
-    console.error(err);
-    return res.status(500).send(err);
-  }
-};
-
-const FindWaiters = async (req, res) => {
-  try {
-    const search = await db.GetWaiters(req.tenantId);
-    return res.status(200).send(search || []);
-  } catch (err) {
-    console.error(err.message);
-    return res.status(500).send(err.message);
-  }
-};
-
-const GetWaitList = async (req, res) => {
-  try {
-    const Search = await db.GetWaitList(req.tenantId);
-    return res.status(200).send(Search);
-  } catch (exp) {
-    console.error(exp.message);
-    return res.status(500).send(exp);
-  }
-};
-
-const DeleteWaitList = async (req, res) => {
-  try {
-    const result = await db.DeleteWaitList(req.params.id, req.tenantId);
-    return res.status(200).send(result);
-  } catch (exp) {
-    console.error(exp.message);
-    return res.status(500).send(exp);
-  }
-};
-
-const AddWaitList = async (req, res) => {
-  try {
-    const { error, value } = waitlist.validate(req.body);
-    if (error) return res.status(400).send(error.message);
-    value.tenantId = req.tenantId;
-    await db.AddWaitList(value);
-    return res.status(200).send('Añadido a la wait list');
-  } catch (exp) {
-    console.error(exp.message);
-    return res.status(500).send(exp);
-  }
-};
-
 const ForgotPassword = async (req, res) => {
   try {
     if (!hasSmtpConfig()) {
@@ -469,7 +404,6 @@ const ChangePassword = async (req, res) => {
 
 module.exports = {
   CreateUser,
-  FindUserByEmail,
   LoginUsuario,
   LoginMfa,
   RefreshSession,
@@ -477,11 +411,6 @@ module.exports = {
   MfaSetup,
   MfaEnable,
   MfaDisable,
-  FindUserByUsername,
-  FindWaiters,
-  GetWaitList,
-  DeleteWaitList,
-  AddWaitList,
   ForgotPassword,
   ResetPassword,
   Me,

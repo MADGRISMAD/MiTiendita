@@ -22,10 +22,6 @@ function withId(doc) {
   return { ...rest, id: String(_id), _id };
 }
 
-function withMesaId(doc) {
-  return withId(doc);
-}
-
 /** Colección cruda (para servicios como el límite de peticiones). */
 function getCollection(name) {
   return dbConnection ? dbConnection.collection(name) : null;
@@ -357,69 +353,6 @@ async function ListTenantAdminEmails(tenantId) {
   ];
 }
 
-async function AddMesa(data) {
-  const result = await dbConnection.collection('mesas').insertOne(data);
-  return withMesaId(await dbConnection.collection('mesas').findOne({ _id: result.insertedId }));
-}
-async function UpdateStatusMesa(id, data, tenantId) {
-  const clean = { ...data };
-  delete clean.id;
-  delete clean._id;
-  let filter = oidFilter(id, tenantId);
-  if (!filter) {
-    filter = { numero: parseInt(id, 10), ...(tenantId ? { tenantId } : {}) };
-  }
-  let result = await dbConnection.collection('mesas').updateOne(filter, { $set: clean });
-  if (result.matchedCount === 0 && tenantId) {
-    result = await dbConnection.collection('mesas').updateOne(
-      { nombre: String(id), tenantId },
-      { $set: clean }
-    );
-  }
-  return result;
-}
-async function Getmesas(tenantId) {
-  const filter = tenantId ? { tenantId } : {};
-  return (await dbConnection.collection('mesas').find(filter).toArray()).map(withMesaId);
-}
-async function GetMesaById(id, tenantId) {
-  const byOid = oidFilter(id, tenantId);
-  if (byOid) {
-    const doc = await dbConnection.collection('mesas').findOne(byOid);
-    if (doc) return withMesaId(doc);
-  }
-  const base = tenantId ? { tenantId } : {};
-  let result = await dbConnection.collection('mesas').findOne({ ...base, nombre: id });
-  if (!result) {
-    result = await dbConnection.collection('mesas').findOne({ ...base, numero: parseInt(id, 10) });
-  }
-  return withMesaId(result);
-}
-async function GetNextMesaNumero(tenantId) {
-  const filter = tenantId ? { tenantId } : {};
-  const last = await dbConnection.collection('mesas').find(filter).sort({ numero: -1 }).limit(1).toArray();
-  return last.length ? (last[0].numero || 0) + 1 : 1;
-}
-async function GetMesaFreeWaiter(tenantId) {
-  const filter = { disponible: true, ...(tenantId ? { tenantId } : {}) };
-  return (await dbConnection.collection('mesas').find(filter).toArray()).map(withMesaId);
-}
-async function DeleteMesa(id, tenantId) {
-  const byOid = oidFilter(id, tenantId);
-  if (byOid) {
-    const byOidRes = await dbConnection.collection('mesas').deleteOne(byOid);
-    if (byOidRes.deletedCount) return byOidRes;
-  }
-  return await dbConnection.collection('mesas').deleteOne({
-    numero: parseInt(id, 10),
-    ...(tenantId ? { tenantId } : {}),
-  });
-}
-async function CloseMesas(tenantId) {
-  const filter = tenantId ? { tenantId } : {};
-  return await dbConnection.collection('mesas').updateMany(filter, { $set: { disponible: false, personaTitular: null } });
-}
-
 async function GetMenus(tenantId) {
   const filter = tenantId ? { tenantId } : {};
   return (await dbConnection.collection('menus').find(filter).toArray()).map(withId);
@@ -625,20 +558,6 @@ async function DeleteWaiter(id, tenantId) {
 }
 async function UpdateWaiter(id, data, tenantId) {
   return await dbConnection.collection('waiters').updateOne({ cellphone: id, ...(tenantId ? { tenantId } : {}) }, { $set: data });
-}
-
-async function AddWaitList(data) {
-  return await dbConnection.collection('waitlist').insertOne(data);
-}
-async function GetWaitList(tenantId) {
-  const filter = tenantId ? { tenantId } : {};
-  return await dbConnection.collection('waitlist').find(filter).toArray();
-}
-async function GetWaitListByNumber(number, tenantId) {
-  return await dbConnection.collection('waitlist').findOne({ cellphone: parseInt(number, 10), ...(tenantId ? { tenantId } : {}) });
-}
-async function DeleteWaitList(id, tenantId) {
-  return await dbConnection.collection('waitlist').deleteOne({ telefono: id, ...(tenantId ? { tenantId } : {}) });
 }
 
 async function GetSettings(tenantId) {
@@ -1316,9 +1235,7 @@ module.exports = {
   CreateUser, FindUserByEmail, LoginUsuario, FindUserByUsername, UpdateUserById, FindUserByResetToken,
   ListPlatformUsers, CountPlatformAdmins, DeleteUserById,
   ListTenantAdminEmails,
-  AddMesa, UpdateStatusMesa, Getmesas, GetMesaFreeWaiter, GetMesaById, DeleteMesa, CloseMesas, GetNextMesaNumero,
   AddWaiter, GetWaiters, GetWaiterByCellphone, GetWaiterByDisponibility, DeleteWaiter, UpdateWaiter,
-  AddWaitList, GetWaitList, GetWaitListByNumber, DeleteWaitList,
   GetSettings, CreateSettings, UpdateSettings,
   GetMenus, GetMenuById, CreateMenu, UpdateMenu, DeleteMenu,
   GetFoods, CountFoods, CountPaidOrders, CountCashSessions, GetFoodById, GetFoodByBarcode, CreateFood, UpdateFood, ReserveSaleStock, ConsumeSaleLots, RestoreSaleStock, IncrementFoodStock, DeleteFood, GetLowStockFoods, SearchFoods,

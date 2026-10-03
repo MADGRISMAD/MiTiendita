@@ -65,21 +65,6 @@ async function create(req, res) {
 
     const created = await db.CreateOrder(payload);
 
-    if (payload.tableId && payload.modality === 'dine-in') {
-      try {
-        await db.UpdateStatusMesa(
-          payload.tableId,
-          {
-            disponible: false,
-            personaTitular: body.personaTitular || payload.tableName,
-          },
-          req.tenantId
-        );
-      } catch (e) {
-        console.warn('No se pudo ocupar la mesa:', e.message);
-      }
-    }
-
     return res.status(201).json(created);
   } catch (err) {
     console.error(err);
@@ -197,18 +182,6 @@ async function settlePayment(req, existing, body, { requireCash = true, paidAt }
     },
     req.tenantId
   );
-
-  if (existing.tableId) {
-    try {
-      await db.UpdateStatusMesa(
-        existing.tableId,
-        { disponible: true, personaTitular: null },
-        req.tenantId
-      );
-    } catch (e) {
-      console.warn('No se pudo liberar la mesa:', e.message);
-    }
-  }
 
   return updated;
 }

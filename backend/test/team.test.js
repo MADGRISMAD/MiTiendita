@@ -49,6 +49,11 @@ function memoryDb() {
     async UpdateUserById(id, data) {
       return Object.assign(byId(id), data);
     },
+    activity: [],
+    async CreateActivityLog(entry) {
+      this.activity.push(entry);
+      return entry;
+    },
     async RecordLoginFailure() {},
     async ClearLoginFailures(id) {
       Object.assign(byId(id), { failedLogins: 0, lockedUntil: null, lastLoginAt: new Date() });
@@ -85,6 +90,7 @@ function load(db) {
     'services/session.service.js',
     'services/usuario.service.js',
     'services/plan-limits.service.js',
+    'services/team.service.js',
     'controllers/user.controller.js',
     'controllers/invites.controller.js',
     'middleware/auth.middleware.js',
@@ -255,4 +261,125 @@ test('el modelo solo conoce admin y cashier', () => {
   assert.equal(t.normalizeRole('kitchen'), 'cashier');
   assert.equal(t.normalizeRole('admin'), 'admin');
   assert.equal(t.normalizeRole('platform_admin'), 'platform_admin');
+});
+
+// ———————————————— Cambio de rol y blindajes ————————————————
+
+test('cambiar de rol: aplica, cierra la sesión de esa cuenta y queda en la bitácora', async () => {
+  const db = memoryDb();
+  await seed(db);
+  const { invites, users, auth } = load(db);
+  const pedro = await login(users, 'pedro');
+  assert.equal(await check(auth, pedro.body.token), 200);
+
+  const r = res();
+  await invites.changeUserRole(req({ role: 'admin' }, { ...asAdmin, params: { id: 'u2' } }), r);
+  assert.equal(r.code, 200);
+  assert.equal(db.users[1].role, 'admin');
+  assert.equal(await check(auth, pedro.body.token), 401, 'tiene que iniciar sesión otra vez con el rol nuevo');
+  assert.equal((await login(users, 'pedro')).body.role, 'admin');
+  assert.equal(db.activity.at(-1).type, 'user_role_changed');
+  assert.match(db.activity.at(-1).message, /de cajero a dueño/);
+  assert.equal(db.activity.at(-1).user, 'dueno');
+
+  const back = res();
+  await invites.changeUserRole(req({ role: 'cashier' }, { ...asAdmin, params: { id: 'u2' } }), back);
+  assert.equal(back.code, 200);
+  assert.equal(db.users[1].role, 'cashier');
+});
+
+test('cambiar de rol: valida el rol, la misma cuenta, la tienda y el último dueño', async () => {
+  const db = memoryDb();
+  await seed(db);
+  const { invites } = load(db);
+  const call = async (id, role, actor = asAdmin) => {
+    const r = res();
+    await invites.changeUserRole(req({ role }, { ...actor, params: { id } }), r);
+    return r;
+  };
+  assert.equal((await call('u2', 'waiter')).code, 400, 'rol de restaurante: no existe');
+  assert.equal((await call('u2', 'platform_admin')).code, 400, 'ni escalar a la plataforma');
+  assert.equal((await call('u2', undefined)).code, 400);
+  assert.equal((await call('u1', 'cashier')).code, 400, 'el propio rol no se cambia');
+  assert.equal((await call('u3', 'cashier')).code, 404, 'otra tienda');
+  assert.equal((await call('nope', 'cashier')).code, 404);
+  assert.equal((await call('u2', 'cashier')).body.already, true, 'mismo rol: sin cambios ni cierre de sesión');
+
+  // El único dueño no puede dejar a la tienda sin dueño aunque lo pida otro dueño que ya no exista
+  db.users.push({ _id: 'u4', username: 'socio', email: 's@t.mx', role: 'admin', tenantId: 't1' });
+  assert.equal((await call('u1', 'cashier', { user: { username: 'socio' }, tenantId: 't1' })).code, 200);
+  const last = await call('u4', 'cashier', { user: { username: 'pedro' }, tenantId: 't1' });
+  assert.equal(last.code, 400);
+  assert.equal(db.users.find((u) => u.username === 'socio').role, 'admin');
+});
+
+test('dos dueños que se quitan el acceso a la vez: la tienda nunca queda sin dueño', async () => {
+  for (const action of ['deactivate', 'role']) {
+    const db = memoryDb();
+    await seed(db);
+    db.users.push({ _id: 'u4', username: 'socio', email: 's@t.mx', role: 'admin', tenantId: 't1' });
+    const { invites } = load(db);
+    const a = res();
+    const b = res();
+    const aActor = { user: { username: 'dueno' }, tenantId: 't1' };
+    const bActor = { user: { username: 'socio' }, tenantId: 't1' };
+    const run = (actor, id, out) =>
+      action === 'deactivate'
+        ? invites.deactivateUser(req({}, { ...actor, params: { id } }), out)
+        : invites.changeUserRole(req({ role: 'cashier' }, { ...actor, params: { id } }), out);
+    await Promise.all([run(aActor, 'u4', a), run(bActor, 'u1', b)]);
+    const admins = db.users.filter((u) => u.tenantId === 't1' && u.role === 'admin' && !u.disabled);
+    assert.ok(admins.length >= 1, `${action}: quedó al menos un dueño (${admins.length})`);
+    assert.ok([a.code, b.code].some((c) => c === 409 || c === 200), `${action}: ${a.code}/${b.code}`);
+  }
+});
+
+test('desactivar y reactivar también quedan en la bitácora y reactivar cierra tokens viejos', async () => {
+  const db = memoryDb();
+  await seed(db);
+  const { invites, users, auth } = load(db);
+  const pedro = await login(users, 'pedro');
+  await invites.deactivateUser(req({}, { ...asAdmin, params: { id: 'u2' } }), res());
+  await invites.reactivateUser(req({}, { ...asAdmin, params: { id: 'u2' } }), res());
+  assert.deepEqual(db.activity.map((a) => a.type), ['user_deactivated', 'user_reactivated']);
+  assert.equal(await check(auth, pedro.body.token), 401, 'el token de antes de la baja no revive');
+  assert.equal((await login(users, 'pedro')).code, 200);
+});
+
+test('no se pueden tocar cuentas de la plataforma desde una tienda', async () => {
+  const db = memoryDb();
+  await seed(db);
+  db.users.push({ _id: 'u9', username: 'ops', email: 'ops@mitiendita.mx', role: 'platform_admin', tenantId: 't1' });
+  const { invites } = load(db);
+  for (const call of [
+    (r) => invites.deactivateUser(req({}, { ...asAdmin, params: { id: 'u9' } }), r),
+    (r) => invites.changeUserRole(req({ role: 'cashier' }, { ...asAdmin, params: { id: 'u9' } }), r),
+  ]) {
+    const r = res();
+    await call(r);
+    assert.equal(r.code, 404);
+  }
+  assert.equal(db.users.find((u) => u.username === 'ops').role, 'platform_admin');
+});
+
+test('rutas retiradas: /usuarios/find (filtraba cuentas de otras tiendas), lista de espera, mesas', () => {
+  const fs = require('node:fs');
+  const usuarios = require('../routers/usuarios.router');
+  const paths = usuarios.stack.map((l) => l.route?.path).filter(Boolean);
+  assert.ok(!paths.some((p) => /find|waitlist/.test(p)), paths.join(', '));
+  for (const gone of ['routers/tables.router.js', 'routers/mesas.router.js', 'controllers/mesa.controller.js', 'controllers/tables.controller.js']) {
+    assert.equal(fs.existsSync(path.join(root, gone)), false, gone);
+  }
+  assert.ok(!fs.readFileSync(path.join(root, 'app.js'), 'utf8').includes("'/mesas'"));
+});
+
+test('las rutas de equipo exigen sesión y rol de dueño', () => {
+  const router = require('../routers/invites.router');
+  const wanted = ['/team/:id/deactivate', '/team/:id/reactivate', '/team/:id/role'];
+  for (const p of wanted) {
+    const layer = router.stack.find((l) => l.route?.path === p);
+    assert.ok(layer, p);
+    assert.equal(layer.route.methods.put, true);
+    assert.ok(layer.route.stack.length >= 5, `${p}: auth + suscripción + rol + límite + controlador`);
+  }
 });

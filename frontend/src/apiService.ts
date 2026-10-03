@@ -281,22 +281,6 @@ export const apiService = {
     return Promise.resolve(false);
   },
 
-  getTables() {
-    return axios.get('/tables').then((r) => r.data);
-  },
-  getTableById(tableId: string) {
-    return axios.get(`/tables/${tableId}`).then((r) => r.data);
-  },
-  createTable(tableDTO: Record<string, unknown>) {
-    return axios.post('/tables', tableDTO).then((r) => r.data);
-  },
-  editTable(tableId: string, tableDTO: Record<string, unknown>) {
-    return axios.put(`/tables/${tableId}`, tableDTO).then((r) => r.data);
-  },
-  deleteTable(tableId: string) {
-    return axios.delete(`/tables/${tableId}`).then((r) => r.status === 200);
-  },
-
   getWaiters() {
     return axios.get('/waiters').then((r) => r.data);
   },
@@ -308,16 +292,6 @@ export const apiService = {
   },
   deleteWaiter(cellphone: string) {
     return axios.delete(`/waiters/${cellphone}`).then((r) => r.data);
-  },
-
-  getWaitlist() {
-    return axios.get('/usuarios/waitlist/').then((r) => r.data);
-  },
-  addWaitlist(data: { nombre: string; telefono: string | number }) {
-    return axios.post('/usuarios/waitlist/add', data).then((r) => r.data);
-  },
-  deleteWaitlist(id: string | number) {
-    return axios.delete(`/usuarios/waitlist/delete/${id}`).then((r) => r.data);
   },
 
   getSettings() {
@@ -343,6 +317,10 @@ export const apiService = {
   },
   reactivateUser(id: string) {
     return axios.put(`/invites/team/${id}/reactivate`).then((r) => r.data);
+  },
+  /** Cambia el rol de una cuenta (admin | cashier); la persona vuelve a iniciar sesión. */
+  changeUserRole(id: string, role: 'admin' | 'cashier') {
+    return axios.put(`/invites/team/${id}/role`, { role }).then((r) => r.data);
   },
   revokeInvite(id: string) {
     return axios.put(`/invites/${id}/revoke`).then((r) => r.data);
