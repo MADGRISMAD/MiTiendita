@@ -101,7 +101,8 @@ const faqs = [
 
 <style scoped>
 .help {
-  min-height: 100%;
+  height: 100%;
+  overflow-y: auto;
   background: var(--timber-surface, #eef1f6);
   color: var(--timber-ink, #1a2332);
   font-family: var(--font-sans);
