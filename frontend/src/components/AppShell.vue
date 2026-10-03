@@ -21,6 +21,7 @@
         >
           <span class="dock-ico" v-html="item.icon"></span>
           {{ item.label }}
+          <em v-if="item.badge" class="nav-badge" :aria-label="`${item.badge} por responder`">{{ item.badge > 99 ? '99+' : item.badge }}</em>
         </router-link>
       </nav>
 
@@ -102,6 +103,7 @@
         exact-active-class="router-link-active"
       >
         <span class="dock-ico" v-html="item.icon"></span>
+        <em v-if="item.badge" class="nav-badge dot" :aria-label="`${item.badge} por responder`">{{ item.badge > 99 ? '99+' : item.badge }}</em>
         <span class="dock-label">{{ item.label }}</span>
       </router-link>
       <button
@@ -130,6 +132,7 @@ import { canAccessRoute, hasRole, isPlatformAdmin, isPlatformStaff } from "../au
 import { apiService, logoutSession } from "../apiService";
 import { applyBillingStatus } from "../billingStore";
 import { offlineStore } from "../offlineFlags";
+import { platformStore } from "../platform/platformStore";
 import { flushOfflineSales } from "../offlineSync";
 
 const route = useRoute();
@@ -232,19 +235,20 @@ const ico = {
   receipt: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-2.2-1.4L12 21l-3.8-1.4L6 21V3z"/><path d="M9 8h6M9 12h6"/></svg>`,
   more: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/></svg>`,
   people: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="3.2"/><path d="M22 21v-2a3.6 3.6 0 00-3-3.5"/><path d="M16 3.2a3.2 3.2 0 010 6.2"/></svg>`,
+  home: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/></svg>`,
+  inbox: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13l2.5-8h13L21 13"/><path d="M3 13v6h18v-6h-5l-1.5 2h-5L8 13H3z"/></svg>`,
 };
 
-const adminDock = [
-  { to: "/platform", name: "platform", label: "Resumen", icon: ico.cash },
-  { to: "/platform/clientes", name: "platformClients", label: "Clientes", icon: ico.products },
-  { to: "/platform/equipo", name: "platformTeam", label: "Equipo", icon: ico.people },
-  { to: "/platform/ganancias", name: "platformRevenue", label: "Ganancias", icon: ico.sell },
-  { to: "/platform/ia", name: "platformAi", label: "Gastos IA", icon: ico.spark },
-  { to: "/platform/gastos", name: "platformExpenses", label: "Gastos", icon: ico.receipt },
-];
-
+// Plataforma: soporte ve lo de atender; el admin, además, el dinero y el equipo
 const supportDock = [
+  { to: "/platform", name: "platform", label: "Hoy", icon: ico.home },
+  { to: "/platform/soporte", name: "platformSupport", label: "Soporte", icon: ico.inbox },
   { to: "/platform/clientes", name: "platformClients", label: "Clientes", icon: ico.products },
+];
+const adminDock = [
+  ...supportDock,
+  { to: "/platform/finanzas", name: "platformFinance", label: "Finanzas", icon: ico.cash },
+  { to: "/platform/equipo", name: "platformTeam", label: "Equipo", icon: ico.people },
 ];
 
 const allDock = [
@@ -264,7 +268,9 @@ const allMore = [
 
 const dock = computed(() => {
   if (!ownerMode.value) return allDock.filter((i) => canAccessRoute(i.name));
-  return isPlatformAdmin() ? adminDock : supportDock;
+  const items = isPlatformAdmin() ? adminDock : supportDock;
+  // Tickets por responder sobre «Soporte»
+  return items.map((i) => (i.name === "platformSupport" ? { ...i, badge: platformStore.waiting || 0 } : i));
 });
 const moreItems = computed(() => allMore.filter((i) => canAccessRoute(i.name)));
 // "Más" vive con las demás pestañas cuando caben (celular y tablet)
@@ -298,6 +304,28 @@ onUnmounted(() => clearInterval(timer));
 </script>
 
 <style scoped>
+.nav-badge {
+  min-width: 1.15rem;
+  height: 1.15rem;
+  margin-left: 0.35rem;
+  padding: 0 0.3rem;
+  border-radius: 99px;
+  background: var(--timber-danger);
+  color: #fff;
+  font-size: 0.68rem;
+  font-style: normal;
+  font-weight: 800;
+  line-height: 1.15rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.nav-badge.dot {
+  position: absolute;
+  top: 0.15rem;
+  left: calc(50% + 0.55rem);
+  margin: 0;
+}
+.dock-item { position: relative; }
 .more-wa {
   margin: 0.4rem 0;
 }

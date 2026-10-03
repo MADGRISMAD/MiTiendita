@@ -87,7 +87,7 @@ export const roleHome = {
   admin: "pos",
   cashier: "pos",
   platform_admin: "platform",
-  platform_support: "platformClients",
+  platform_support: "platform",
 };
 
 export const routeRoles = {
@@ -99,12 +99,12 @@ export const routeRoles = {
   settings: ["admin"],
   setup: ["admin"],
   billing: ["admin", "cashier"],
-  platform: ["platform_admin"],
+  platform: ["platform_admin", "platform_support"],
+  platformSupport: ["platform_admin", "platform_support"],
   platformClients: ["platform_admin", "platform_support"],
+  platformClient: ["platform_admin", "platform_support"],
+  platformFinance: ["platform_admin"],
   platformTeam: ["platform_admin"],
-  platformRevenue: ["platform_admin"],
-  platformAi: ["platform_admin"],
-  platformExpenses: ["platform_admin"],
   printOrder: ["admin", "cashier"],
   printOffline: ["admin", "cashier"],
   printCash: ["admin", "cashier"],

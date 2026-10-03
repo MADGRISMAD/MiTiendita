@@ -9,6 +9,8 @@ on:
       - "frontend/src/escpos.js"
       - "frontend/src/bulk.js"
       - "frontend/src/passwordPolicy.js"
+      - "frontend/src/platform/format.js"
+      - "frontend/src/platform/attention.js"
       - "package.json"
       - "package-lock.json"
     branches:
@@ -21,6 +23,8 @@ on:
       - "frontend/src/escpos.js"
       - "frontend/src/bulk.js"
       - "frontend/src/passwordPolicy.js"
+      - "frontend/src/platform/format.js"
+      - "frontend/src/platform/attention.js"
       - "package.json"
       - "package-lock.json"
     branches:

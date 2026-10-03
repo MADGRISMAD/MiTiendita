@@ -462,6 +462,19 @@ export const apiService = {
   platformSendClientMail(id: string, payload: { to?: string; subject?: string; message: string; ticketId?: string }) {
     return axios.post(`/platform/tenants/${id}/mail`, payload).then((r) => r.data);
   },
+  /** Bandeja de soporte: tickets de todos los clientes que le tocan a quien pregunta. */
+  platformSupport(params: { status?: 'open' | 'answered' | 'all'; q?: string; limit?: number } = {}) {
+    return axios.get('/platform/support', { params }).then((r) => r.data);
+  },
+  platformTenantActivity(id: string) {
+    return axios.get(`/platform/tenants/${id}/activity`).then((r) => r.data);
+  },
+  platformActivity(limit = 60) {
+    return axios.get('/platform/activity', { params: { limit } }).then((r) => r.data);
+  },
+  platformResetStaffMfa(id: string) {
+    return axios.post(`/platform/staff/${id}/reset-mfa`).then((r) => r.data);
+  },
   platformInbox() {
     return axios.get('/platform/inbox').then((r) => r.data);
   },
