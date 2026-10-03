@@ -244,3 +244,9 @@ a.adm-kpi:hover { border-color: color-mix(in srgb, var(--timber-primary) 40%, va
 .adm.pf { min-width: 0; max-width: 100%; }
 .adm.pf > * { min-width: 0; }
 .pf-tools .adm-tabs { flex: 0 1 auto; min-width: 0; }
+
+/* Las pestañas ocupan todo el ancho y se reparten parejo */
+.pf .adm-tabs { width: 100%; max-width: none; flex: 1 1 100%; }
+.pf .adm-tabs button { flex: 1 1 0; justify-content: center; white-space: nowrap; }
+.pf .adm-tabs.main button { flex: 1 1 0; }
+.pf-tools .adm-search { max-width: none; }
