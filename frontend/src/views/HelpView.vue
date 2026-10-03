@@ -1,40 +1,44 @@
 <template>
-  <div class="help">
-    <header class="nav">
-      <router-link :to="loggedIn ? '/pos' : '/'" class="brand">
-        <img src="/logo.svg" alt="" width="32" height="32" />
-        <BrandName tone="dark" />
-      </router-link>
-      <router-link :to="loggedIn ? '/pos' : '/register'" class="cta">
-        {{ loggedIn ? "Volver a vender" : "Probar gratis" }}
-      </router-link>
-    </header>
-
-    <article class="doc">
+  <PublicPage>
+    <template #hero>
       <p class="kicker">Ayuda</p>
-      <h1>Preguntas frecuentes</h1>
+      <h1>¿En qué te ayudamos?</h1>
       <p class="lede">
-        Lo básico para cobrar sin broncas. ¿Tu cajero es nuevo? Imprímele la guía de una página.
+        Respuestas rápidas para cobrar sin broncas. ¿Tu cajero es nuevo? Imprímele la guía de una página.
       </p>
-      <a class="guide" href="/guia-cajero.pdf" download>Descargar guía de cajero (PDF)</a>
+    </template>
 
-      <WhatsAppHelp class="wa" />
+    <div class="actions">
+      <a class="card act" href="/guia-cajero.pdf" download>
+        <span class="act-ico"><PosIcon name="receipt" :size="22" /></span>
+        <span class="act-copy">
+          <strong>Guía de cajero</strong>
+          <small>Una página en PDF para pegar junto a la caja</small>
+        </span>
+        <PosIcon name="chevron" :size="18" />
+      </a>
+      <div class="card wa-card"><WhatsAppHelp /></div>
+    </div>
 
+    <section class="card faqs" aria-labelledby="faq-title">
+      <h2 id="faq-title">Preguntas frecuentes</h2>
       <details v-for="f in faqs" :key="f.q" class="faq">
-        <summary>{{ f.q }}</summary>
-        <p v-for="(p, i) in f.a" :key="i">{{ p }}</p>
+        <summary>
+          <span>{{ f.q }}</span>
+          <PosIcon name="chevron" :size="18" class="chev" />
+        </summary>
+        <div class="faq-body">
+          <p v-for="(p, i) in f.a" :key="i">{{ p }}</p>
+        </div>
       </details>
-    </article>
-  </div>
+    </section>
+  </PublicPage>
 </template>
 
 <script setup>
-import { computed } from "vue";
-import BrandName from "../components/BrandName.vue";
+import PublicPage from "../components/PublicPage.vue";
+import PosIcon from "../components/PosIcon.js";
 import WhatsAppHelp from "../components/WhatsAppHelp.vue";
-import { authStore } from "../authStore";
-
-const loggedIn = computed(() => Boolean(authStore.token));
 
 const faqs = [
   {
@@ -100,85 +104,60 @@ const faqs = [
 </script>
 
 <style scoped>
-.help {
-  height: 100%;
-  overflow-y: auto;
-  background: var(--timber-surface, #eef1f6);
-  color: var(--timber-ink, #1a2332);
-  font-family: var(--font-sans);
+.card {
+  background: var(--timber-panel);
+  border: 1px solid var(--timber-line);
+  border-radius: var(--timber-radius);
+  box-shadow: var(--timber-shadow);
 }
-.nav {
+.actions {
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+  margin-bottom: 1rem;
+}
+.act {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 0.7rem 1.1rem;
-  background: var(--timber-topbar, #123056);
-}
-.brand {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  color: #fff;
+  gap: 0.85rem;
+  padding: 1rem 1.1rem;
+  color: inherit;
   text-decoration: none;
-  font-weight: 800;
+  transition: transform 0.15s, border-color 0.15s;
 }
-.cta {
-  color: #1a1208;
-  background: #e08a1e;
-  text-decoration: none;
-  font-weight: 800;
-  border-radius: 999px;
-  padding: 0.45rem 0.9rem;
-  font-size: 0.88rem;
-}
-.doc {
-  max-width: 40rem;
-  margin: 0 auto;
-  padding: 2rem 1.15rem 3rem;
-}
-.kicker {
-  margin: 0;
-  font-size: 0.72rem;
-  font-weight: 800;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: #1e5aa8;
-}
-h1 {
-  margin: 0.25rem 0 0;
-  font-size: 1.8rem;
-}
-.lede {
-  color: var(--timber-muted, #64748b);
-  line-height: 1.5;
-}
-.guide {
-  display: inline-block;
-  margin: 0.25rem 0 1.25rem;
-  color: #fff;
-  background: #1e5aa8;
-  text-decoration: none;
-  font-weight: 800;
-  border-radius: 0.6rem;
-  padding: 0.6rem 1rem;
-}
-.wa {
-  margin: 0 0 1.25rem;
-}
-.faq {
-  background: #fff;
-  border: 1px solid rgba(0, 0, 0, 0.08);
+.act:hover { transform: translateY(-2px); border-color: var(--timber-primary); }
+.act-ico {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 2.6rem;
+  height: 2.6rem;
   border-radius: 0.75rem;
-  padding: 0 1rem;
-  margin-bottom: 0.6rem;
+  background: var(--timber-primary-soft);
+  color: var(--timber-primary);
 }
+.act-copy { flex: 1; display: grid; gap: 0.1rem; }
+.act-copy small { color: var(--timber-muted); }
+.wa-card { display: grid; align-items: center; padding: 1rem 1.1rem; }
+
+.faqs { padding: 0.6rem 1.1rem 0.9rem; }
+.faqs h2 { margin: 0.8rem 0 0.4rem; font-size: 1.15rem; font-weight: 800; }
+.faq { border-bottom: 1px solid var(--timber-line); }
+.faq:last-child { border-bottom: 0; }
 .faq summary {
-  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.95rem 0;
   font-weight: 700;
-  padding: 0.85rem 0;
+  cursor: pointer;
+  list-style: none;
 }
-.faq p {
-  margin: 0 0 0.75rem;
-  line-height: 1.55;
-}
+.faq summary::-webkit-details-marker { display: none; }
+.faq summary:hover { color: var(--timber-primary); }
+.chev { flex: none; color: var(--timber-muted); transition: transform 0.2s; }
+.faq[open] .chev { transform: rotate(90deg); color: var(--timber-primary); }
+.faq-body { padding: 0 0 0.9rem; }
+.faq-body p { margin: 0 0 0.6rem; line-height: 1.6; color: var(--timber-muted); max-width: 44rem; }
 </style>
