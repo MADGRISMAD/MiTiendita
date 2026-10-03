@@ -1,4 +1,5 @@
 // Datos del corte de caja + impresión directa sin abrir otra ventana.
+// Colócalo en: src/cashCloseData.js
 import { apiService } from "./apiService";
 import { storeClock, storeParts } from "./storeTime";
 import { venueStore } from "./venueStore";
@@ -23,8 +24,25 @@ const shortDate = (d) => {
 };
 const clock = (d) => storeClock(d, venueStore.timezone) || "—";
 
-/** Arma el objeto que espera buildCashClose() (escpos.js). */
-export function buildCashCloseData(session, orders, printedAt = new Date()) {
+// El fondo inicial puede venir con distintos nombres según el endpoint
+const OPENING_KEYS = [
+  "openingFloat", "opening_float", "openingAmount", "openingBalance",
+  "initialFloat", "initialCash", "startingCash", "float", "fondoInicial", "fondo",
+];
+function pickOpening(s, hint) {
+  for (const k of OPENING_KEYS) {
+    const v = Number(s?.[k]);
+    if (Number.isFinite(v) && v > 0) return v;
+  }
+  const h = Number(hint);
+  return Number.isFinite(h) && h > 0 ? h : 0;
+}
+
+/**
+ * Arma el objeto que espera buildCashClose() (escpos.js).
+ * hint.openingFloat: fondo conocido por la pantalla (respaldo si el turno no lo trae).
+ */
+export function buildCashCloseData(session, orders, printedAt = new Date(), hint = {}) {
   const s = session;
   const closed = Boolean(s.closedAt) || s.status === "closed";
   const paid = orders.filter((o) => o.paymentStatus === "paid");
@@ -47,8 +65,12 @@ export function buildCashCloseData(session, orders, printedAt = new Date()) {
     local.total += amount;
   }
 
-  const opening = Number(s.openingFloat || 0);
   const cashRefunds = Number(s.cashRefunds || 0);
+  let opening = pickOpening(s, hint.openingFloat);
+  // Último recurso: Debe haber (del servidor) - ventas en efectivo + devoluciones
+  if (!opening && closed && s.expectedCash != null) {
+    opening = Math.max(0, Math.round((Number(s.expectedCash) - local.cash + cashRefunds) * 100) / 100);
+  }
   const expectedCash =
     closed && s.expectedCash != null ? Number(s.expectedCash) : opening + local.cash - cashRefunds;
   const cashSales = expectedCash - opening + cashRefunds;
@@ -141,12 +163,16 @@ export function buildCashCloseData(session, orders, printedAt = new Date()) {
 }
 
 /** Descarga el turno y sus tickets y lo imprime directo en la térmica. Lanza error si falla. */
-export async function printCashCloseById(id) {
+export async function printCashCloseById(id, hint = {}) {
   const sid = String(id);
-  const session = await apiService.getCashSessionById(sid);
-  const all = await apiService.getOrders().catch(() => []);
-  const orders = (Array.isArray(all) ? all : [])
-    .filter((o) => String(o.cashSessionId || "") === sid)
-    .sort((x, y) => new Date(x.paidAt || x.createdAt) - new Date(y.paidAt || y.createdAt));
-  await printCashCloseDirect(buildCashCloseData(session, orders));
+  // El backend responde { session, totals, orders }; por si apiService ya la desenvuelve, se aceptan ambas formas
+  const raw = await apiService.getCashSessionById(sid);
+  const session = raw?.session || raw;
+  let orders = Array.isArray(raw?.orders) ? raw.orders : null;
+  if (!orders) {
+    const all = await apiService.getOrders().catch(() => []);
+    orders = (Array.isArray(all) ? all : []).filter((o) => String(o.cashSessionId || "") === sid);
+  }
+  orders = [...orders].sort((x, y) => new Date(x.paidAt || x.createdAt) - new Date(y.paidAt || y.createdAt));
+  await printCashCloseDirect(buildCashCloseData(session, orders, new Date(), hint));
 }
