@@ -10,14 +10,30 @@
         <small v-if="session">{{ verdict.title }} · {{ shortDate(session.closedAt || session.openedAt) }}</small>
       </div>
       <div class="tk-seg" role="group" aria-label="Ancho del papel">
-        <button type="button" :aria-pressed="paper === '80'" @click="setPaper('80')">80<span class="tk-mm"> mm</span></button>
-        <button type="button" :aria-pressed="paper === '58'" @click="setPaper('58')">58<span class="tk-mm"> mm</span></button>
+        <button type="button" :aria-pressed="paper === '80'" @click="changePaper('80')">80<span class="tk-mm"> mm</span></button>
+        <button type="button" :aria-pressed="paper === '58'" @click="changePaper('58')">58<span class="tk-mm"> mm</span></button>
       </div>
-      <button type="button" class="tk-btn primary tk-print" :disabled="!session" @click="print">
+      <button
+        v-if="directPrinting() && !printerStore.connected"
+        type="button"
+        class="tk-btn"
+        :disabled="printerStore.busy"
+        @click="pairAndPrint"
+      >
+        Conectar impresora
+      </button>
+      <button
+        type="button"
+        class="tk-btn primary tk-print"
+        :disabled="!session || printerStore.busy"
+        @click="onPrint"
+      >
         <PosIcon name="printer" :size="18" />
-        Imprimir
+        {{ printerStore.busy ? 'Imprimiendo…' : 'Imprimir' }}
       </button>
     </div>
+
+    <p v-if="printMsg" class="tk-state err">{{ printMsg }}</p>
 
     <div class="tk-stage">
       <div class="tk-sheet">
@@ -153,6 +169,13 @@ import { storeClock, storeParts } from "../storeTime";
 import { apiService } from "../apiService";
 import { venueStore, fetchVenueSettings } from "../venueStore";
 import { useTicketShell, folioOf } from "../ticketShell";
+import {
+  printerStore,
+  directPrinting,
+  connectPrinter,
+  savePrinterSettings,
+  printCashCloseDirect,
+} from "../thermalPrinter";
 import PosIcon from "../components/PosIcon.js";
 import TicketHeader from "../components/TicketHeader.vue";
 import TicketBarcode from "../components/TicketBarcode.vue";
@@ -164,6 +187,7 @@ const session = ref(null);
 const orders = ref([]);
 const loading = ref(true);
 const err = ref("");
+const printMsg = ref("");
 const printedAt = new Date();
 
 const folio = computed(() => folioOf(session.value?.id));
@@ -292,6 +316,81 @@ function dayName(d) {
   return p ? DAYS[p.weekday] : "Fecha";
 }
 
+// —— Impresión directa ——
+
+// El ancho elegido aquí también es el de la impresora
+function changePaper(p) {
+  setPaper(p);
+  savePrinterSettings({ paper: p });
+}
+
+function corteData() {
+  const s = session.value;
+  return {
+    closed: closed.value,
+    folio: folio.value,
+    dateText: shortDate(s.openedAt),
+    openedClock: clock(s.openedAt),
+    openedBy: s.openedBy || "-",
+    closedClock: clock(s.closedAt || printedAt),
+    closedBy: s.closedBy || "-",
+    deliveredBy: s.closedBy || s.openedBy || "",
+    duration: duration.value,
+    salesCount: paidOrders.value.length,
+    articles: articles.value,
+    average: average.value,
+    methods: methods.value.map((m) => ({ label: m.label, amount: m.amount })),
+    totalSold: totalSold.value,
+    taxCollected: taxCollected.value,
+    cardExtraTotal: cardExtraTotal.value,
+    voidedCount: voided.value.length,
+    voidedTotal: voidedTotal.value,
+    opening: opening.value,
+    cashSales: cashSales.value,
+    cashRefunds: cashRefunds.value,
+    expectedCash: expectedCash.value,
+    countedCash: Number(s.countedCash || 0),
+    verdictWord: verdict.value.word,
+    verdictSub: verdict.value.sub,
+    notes: s.notes || "",
+    tickets: orders.value.map((o) => ({
+      clock: clock(o.paidAt || o.createdAt),
+      folio: folioOf(o.id),
+      kind: isVoid(o) ? "DEV" : o.paymentStatus === "paid" ? methodShort(o.paymentMethod) : "PEND",
+      amount: num(o.total),
+      void: isVoid(o),
+    })),
+    printedText: `${shortDate(printedAt)} ${clock(printedAt)}`,
+  };
+}
+
+async function printDirect() {
+  printMsg.value = "";
+  try {
+    await printCashCloseDirect(corteData());
+  } catch (e) {
+    printMsg.value = e?.message || "No se pudo imprimir.";
+  }
+}
+
+async function onPrint() {
+  if (!session.value) return;
+  if (directPrinting()) await printDirect();
+  else print(); // modo «Navegador»: diálogo normal
+}
+
+// Primera vez en este equipo: abre el selector (requiere clic) y luego imprime
+async function pairAndPrint() {
+  printMsg.value = "";
+  try {
+    await connectPrinter({ prompt: true });
+  } catch (e) {
+    printMsg.value = e?.message || "No se pudo conectar la impresora.";
+    return;
+  }
+  await printDirect();
+}
+
 onMounted(async () => {
   try {
     await fetchVenueSettings().catch(() => {});
@@ -301,8 +400,16 @@ onMounted(async () => {
     orders.value = (Array.isArray(all) ? all : [])
       .filter((o) => String(o.cashSessionId || "") === id)
       .sort((a, b) => new Date(a.paidAt || a.createdAt) - new Date(b.paidAt || b.createdAt));
+
+    if (directPrinting()) {
+      setPaper(printerStore.paper);
+      // Reconexión silenciosa si la impresora ya tiene permiso
+      await connectPrinter({ prompt: false }).catch(() => {});
+    }
+
     if (route.query.autoprint === "1") {
-      setTimeout(() => window.print(), 400);
+      if (directPrinting()) setTimeout(printDirect, 300);
+      else setTimeout(() => window.print(), 400);
     }
   } catch (e) {
     const msg = e?.response?.data;

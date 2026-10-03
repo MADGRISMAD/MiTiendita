@@ -24,7 +24,7 @@ export function encodeText(text) {
     else if (PC850[ch] != null) out.push(PC850[ch]);
     else if (LOOKALIKE[ch] != null) for (const c of LOOKALIKE[ch]) out.push(c.charCodeAt(0));
     else {
-      const plain = ch.normalize("NFD").replace(/[̀-ͯ]/g, "");
+      const plain = ch.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
       const c = plain.charCodeAt(0);
       out.push(plain && c >= 0x20 && c < 0x7f ? c : 0x3f);
     }
@@ -208,6 +208,100 @@ export function buildReceipt(t, { cols = 48, openDrawer = false } = {}) {
     p.line("Si requiere factura, solicítela en caja.");
   }
   p.feed(1).line("Hecho con Mi Tiendita").align("left").feed(3).cut();
+  return p.build();
+}
+
+/**
+ * Corte de caja. `t` trae todo calculado (lo arma PrintCashCloseView → corteData()):
+ * { shop, kind, address, phone, closed, folio, dateText, openedClock, openedBy, closedClock, closedBy,
+ *   deliveredBy, duration, salesCount, articles, average, methods: [{ label, amount }], totalSold,
+ *   taxCollected, cardExtraTotal, voidedCount, voidedTotal, opening, cashSales, cashRefunds,
+ *   expectedCash, countedCash, verdictWord, verdictSub, notes,
+ *   tickets: [{ clock, folio, kind, amount, void }], printedText }
+ */
+export function buildCashClose(t, { cols = 48 } = {}) {
+  const p = new EscPos({ cols });
+  const half = Math.floor(cols / 2);
+  const section = (title) => {
+    p.feed(1).bold().line(String(title).toUpperCase()).bold(false).rule();
+  };
+
+  p.init();
+
+  // Encabezado
+  p.align("center").bold().size(2).wrapped(String(t.shop || "Mi Tiendita").toUpperCase(), { cols: half });
+  p.size(1).bold(false);
+  if (t.kind) p.line(t.kind);
+  if (t.address) p.wrapped(t.address);
+  if (t.phone) p.line(`Tel. ${t.phone}`);
+  p.align("left").rule("=");
+
+  p.align("center").bold().size(2).wrapped("CORTE DE CAJA", { cols: half });
+  p.size(1).line(t.closed ? "Z - FINAL" : "X - PARCIAL").bold(false);
+  p.align("left").rule("=");
+
+  p.lr("Turno No.", t.folio || "");
+  p.lr("Fecha", t.dateText || "");
+  p.lr("Abrió", `${t.openedClock} ${t.openedBy}`);
+  p.lr(t.closed ? "Cerró" : "Corte", `${t.closedClock} ${t.closed ? t.closedBy : "Caja abierta"}`);
+  if (t.duration) p.lr("Duración", t.duration);
+
+  // Resumen
+  section("Resumen");
+  p.lr("Ventas", String(t.salesCount));
+  p.lr("Artículos", String(t.articles));
+  p.lr("Promedio por venta", money(t.average));
+
+  // Formas de pago
+  section("Ventas por forma de pago");
+  for (const m of t.methods || []) p.lr(m.label, money(m.amount));
+  p.rule();
+  p.bold().size(2);
+  p.lines(leftRight("VENDIDO", money(t.totalSold), half));
+  p.size(1).bold(false);
+  p.lr("IVA incluido", money(t.taxCollected));
+  if (Number(t.cardExtraTotal)) p.lr("Comisiones por tarjeta", money(t.cardExtraTotal));
+  if (t.voidedCount) p.lr(`Devueltas o canceladas (${t.voidedCount})`, money(t.voidedTotal));
+
+  // Cuadre del cajón
+  section("Cuadre del cajón");
+  p.lr("  Fondo inicial", money(t.opening));
+  p.lr("+ Ventas en efectivo", money(t.cashSales));
+  if (Number(t.cashRefunds)) p.lr("- Devoluciones en efectivo", `-${money(t.cashRefunds)}`);
+  p.rule();
+  p.bold().lr("= Debe haber", money(t.expectedCash)).bold(false);
+  if (t.closed) p.bold().lr("  Se contó", money(t.countedCash)).bold(false);
+
+  // Veredicto
+  p.feed(1).align("center").bold().size(2).wrapped(`[ ${String(t.verdictWord || "").toUpperCase()} ]`, { cols: half });
+  p.size(1);
+  if (t.verdictSub) p.line(t.verdictSub);
+  p.bold(false).align("left");
+
+  if (t.notes) {
+    section("Observaciones");
+    p.wrapped(t.notes);
+  }
+
+  // Tickets del turno
+  if ((t.tickets || []).length) {
+    section(`Tickets del turno · ${t.tickets.length}`);
+    for (const k of t.tickets) {
+      p.lr(`${k.clock} #${k.folio} ${k.kind}`, k.void ? `(${k.amount})` : k.amount);
+    }
+  }
+
+  // Firmas
+  const w = Math.floor((cols - 4) / 2);
+  const pair = (a, b) => `${String(a).slice(0, w).padEnd(w)}    ${String(b).slice(0, w)}`;
+  p.feed(3);
+  p.line("-".repeat(w) + "    " + "-".repeat(w));
+  p.line(pair("Entregó", "Recibió"));
+  p.line(pair(String(t.deliveredBy || "").toUpperCase(), ""));
+
+  p.feed(1).align("center");
+  if (t.printedText) p.line(`Impreso ${t.printedText}`);
+  p.line("Hecho con Mi Tiendita").align("left").feed(3).cut();
   return p.build();
 }
 
