@@ -75,6 +75,16 @@
                 <button
                   v-if="!u.disabled"
                   type="button"
+                  class="adm-btn sm"
+                  :disabled="busyId === u.id"
+                  :aria-label="roleButtonLabel(u)"
+                  @click="changeRole(u)"
+                >
+                  {{ confirmId === `role${u.id}` ? '¿Confirmar?' : u.role === 'admin' ? 'Hacer cajero' : 'Hacer dueño' }}
+                </button>
+                <button
+                  v-if="!u.disabled"
+                  type="button"
                   class="adm-btn sm danger-ghost"
                   :disabled="busyId === u.id"
                   :aria-label="confirmId === `x${u.id}` ? `¿Desactivar a ${displayName(u)}? Toca otra vez para confirmar` : `Desactivar a ${displayName(u)}`"
@@ -91,7 +101,8 @@
           <p v-else-if="!loading.team" class="adm-hint">No se pudo leer el equipo.</p>
           <p class="adm-hint foot">
             Si alguien se va, desactívalo: deja de poder entrar y cobrar al instante, aunque tenga la sesión abierta.
-            Libera su lugar en el plan y puedes reactivarlo cuando quieras.
+            Libera su lugar en el plan y puedes reactivarlo cuando quieras. Al cambiar un rol, la persona vuelve a iniciar sesión.
+            Siempre debe quedar al menos un dueño activo.
           </p>
         </div>
 
@@ -442,6 +453,31 @@ function lastAccess(u) {
   if (days === 1) return "entró ayer";
   if (days < 30) return `entró hace ${days} días`;
   return `entró el ${d.toLocaleDateString("es-MX", { day: "numeric", month: "short", year: "numeric" })}`;
+}
+function roleButtonLabel(u) {
+  const name = displayName(u);
+  const to = u.role === 'admin' ? 'cajero' : 'dueño';
+  return confirmId.value === `role${u.id}`
+    ? `¿Confirmar que ${name} pase a ${to}? Toca otra vez para confirmar`
+    : `Hacer ${to} a ${name}`;
+}
+async function changeRole(u) {
+  const to = u.role === 'admin' ? 'cashier' : 'admin';
+  if (needsConfirm(`role${u.id}`)) return;
+  busyId.value = u.id;
+  try {
+    await apiService.changeUserRole(u.id, to);
+    say(
+      to === 'admin'
+        ? `${displayName(u)} ahora es dueño: ve y cambia todo. Tendrá que volver a iniciar sesión.`
+        : `${displayName(u)} ahora es cajero. Tendrá que volver a iniciar sesión.`
+    );
+    await loadTeam();
+  } catch (e) {
+    error.value = errText(e, "No se pudo cambiar el rol.");
+  } finally {
+    busyId.value = "";
+  }
 }
 async function deactivate(u) {
   if (needsConfirm(`x${u.id}`)) return;

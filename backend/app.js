@@ -35,8 +35,6 @@ app.use(async (_req, _res, next) => {
 app.use(limits.global());
 
 app.use('/usuarios', require('./routers/usuarios.router'));
-app.use('/mesas', require('./routers/tables.router'));
-app.use('/tables', require('./routers/tables.router'));
 app.use('/menus', require('./routers/menus.router'));
 app.use('/foods', require('./routers/foods.router'));
 app.use('/waiters', require('./routers/meseros.router'));

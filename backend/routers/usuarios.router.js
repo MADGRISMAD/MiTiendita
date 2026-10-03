@@ -2,7 +2,7 @@ const router = require('express').Router();
 const multer = require('multer');
 const upload = multer();
 const userController = require('../controllers/user.controller');
-const { requireAuth, requireActiveSubscription, requireRoles } = require('../middleware/auth.middleware');
+const { requireAuth } = require('../middleware/auth.middleware');
 const { limits } = require('../services/rate-limit.service');
 
 router.post('/register', limits.register(), upload.none(), userController.CreateUser);
@@ -21,30 +21,5 @@ router.post('/mfa/setup', limits.mfa(), userController.MfaSetup);
 router.post('/mfa/enable', limits.mfa(), userController.MfaEnable);
 router.post('/mfa/disable', requireAuth, limits.mfa(), userController.MfaDisable);
 
-router.get('/find', requireAuth, requireActiveSubscription, requireRoles('admin'), upload.none(), userController.FindUserByEmail);
-router.get(
-  '/waitlist/',
-  requireAuth,
-  requireActiveSubscription,
-  requireRoles('admin'),
-  upload.none(),
-  userController.GetWaitList
-);
-router.post(
-  '/waitlist/add',
-  requireAuth,
-  requireActiveSubscription,
-  requireRoles('admin'),
-  upload.none(),
-  userController.AddWaitList
-);
-router.delete(
-  '/waitlist/delete/:id',
-  requireAuth,
-  requireActiveSubscription,
-  requireRoles('admin'),
-  upload.none(),
-  userController.DeleteWaitList
-);
 
 module.exports = router;
