@@ -97,6 +97,21 @@ function httpError(status, message) {
   return err;
 }
 
+/**
+ * Guarda en cada línea el costo del producto al momento del cobro (0 = costo desconocido),
+ * para que cambiar el costo después no altere la utilidad del histórico.
+ */
+async function withUnitCosts(items, tenantId) {
+  return Promise.all(
+    items.map(async (item) => {
+      if (item.unitCost != null) return item;
+      const foodId = item.foodId || item.food;
+      const food = foodId ? await db.GetFoodById(foodId, tenantId) : null;
+      return { ...item, unitCost: Math.max(0, Number(food?.cost) || 0) };
+    })
+  );
+}
+
 async function settlePayment(req, existing, body, { requireCash = true, paidAt } = {}) {
   const method = body?.paymentMethod || 'cash';
   if (!paymentMethods.includes(method)) {
@@ -178,7 +193,7 @@ async function settlePayment(req, existing, body, { requireCash = true, paidAt }
       inventoryApplied: Boolean(settings?.inventoryEnabled),
       stockReview: stockShortages.length > 0,
       stockShortages,
-      items: existing.items || [],
+      items: await withUnitCosts(existing.items || [], req.tenantId),
     },
     req.tenantId
   );

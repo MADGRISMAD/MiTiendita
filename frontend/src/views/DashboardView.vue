@@ -7,6 +7,13 @@
           <p>{{ rangeText }}<span class="hide-mobile"> · {{ businessName }}</span></p>
         </div>
         <div class="rep-actions">
+          <select v-model="csvSep" class="inp csv-sep hide-mobile" aria-label="Separador del CSV">
+            <option value=",">CSV con comas</option>
+            <option value=";">CSV con punto y coma</option>
+          </select>
+          <button type="button" class="btn hide-mobile" :disabled="!orders.length" @click="exportDaily">
+            <PosIcon name="receipt" :size="18" /> Resumen diario
+          </button>
           <button type="button" class="btn hide-mobile" :disabled="!orders.length" @click="exportSales">
             <PosIcon name="receipt" :size="18" /> Exportar ventas
           </button>
@@ -106,6 +113,31 @@
         </div>
       </section>
 
+      <!-- De la venta bruta a la utilidad -->
+      <section class="card" :class="{ busy: loading }">
+        <div class="card-head">
+          <div>
+            <h2>Cuentas del periodo</h2>
+            <p>De la venta bruta a la utilidad</p>
+          </div>
+        </div>
+        <dl class="books">
+          <div><dt>Ventas brutas</dt><dd>{{ money(cur.gross) }}</dd></div>
+          <div><dt>Descuentos</dt><dd>− {{ money(cur.discount) }}</dd></div>
+          <div><dt>IVA</dt><dd>− {{ money(cur.tax) }}</dd></div>
+          <div class="sum"><dt>Ventas netas</dt><dd>{{ money(cur.net) }}</dd></div>
+          <template v-if="isAdmin">
+            <div><dt>Costo</dt><dd>{{ profit.covered ? `− ${money(profit.cost)}` : '—' }}</dd></div>
+            <div class="sum"><dt>Utilidad bruta</dt><dd>{{ profit.covered ? money(profit.amount) : '—' }}</dd></div>
+            <div><dt>Margen</dt><dd>{{ profit.covered ? `${Math.round(profit.margin * 100)}%` : '—' }}</dd></div>
+          </template>
+        </dl>
+        <p v-if="isAdmin && profit.covered && profit.coverage < 0.995" class="books-note">
+          El costo se conoce en el {{ Math.round(profit.coverage * 100) }}% de la venta; el resto no entra en la utilidad.
+        </p>
+        <p v-else-if="isAdmin && !profit.covered && cur.count" class="books-note">Captura el costo en Productos para ver la utilidad.</p>
+      </section>
+
       <div class="row wn">
         <!-- Ventas por hora o por día -->
         <section class="card" :class="{ busy: loading }">
@@ -180,6 +212,7 @@
             <div class="seg" role="group" aria-label="Ordenar por">
               <button type="button" :aria-pressed="topBy === 'money'" @click="topBy = 'money'">Dinero</button>
               <button type="button" :aria-pressed="topBy === 'qty'" @click="topBy = 'qty'">Unidades</button>
+              <button v-if="isAdmin" type="button" :aria-pressed="topBy === 'profit'" @click="topBy = 'profit'">Ganancia</button>
             </div>
           </div>
           <ol v-if="topList.length" class="top">
@@ -188,16 +221,17 @@
               <div class="top-main">
                 <div class="top-line">
                   <strong>{{ p.name }}</strong>
-                  <b>{{ topBy === 'qty' ? qty(p.qty) : money(p.revenue) }}</b>
+                  <b>{{ topBy === 'qty' ? qty(p.qty) : topBy === 'profit' ? money(p.profit) : money(p.revenue) }}</b>
                 </div>
                 <div class="meter" aria-hidden="true"><i :style="{ width: `${p.share}%` }"></i></div>
                 <small>
-                  {{ topBy === 'qty' ? money(p.revenue) : `${qty(p.qty)} vendidos` }} · {{ p.tickets }} {{ p.tickets === 1 ? 'ticket' : 'tickets' }}
-                  <template v-if="isAdmin && p.costKnown"> · ganas {{ money(p.profit) }} ({{ p.margin }}%)</template>
+                  {{ topBy === 'qty' ? money(p.revenue) : topBy === 'profit' ? `${p.margin}% de margen · ${money(p.revenue)} vendidos` : `${qty(p.qty)} vendidos` }} · {{ p.tickets }} {{ p.tickets === 1 ? 'ticket' : 'tickets' }}
+                  <template v-if="isAdmin && p.costKnown && topBy !== 'profit'"> · ganas {{ money(p.profit) }} ({{ p.margin }}%)</template>
                 </small>
               </div>
             </li>
           </ol>
+          <p v-else-if="topBy === 'profit' && products.length" class="empty">Captura el costo en Productos para ver la ganancia por producto.</p>
           <p v-else class="empty">Aún no hay productos vendidos {{ periodPhrase }}.</p>
           <div v-if="products.length" class="card-foot">
             <button v-if="products.length > topLimit" type="button" class="link" @click="topLimit += 10">Ver 10 más</button>
@@ -659,6 +693,9 @@ function summarize(list) {
     count: paid.length,
     avg: paid.length ? total / paid.length : 0,
     tax: paid.reduce((s, o) => s + Number(o.tax || 0), 0),
+    gross: paid.reduce((s, o) => s + Number(o.subtotal || 0), 0),
+    discount: paid.reduce((s, o) => s + Number(o.discountAmount || 0), 0),
+    net: paid.reduce((s, o) => s + Number(o.subtotal || 0) - Number(o.discountAmount || 0) - Number(o.tax || 0), 0),
     // Lo que la tienda cobró de más por pagos con tarjeta (no es IVA)
     cardFees: paid.reduce((s, o) => s + Number(o.cardExtraTax || 0), 0),
     articles: paid.reduce((s, o) => s + articlesOf(o), 0),
@@ -699,10 +736,17 @@ function lineAmounts(o) {
   const rate = rateOf(o.taxRate);
   const subtotal = Number(o.subtotal || 0);
   const factor = subtotal > 0 ? Math.max(0, subtotal - Number(o.discountAmount || 0)) / subtotal : 1;
-  return (o.items || []).map((it) => ({
-    it,
-    amount: lineBreakdown(it.price, it.quantity, it.priceIncludesTax, rate).gross * factor,
-  }));
+  return (o.items || []).map((it) => {
+    const b = lineBreakdown(it.price, it.quantity, it.priceIncludesTax, rate);
+    return { it, amount: b.gross * factor, net: b.net * factor };
+  });
+}
+
+// Costo guardado al cobrar (#18). Las ventas anteriores no lo guardaron: se usa el costo actual del producto.
+function unitCostOf(it) {
+  if (it.unitCost != null) return Number(it.unitCost) || 0;
+  const food = it.foodId ? foodById.value.get(String(it.foodId)) : null;
+  return Number(food?.cost || 0);
 }
 
 const products = computed(() => {
@@ -710,7 +754,7 @@ const products = computed(() => {
   for (const o of orders.value) {
     if (!isPaid(o)) continue;
     const seen = new Set();
-    for (const { it, amount } of lineAmounts(o)) {
+    for (const { it, amount, net } of lineAmounts(o)) {
       const key = it.foodId ? `id:${it.foodId}` : `n:${it.name || "Producto"}`;
       const food = it.foodId ? foodById.value.get(String(it.foodId)) : null;
       const p = map.get(key) || {
@@ -722,14 +766,16 @@ const products = computed(() => {
         tickets: 0,
         cost: 0,
         costRevenue: 0,
+        costNet: 0,
       };
       const q = Number(it.quantity || 0);
       p.qty += q;
       p.revenue += amount;
-      const unitCost = Number(food?.cost || 0);
+      const unitCost = unitCostOf(it);
       if (unitCost > 0) {
         p.cost += unitCost * q;
         p.costRevenue += amount;
+        p.costNet += net;
       }
       if (!seen.has(key)) {
         p.tickets += 1;
@@ -741,16 +787,18 @@ const products = computed(() => {
   return [...map.values()].map((p) => ({
     ...p,
     costKnown: p.costRevenue > 0,
-    profit: p.costRevenue - p.cost,
-    margin: p.costRevenue > 0 ? Math.round(((p.costRevenue - p.cost) / p.costRevenue) * 100) : 0,
+    // La utilidad se calcula sobre la venta sin IVA: el IVA no es ganancia
+    profit: p.costNet - p.cost,
+    margin: p.costNet > 0 ? Math.round(((p.costNet - p.cost) / p.costNet) * 100) : 0,
   }));
 });
 
 const topBy = ref("money");
 const topLimit = ref(10);
 const topList = computed(() => {
-  const key = topBy.value === "qty" ? "qty" : "revenue";
-  const sorted = [...products.value].sort((a, b) => b[key] - a[key]);
+  const key = topBy.value === "qty" ? "qty" : topBy.value === "profit" ? "profit" : "revenue";
+  const pool = key === "profit" ? products.value.filter((p) => p.costKnown) : products.value;
+  const sorted = [...pool].sort((a, b) => b[key] - a[key]);
   const max = sorted[0]?.[key] || 1;
   return sorted.slice(0, topLimit.value).map((p) => ({ ...p, share: Math.max(2, Math.round((p[key] / max) * 100)) }));
 });
@@ -758,13 +806,21 @@ const topList = computed(() => {
 const profit = computed(() => {
   let revenue = 0;
   let covered = 0;
+  let coveredNet = 0;
   let cost = 0;
   for (const p of products.value) {
     revenue += p.revenue;
     covered += p.costRevenue;
+    coveredNet += p.costNet;
     cost += p.cost;
   }
-  return { covered: covered > 0, amount: covered - cost, margin: covered > 0 ? (covered - cost) / covered : 0, coverage: revenue > 0 ? covered / revenue : 0 };
+  return {
+    covered: covered > 0,
+    cost,
+    amount: coveredNet - cost,
+    margin: coveredNet > 0 ? (coveredNet - cost) / coveredNet : 0,
+    coverage: revenue > 0 ? covered / revenue : 0,
+  };
 });
 const profitNote = computed(() => {
   if (!cur.value.count) return "Sin ventas";
@@ -1094,8 +1150,23 @@ function csvCell(v) {
   const s = String(v ?? "");
   return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
+// Excel en algunos países (España, Argentina…) separa con «;» en vez de «,»
+const csvSep = ref(",");
+try {
+  if (localStorage.getItem("csvSep") === ";") csvSep.value = ";";
+} catch {
+  /* sin almacenamiento: queda la coma */
+}
+watch(csvSep, (v) => {
+  try {
+    localStorage.setItem("csvSep", v);
+  } catch {
+    /* ignore */
+  }
+});
 function download(name, header, rows) {
-  const body = [header.join(","), ...rows.map((r) => r.map(csvCell).join(","))].join("\n");
+  const sep = csvSep.value;
+  const body = [header.map(csvCell).join(sep), ...rows.map((r) => r.map(csvCell).join(sep))].join("\n");
   const blob = new Blob(["﻿" + body], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -1130,6 +1201,59 @@ function exportSales() {
   download(
     `ventas_${fileRange.value}.csv`,
     ["Fecha", "Hora", "Folio", "Estado", "Forma de pago", "Articulos", "Subtotal", "Descuento", "IVA", "Comision tarjeta", "Total", "Productos"],
+    rows
+  );
+}
+// Un renglón por día del rango (también los días sin ventas) y un total al final
+function exportDaily() {
+  const blank = () => ({ tickets: 0, gross: 0, discount: 0, tax: 0, net: 0, cost: 0, costNet: 0, cash: 0, card: 0, transfer: 0, other: 0 });
+  const byDay = new Map();
+  for (const o of orders.value) {
+    const t = isPaid(o) && stampOf(o);
+    if (!t) continue;
+    const k = keyOf(t);
+    const d = byDay.get(k) || blank();
+    byDay.set(k, d);
+    d.tickets += 1;
+    d.gross += Number(o.subtotal || 0);
+    d.discount += Number(o.discountAmount || 0);
+    d.tax += Number(o.tax || 0);
+    d.net += Number(o.subtotal || 0) - Number(o.discountAmount || 0) - Number(o.tax || 0);
+    for (const { it, net } of lineAmounts(o)) {
+      const c = unitCostOf(it);
+      if (c > 0) {
+        d.cost += c * Number(it.quantity || 0);
+        d.costNet += net;
+      }
+    }
+    const total = Number(o.total || 0);
+    if (o.paymentMethod === "split") {
+      const card = Math.min(total, Math.max(0, Number(o.cardAmount || 0)));
+      d.card += card;
+      d.cash += total - card;
+    } else {
+      d[["cash", "card", "transfer"].includes(o.paymentMethod) ? o.paymentMethod : "other"] += total;
+    }
+  }
+  const f = (n) => n.toFixed(2);
+  const row = (label, d) => {
+    const base = [label, d.tickets, f(d.gross), f(d.discount), f(d.tax), f(d.net)];
+    const costs = d.cost > 0 ? [f(d.cost), f(d.costNet - d.cost), d.costNet > 0 ? Math.round(((d.costNet - d.cost) / d.costNet) * 100) : ""] : ["", "", ""];
+    return [...base, ...(isAdmin.value ? costs : []), f(d.cash), f(d.card), f(d.transfer), f(d.other)];
+  };
+  const rows = [];
+  const all = blank();
+  for (let i = 0; i < Math.min(days.value, 400); i++) {
+    const k = keyOf(addDays(range.value.from, i));
+    const d = byDay.get(k) || blank();
+    rows.push(row(k, d));
+    for (const key of Object.keys(all)) all[key] += d[key];
+  }
+  rows.push(row("Total", all));
+  const head = ["Fecha", "Tickets", "Ventas brutas", "Descuentos", "IVA", "Ventas netas"];
+  download(
+    `resumen_diario_${fileRange.value}.csv`,
+    [...head, ...(isAdmin.value ? ["Costo", "Utilidad bruta", "Margen %"] : []), "Efectivo", "Tarjeta", "Transferencia", "Otro"],
     rows
   );
 }
@@ -1435,6 +1559,23 @@ onMounted(async () => {
 }
 .card-head > div:first-child { min-width: 0; }
 .card-head h2 { margin: 0; font-size: 1.05rem; font-weight: 800; }
+.books {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+  gap: 0.6rem;
+  margin: 0.8rem 0 0;
+}
+.books > div {
+  background: var(--timber-panel-elevated);
+  border: 1px solid var(--timber-line);
+  border-radius: 0.8rem;
+  padding: 0.6rem 0.8rem;
+}
+.books > div.sum { background: var(--timber-primary-soft); border-color: transparent; }
+.books dt { font-size: 0.74rem; font-weight: 700; color: var(--timber-muted); }
+.books dd { margin: 0.15rem 0 0; font-size: 1.1rem; font-weight: 800; }
+.books-note { margin: 0.6rem 0 0; font-size: 0.82rem; color: var(--timber-muted); }
+.csv-sep { width: auto; padding: 0.5rem 0.7rem; }
 .card-head p { margin: 0.15rem 0 0; font-size: 0.82rem; font-weight: 600; color: var(--timber-muted); }
 .card-head .readout { color: var(--timber-ink); min-height: 1.2em; }
 .head-links { display: flex; gap: 0.85rem; flex-shrink: 0; }
