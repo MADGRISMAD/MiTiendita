@@ -4,7 +4,7 @@
 //  - serial:    Web Serial (Chrome/Edge PC) para impresoras USB que aparecen como puerto COM.
 //  - bluetooth: Web Bluetooth (Chrome Android/PC) para impresoras Bluetooth LE.
 import { reactive } from "vue";
-import { buildReceipt, buildTestPage, money } from "./escpos";
+import { buildReceipt, buildTestPage, buildCashClose, money } from "./escpos";
 import { lineBreakdown, rateOf, round2 } from "./tax";
 import { storeParts } from "./storeTime";
 import { formatQtyUnit, isBulk, perUnit, unitOf } from "./bulk";
@@ -281,6 +281,7 @@ export async function printBytes(bytes, { prompt = false } = {}) {
   }
 }
 
+// 80 mm = 42 columnas en la TM-T88V (58 mm = 32)
 function cols() {
   return printerStore.paper === "58" ? 32 : 42;
 }
@@ -375,5 +376,20 @@ export function receiptData(order) {
 /** Imprime el ticket de una venta en la térmica. openDrawer abre el cajón (pago en efectivo). */
 export function printReceiptDirect(order, { openDrawer = false } = {}) {
   const bytes = buildReceipt(receiptData(order), { cols: cols(), openDrawer: openDrawer && printerStore.drawer });
+  return printBytes(bytes);
+}
+
+/** Imprime el corte de caja en la térmica. `data` lo arma PrintCashCloseView (corteData). */
+export function printCashCloseDirect(data) {
+  const bytes = buildCashClose(
+    {
+      shop: venueStore.businessName || "Mi Tiendita",
+      kind: BUSINESS_TYPE_LABEL[venueStore.businessType] || BUSINESS_TYPE_LABEL.abarrotes,
+      address: venueStore.address || "",
+      phone: venueStore.phone || "",
+      ...data,
+    },
+    { cols: cols() }
+  );
   return printBytes(bytes);
 }
