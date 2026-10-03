@@ -264,6 +264,7 @@ const allMore = [
   { to: "/staff", name: "staff", label: "Empleados" },
   { to: "/billing", name: "billing", label: "Facturación / Planes" },
   { to: "/settings", name: "settings", label: "Configuración" },
+  { to: "/ayuda", name: "help", label: "Ayuda" },
 ];
 
 const dock = computed(() => {
