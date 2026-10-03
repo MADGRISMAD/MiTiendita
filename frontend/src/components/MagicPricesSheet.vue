@@ -44,36 +44,62 @@
           <!-- ========== Paso 1: la nota ========== -->
           <template v-if="step === 1">
             <div class="mg-inputs">
-              <div class="mg-photo-col">
-                <div
-                  class="mg-photo"
-                  :class="{ has: photoUrl && !photoBusy, busy: photoBusy, drag: dragging }"
-                  @dragover.prevent="dragging = true"
-                  @dragleave="dragging = false"
-                  @drop.prevent="onDrop"
-                >
-                  <template v-if="photoUrl && !photoBusy">
+              <section
+                class="mg-photo-col"
+                :class="{ drag: dragging }"
+                aria-label="Foto de la nota"
+                @dragover.prevent="dragging = true"
+                @dragleave="dragging = false"
+                @drop.prevent="onDrop"
+              >
+                <h3 class="mg-photo-title">Foto de la nota</h3>
+
+                <!-- Preparando -->
+                <div v-if="photoBusy" class="mg-photo-busy" role="status">
+                  <span class="mg-spin" aria-hidden="true"></span>
+                  <span>Preparando la foto…</span>
+                </div>
+
+                <!-- Ya hay foto -->
+                <template v-else-if="photoUrl">
+                  <figure class="mg-preview">
                     <img :src="photoUrl" alt="Foto de la nota" />
-                  </template>
-                  <template v-else>
-                    <span class="mg-photo-ico"><PosIcon :name="photoBusy ? 'clock' : 'image'" :size="30" /></span>
-                    <strong>{{ photoBusy ? 'Preparando la foto…' : 'Foto de la nota' }}</strong>
-                    <small>
-                      {{ photoBusy ? 'La hacemos más ligera para leerla rápido.' : 'Que se lean bien los renglones. También puedes arrastrar la imagen aquí.' }}
-                    </small>
-                  </template>
-                </div>
-                <div class="mg-photo-btns">
-                  <button type="button" class="mg-photo-btn" :disabled="busy || photoBusy" @click="cameraInput?.click()">
-                    <PosIcon name="camera" :size="18" /> Tomar foto
-                  </button>
-                  <button type="button" class="mg-photo-btn" :disabled="busy || photoBusy" @click="galleryInput?.click()">
-                    <PosIcon name="image" :size="18" /> Elegir de la galería
-                  </button>
-                </div>
-                <input ref="cameraInput" type="file" accept="image/*" capture="environment" class="sr-only" tabindex="-1" @change="onPhoto" />
-                <input ref="galleryInput" type="file" accept="image/jpeg,image/png,image/webp,image/*" class="sr-only" tabindex="-1" @change="onPhoto" />
-              </div>
+                    <button type="button" class="mg-preview-x" :disabled="busy" aria-label="Quitar foto" @click="clearPhoto">
+                      <PosIcon name="x" :size="18" />
+                    </button>
+                  </figure>
+                  <div class="mg-pick small">
+                    <button type="button" class="mg-pick-btn" :disabled="busy" @click="cameraInput?.click()">
+                      <PosIcon name="camera" :size="18" /> <span>Tomar otra</span>
+                    </button>
+                    <button type="button" class="mg-pick-btn" :disabled="busy" @click="galleryInput?.click()">
+                      <PosIcon name="image" :size="18" /> <span>Elegir otra</span>
+                    </button>
+                  </div>
+                </template>
+
+                <!-- Sin foto: dos botones grandes -->
+                <template v-else>
+                  <div class="mg-pick">
+                    <button type="button" class="mg-pick-btn main" :disabled="busy" @click="cameraInput?.click()">
+                      <PosIcon name="camera" :size="30" />
+                      <strong>Tomar foto</strong>
+                      <small>Abre la cámara</small>
+                    </button>
+                    <button type="button" class="mg-pick-btn" :disabled="busy" @click="galleryInput?.click()">
+                      <PosIcon name="image" :size="30" />
+                      <strong>Elegir foto</strong>
+                      <small>De tu galería</small>
+                    </button>
+                  </div>
+                  <p class="mg-photo-tip">
+                    Que se lean bien los renglones.<span class="mg-desk"> También puedes arrastrar la imagen aquí.</span>
+                  </p>
+                </template>
+
+                <input ref="cameraInput" type="file" accept="image/*" capture="environment" class="sr-only" tabindex="-1" aria-hidden="true" @change="onPhoto" />
+                <input ref="galleryInput" type="file" accept="image/jpeg,image/png,image/webp,image/*" class="sr-only" tabindex="-1" aria-hidden="true" @change="onPhoto" />
+              </section>
               <div class="mg-or" aria-hidden="true"><span>o</span></div>
               <label class="mg-text">
                 <span>Pega o escribe la lista, como la tengas</span>
@@ -1210,61 +1236,94 @@ onMounted(async () => {
   align-items: stretch;
   gap: 0.75rem;
 }
-.mg-photo-col { display: grid; gap: 0.6rem; align-content: start; }
-.mg-photo-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
-.mg-photo-btn {
-  display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem;
-  min-height: 2.75rem; padding: 0 0.6rem;
-  border: 1px solid var(--timber-line); border-radius: 0.8rem;
-  background: var(--timber-panel); color: var(--timber-ink);
-  font: inherit; font-size: 0.88rem; font-weight: 800; cursor: pointer;
-}
-.mg-photo-btn:hover:not(:disabled) { border-color: var(--timber-primary); }
-.mg-photo-btn:disabled { opacity: 0.55; cursor: default; }
-.mg-photo {
-  position: relative;
+.mg-photo-col {
   display: grid;
-  place-items: center;
-  align-content: center;
-  gap: 0.35rem;
-  min-height: 14rem;
-  padding: 1.2rem;
-  overflow: hidden;
-  border: 2px dashed color-mix(in srgb, var(--timber-primary) 40%, var(--timber-line));
+  align-content: start;
+  gap: 0.6rem;
+  padding: 0.85rem;
+  border: 1px solid var(--timber-line);
   border-radius: 1.1rem;
-  background: color-mix(in srgb, var(--timber-primary) 5%, var(--timber-panel));
-  text-align: center;
-  cursor: pointer;
+  background: var(--timber-panel);
   transition: border-color 0.15s ease, background 0.15s ease;
 }
-.mg-photo:hover,
-.mg-photo.drag { border-color: var(--timber-primary); background: color-mix(in srgb, var(--timber-primary) 10%, var(--timber-panel)); }
-.mg-photo:focus-within { outline: 3px solid color-mix(in srgb, var(--timber-primary) 40%, transparent); outline-offset: 2px; }
-.mg-photo-ico {
-  width: 3.6rem;
-  height: 3.6rem;
+.mg-photo-col.drag {
+  border: 2px dashed var(--timber-primary);
+  background: color-mix(in srgb, var(--timber-primary) 8%, var(--timber-panel));
+}
+.mg-photo-title { margin: 0; font-size: 0.84rem; font-weight: 700; color: var(--timber-muted); }
+.mg-pick { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; }
+.mg-pick-btn {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 0.3rem;
+  min-height: 8.5rem;
+  padding: 0.9rem 0.6rem;
+  border: 2px solid var(--timber-primary);
+  border-radius: 1rem;
+  background: var(--timber-panel);
+  color: var(--timber-primary);
+  font: inherit;
+  text-align: center;
+  cursor: pointer;
+  box-shadow: 0 2px 0 color-mix(in srgb, var(--timber-primary) 30%, transparent);
+  transition: transform 0.08s ease, background 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.mg-pick-btn strong { font-size: 1.05rem; font-weight: 800; color: inherit; }
+.mg-pick-btn small { font-size: 0.8rem; font-weight: 600; opacity: 0.85; }
+.mg-pick-btn.main { background: var(--timber-primary); color: var(--timber-on-primary); }
+.mg-pick-btn:hover:not(:disabled) { background: color-mix(in srgb, var(--timber-primary) 8%, var(--timber-panel)); }
+.mg-pick-btn.main:hover:not(:disabled) { background: color-mix(in srgb, var(--timber-primary) 88%, #000); }
+.mg-pick-btn:active:not(:disabled) { transform: translateY(2px); box-shadow: none; }
+.mg-pick-btn:focus-visible { outline: 3px solid color-mix(in srgb, var(--timber-primary) 45%, transparent); outline-offset: 2px; }
+.mg-pick-btn:disabled { opacity: 0.55; cursor: default; }
+.mg-pick.small .mg-pick-btn {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 2.9rem;
+  padding: 0 0.6rem;
+  font-size: 0.92rem;
+  font-weight: 800;
+}
+.mg-photo-tip { margin: 0; font-size: 0.82rem; color: var(--timber-muted); line-height: 1.4; text-align: center; }
+@media (hover: none), (pointer: coarse) { .mg-desk { display: none; } }
+.mg-photo-busy {
   display: grid;
   place-items: center;
-  border-radius: 1.1rem;
-  background: var(--timber-primary);
-  color: var(--timber-on-primary);
+  gap: 0.6rem;
+  min-height: 8.5rem;
+  border-radius: 1rem;
+  background: var(--timber-surface);
+  font-weight: 700;
+  color: var(--timber-muted);
 }
-.mg-photo.busy .mg-photo-ico { background: var(--timber-warning); animation: mg-pulse 1s ease-in-out infinite alternate; }
-.mg-photo strong { font-size: 1.02rem; font-weight: 800; }
-.mg-photo small { max-width: 16rem; font-size: 0.82rem; color: var(--timber-muted); line-height: 1.4; }
-.mg-photo.has { padding: 0; border-style: solid; }
-.mg-photo.has img { width: 100%; height: 100%; max-height: 18rem; object-fit: cover; }
-.mg-chip {
+.mg-spin {
+  width: 2rem;
+  height: 2rem;
+  border: 3px solid var(--timber-line);
+  border-top-color: var(--timber-primary);
+  border-radius: 50%;
+  animation: mg-spin 0.8s linear infinite;
+}
+@keyframes mg-spin { to { transform: rotate(360deg); } }
+.mg-preview { position: relative; margin: 0; overflow: hidden; border-radius: 1rem; border: 1px solid var(--timber-line); background: var(--timber-surface); }
+.mg-preview img { display: block; width: 100%; max-height: 16rem; object-fit: contain; }
+.mg-preview-x {
   position: absolute;
-  bottom: 0.6rem;
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 0.35rem 0.8rem;
-  border-radius: 999px;
+  top: 0.5rem;
+  right: 0.5rem;
+  width: 2.4rem;
+  height: 2.4rem;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
   background: rgba(10, 18, 32, 0.72);
   color: #fff;
-  font-size: 0.8rem;
-  font-weight: 700;
+  cursor: pointer;
 }
 .mg-or { display: grid; place-items: center; }
 .mg-or span {
@@ -1552,7 +1611,7 @@ onMounted(async () => {
   .mg-steps li + li::before { width: 0.8rem; }
   .mg-body { padding: 0.85rem; }
   .mg-inputs { grid-template-columns: minmax(0, 1fr); }
-  .mg-photo { min-height: 10rem; }
+  .mg-pick-btn { min-height: 7.5rem; }
   .mg-or { height: 1rem; }
   .mg-or span { width: 1.9rem; height: 1.9rem; }
   .mg-text textarea { min-height: 8rem; }
