@@ -42,6 +42,7 @@ import PlatformTeam from "./views/platform/PlatformTeam.vue";
 const PLATFORM_STAFF = ["platform_admin", "platform_support"];
 import NotFoundView from "./views/NotFoundView.vue";
 import LegalView from "./views/LegalView.vue";
+import HelpView from "./views/HelpView.vue";
 import CustomersView from "./views/CustomersView.vue";
 import InventoryView from "./views/InventoryView.vue";
 
@@ -60,6 +61,7 @@ const routes: RouteRecordRaw[] = [
   { path: "/invite/:token", name: "invite", component: InviteAcceptView },
   { path: "/terminos", name: "terms", component: LegalView, props: { page: "terms" } },
   { path: "/privacidad", name: "privacy", component: LegalView, props: { page: "privacy" } },
+  { path: "/ayuda", name: "help", component: HelpView },
   { path: "/factura/:token", name: "factura", component: InvoiceRequestView },
   { path: "/setup", name: "setup", component: SetupWizard, meta: { requiresAuth: true } },
   { path: "/dashboard", name: "dashboard", component: DashboardView, meta: authMeta(["admin", "cashier"]) },

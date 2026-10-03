@@ -257,6 +257,27 @@
         </div>
       </section>
 
+      <!-- ═══ VIDEO ═══ -->
+      <section id="video" class="band">
+        <div class="section video-wrap" data-reveal>
+          <p class="section-kicker">Míralo en acción</p>
+          <h2>De abrir la caja al corte, en minuto y medio</h2>
+          <p class="section-lede">
+            Así se ve una venta real: escanear, cobrar, ticket con QR de factura y corte de caja.
+          </p>
+          <video
+            class="demo-video"
+            controls
+            playsinline
+            preload="none"
+            poster="/demo-cobro-poster.jpg"
+            aria-label="Demostración de cobro en Mi Tiendita"
+          >
+            <source src="/demo-cobro.mp4" type="video/mp4" />
+          </video>
+        </div>
+      </section>
+
       <!-- ═══ INVENTARIO MÁGICO (estrella) ═══ -->
       <section id="inventario-magico" class="band magic">
         <div class="magic-sky" aria-hidden="true">
@@ -544,6 +565,21 @@
         </div>
       </section>
 
+      <!-- ═══ TESTIMONIOS (se muestran cuando haya reales en `testimonials`) ═══ -->
+      <section v-if="testimonials.length" id="testimonios" class="band">
+        <div class="section" data-reveal>
+          <p class="section-kicker">Tiendas que ya cobran con Mi Tiendita</p>
+          <h2>Lo dicen ellos</h2>
+          <div class="testi-grid">
+            <figure v-for="t in testimonials" :key="t.name" class="glass testi">
+              <img v-if="t.photo" :src="t.photo" :alt="t.name" width="56" height="56" loading="lazy" />
+              <blockquote>“{{ t.quote }}”</blockquote>
+              <figcaption><strong>{{ t.name }}</strong> · {{ t.shop }}, {{ t.city }}</figcaption>
+            </figure>
+          </div>
+        </div>
+      </section>
+
       <!-- ═══ HARDWARE (carrusel 3D) ═══ -->
       <section id="hardware" class="band hardware">
         <div class="section hw-layout">
@@ -658,6 +694,8 @@
       <div class="foot-links">
         <router-link to="/login">Ingresar</router-link>
         <router-link to="/register">Registro</router-link>
+        <router-link to="/ayuda">Ayuda</router-link>
+        <a href="/guia-cajero.pdf" download>Guía de cajero</a>
         <router-link to="/terminos">Términos</router-link>
         <router-link to="/privacidad">Privacidad</router-link>
       </div>
@@ -681,6 +719,8 @@ const route = useRoute();
 const root = ref(null);
 const { refresh } = useLandingMotion(root);
 const plans = ref([]);
+/** Testimonios reales: { name, shop, city, quote, photo? } — con permiso de la persona. Vacío = sección oculta. */
+const testimonials = ref([]);
 const billingInterval = ref("month");
 const loggedIn = computed(() => Boolean(authStore.token));
 const showPerpetual = ref(false);
@@ -3011,6 +3051,27 @@ main,
 @media (max-width: 560px) {
   .lp-modal-cols { grid-template-columns: minmax(0, 1fr); }
 }
+
+.demo-video {
+  display: block;
+  width: 100%;
+  max-width: 52rem;
+  margin: 1.5rem auto 0;
+  aspect-ratio: 16 / 9;
+  border-radius: 1rem;
+  background: #000;
+  box-shadow: 0 30px 60px -30px rgba(0, 0, 0, 0.7);
+}
+.testi-grid {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+}
+.testi { margin: 0; }
+.testi img { border-radius: 50%; object-fit: cover; }
+.testi blockquote { margin: 0.6rem 0; line-height: 1.5; }
+.testi figcaption { color: var(--timber-muted); font-size: 0.9rem; }
 
 /* ═══════════════════════════════════════════
    HARDWARE — carrusel 3D que gira con el scroll
