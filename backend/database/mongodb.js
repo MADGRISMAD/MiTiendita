@@ -327,6 +327,8 @@ async function ListPlatformUsers() {
     cellphone: user.cellphone || '',
     role: user.role || 'platform_admin',
     createdAt: user.createdAt || null,
+    lastLoginAt: user.lastLoginAt || null,
+    mfaEnabled: Boolean(user.mfaEnabled),
   }));
 }
 async function CountPlatformAdmins() {
@@ -1198,6 +1200,21 @@ async function CreateActivityLog(data) {
   const result = await dbConnection.collection('activity_log').insertOne(data);
   return withId(await dbConnection.collection('activity_log').findOne({ _id: result.insertedId }));
 }
+// —— Auditoría de la plataforma (lo que hace el equipo de Mi Tiendita). Colección aparte: los dueños no la ven ——
+async function CreatePlatformAudit(entry) {
+  const result = await dbConnection.collection('platform_audit').insertOne(entry);
+  return { ...entry, id: String(result.insertedId) };
+}
+async function ListPlatformAudit({ tenantId = null, limit = 60 } = {}) {
+  const filter = tenantId ? { tenantId: String(tenantId) } : {};
+  const rows = await dbConnection
+    .collection('platform_audit')
+    .find(filter)
+    .sort({ createdAt: -1 })
+    .limit(Math.min(200, Math.max(1, Number(limit) || 60)))
+    .toArray();
+  return rows.map(({ _id, ...rest }) => ({ id: String(_id), ...rest }));
+}
 async function GetActivityLog(tenantId, limit = 80) {
   const filter = tenantId ? { tenantId } : {};
   return (await dbConnection
@@ -1256,5 +1273,5 @@ module.exports = {
   GetFoodsBySupplier, UnlinkSupplierFromFoods,
   CreatePurchase, GetPurchases, GetPurchaseById,
   CreateLot, GetLotsByFood, GetExpiringLots,
-  CreateActivityLog, GetActivityLog, GetPaidItemQtySince,
+  CreatePlatformAudit, ListPlatformAudit, CreateActivityLog, GetActivityLog, GetPaidItemQtySince,
 };

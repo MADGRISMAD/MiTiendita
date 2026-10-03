@@ -6,6 +6,9 @@ const mp = require('../services/mercadopago.service');
 const supportMail = require('../services/support-mail.service');
 const { ownerMonthlyReport } = require('../utils/mail-templates');
 const hasher = require('../utils/bcrypt.utils');
+const audit = require('../services/platform-audit.service');
+const limits = require('../services/plan-limits.service');
+const sessions = require('../services/session.service');
 
 const SHORT_MONTHS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 
@@ -87,6 +90,10 @@ async function clientCard(tenant, { withUsers = false } = {}) {
     suspendedReason: tenant.suspendedReason || '',
     mpPayerEmail: tenant.mpPayerEmail || '',
     createdAt: tenant.createdAt || null,
+    lastSeenAt: users.reduce((latest, user) => {
+      const at = user.lastLoginAt ? new Date(user.lastLoginAt) : null;
+      return at && (!latest || at > latest) ? at : latest;
+    }, null),
     usersCount: users.length,
     ownerName: owner ? `${owner.name || ''} ${owner.lastName || ''}`.trim() : '',
     ownerEmail: owner?.email || '',
@@ -128,7 +135,11 @@ async function getTenant(req, res) {
   try {
     const tenant = await db.GetTenantById(req.params.id);
     if (!tenant) return res.status(404).send('No encontré ese cliente.');
-    return res.status(200).json(await clientCard(tenant, { withUsers: true }));
+    const [card, usage] = await Promise.all([
+      clientCard(tenant, { withUsers: true }),
+      limits.usageFor(tenant.id, tenant.plan || 'basic').catch(() => null),
+    ]);
+    return res.status(200).json({ ...card, usage });
   } catch (err) {
     console.error(err);
     return res.status(500).send(err.message || 'No pude abrir ese cliente.');
@@ -186,6 +197,15 @@ async function updateTenant(req, res) {
     await db.UpdateTenant(tenant.id, patch);
     if (isPerpetual(plan) && !isPerpetual(tenant.plan)) {
       await noteLicense(tenant.id, 'perpetual', 'Soporte activó la licencia perpetua (sin magia)');
+    }
+    const changes = audit.describeChanges(tenant, { ...tenant, ...patch }, { plan: PLAN_NAMES, status: STATUS_NAMES });
+    if (changes.length) {
+      await audit.record(req, {
+        tenantId: tenant.id,
+        type: 'tenant_updated',
+        message: `Cambió ${changes.join(', ')}`,
+        meta: { changes },
+      });
     }
     await db.UpdateSettings(
       {
@@ -271,6 +291,12 @@ async function suspend(req, res) {
       suspendedReason: reason,
     });
     if (!updated) return res.status(404).send('Tenant no encontrado');
+    await audit.record(req, {
+      tenantId: req.params.id,
+      type: 'tenant_suspended',
+      message: `Suspendió la tienda (${reason})`,
+      meta: { reason },
+    });
     return res.status(200).json(updated);
   } catch (err) {
     console.error(err);
@@ -296,6 +322,12 @@ async function reactivate(req, res) {
     }
     const updated = await db.UpdateTenant(req.params.id, patch);
     if (!updated) return res.status(404).send('Tenant no encontrado');
+    await audit.record(req, {
+      tenantId: req.params.id,
+      type: 'tenant_reactivated',
+      message: mode === 'trial' ? 'Reactivó la tienda con una prueba nueva' : 'Reactivó la tienda',
+      meta: { mode },
+    });
     return res.status(200).json(updated);
   } catch (err) {
     console.error(err);
@@ -323,6 +355,12 @@ async function setPlan(req, res) {
       await noteLicense(req.params.id, 'perpetual', 'Soporte activó la licencia perpetua (sin magia)');
     }
     if (!updated) return res.status(404).send('Tenant no encontrado');
+    await audit.record(req, {
+      tenantId: req.params.id,
+      type: 'tenant_plan_changed',
+      message: `Cambió el plan ${PLAN_NAMES[tenant.plan] || tenant.plan} → ${PLAN_NAMES[plan] || plan}`,
+      meta: { from: tenant.plan, to: plan },
+    });
     return res.status(200).json(updated);
   } catch (err) {
     console.error(err);
@@ -538,6 +576,11 @@ async function createExpense(req, res) {
       month: db.aiMonthKey(),
       createdAt: new Date(),
     });
+    await audit.record(req, {
+      type: 'expense_created',
+      message: `Anotó el gasto «${created.label}» por $${Number(created.amount).toFixed(2)}`,
+      meta: { id: created.id, amount: created.amount },
+    });
     return res.status(201).json({
       id: created.id,
       label: created.label,
@@ -556,6 +599,7 @@ async function deleteExpense(req, res) {
   try {
     const removed = await db.DeletePlatformExpense(req.params.id);
     if (!removed) return res.status(404).send('No encontré ese gasto.');
+    await audit.record(req, { type: 'expense_deleted', message: 'Quitó un gasto', meta: { id: req.params.id } });
     return res.status(200).json({ ok: true });
   } catch (err) {
     console.error(err);
@@ -589,6 +633,8 @@ function publicStaff(user) {
     role,
     roleName: STAFF_ROLE_NAMES[role] || 'Admin',
     createdAt: user.createdAt || null,
+    lastLoginAt: user.lastLoginAt || null,
+    mfaEnabled: Boolean(user.mfaEnabled),
   };
 }
 
@@ -645,6 +691,11 @@ async function createStaff(req, res) {
       role,
       createdAt: now,
     };
+    await audit.record(req, {
+      type: 'staff_created',
+      message: `Agregó a ${name} ${lastName} al equipo como ${STAFF_ROLE_NAMES[role]}`,
+      meta: { username, role },
+    });
     return res.status(201).json(publicStaff(fresh));
   } catch (err) {
     console.error(err);
@@ -667,6 +718,12 @@ async function deleteStaff(req, res) {
     }
     const removed = await db.DeleteUserById(id);
     if (!removed) return res.status(404).send('No encontré a esa persona.');
+    sessions.forgetUser(target.username);
+    await audit.record(req, {
+      type: 'staff_removed',
+      message: `Quitó a ${target.name} ${target.lastName} del equipo`,
+      meta: { username: target.username, role: target.role },
+    });
     return res.status(200).json({ ok: true });
   } catch (err) {
     console.error(err);
@@ -674,7 +731,125 @@ async function deleteStaff(req, res) {
   }
 }
 
+/** Bandeja de soporte: tickets de todos los clientes que le tocan a quien pregunta. */
+async function support(req, res) {
+  try {
+    const staffEmail = await currentStaffEmail(req);
+    const status = ['open', 'answered'].includes(req.query.status) ? req.query.status : 'all';
+    return res.status(200).json(
+      await supportMail.ticketBoard(staffEmail, { status, q: req.query.q, limit: req.query.limit })
+    );
+  } catch (err) {
+    console.error(err);
+    return res.status(err.status || 500).send(err.message || 'No pude cargar la bandeja de soporte.');
+  }
+}
+
+/** Historia de un cliente: pagos y licencias (billing_events) junto con lo que hizo el equipo. */
+async function tenantActivity(req, res) {
+  try {
+    const tenant = await db.GetTenantById(req.params.id);
+    if (!tenant) return res.status(404).send('No encontré ese cliente.');
+    const [events, actions] = await Promise.all([
+      db.ListBillingEvents(tenant.id, 40),
+      db.ListPlatformAudit({ tenantId: tenant.id, limit: 40 }),
+    ]);
+    const items = [
+      ...events.map((e) => ({
+        id: `b${e.id || e._id || e.at}`,
+        source: 'billing',
+        type: e.type,
+        message: e.note || e.type,
+        amount: e.amount ?? null,
+        actor: '',
+        at: e.at || e.createdAt || null,
+      })),
+      ...actions.map((a) => ({
+        id: `a${a.id}`,
+        source: 'team',
+        type: a.type,
+        message: a.message,
+        amount: null,
+        actor: a.actor || '',
+        at: a.createdAt,
+      })),
+    ]
+      .filter((i) => i.at)
+      .sort((a, b) => new Date(b.at) - new Date(a.at))
+      .slice(0, 60);
+    return res.status(200).json({ items });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).send(err.message || 'No pude leer la actividad.');
+  }
+}
+
+/** Últimos movimientos del equipo en toda la plataforma (solo admin). */
+async function activity(req, res) {
+  try {
+    const rows = await db.ListPlatformAudit({ limit: Number(req.query.limit) || 60 });
+    const tenantIds = [...new Set(rows.map((r) => r.tenantId).filter(Boolean))];
+    const names = new Map();
+    await Promise.all(
+      tenantIds.map(async (id) => {
+        const [tenant, settings] = await Promise.all([db.GetTenantById(id), db.GetSettings(id)]);
+        names.set(id, settings?.businessName || tenant?.name || 'Cliente');
+      })
+    );
+    return res.status(200).json({
+      items: rows.map((r) => ({
+        id: r.id,
+        type: r.type,
+        message: r.message,
+        actor: r.actor || '',
+        tenantId: r.tenantId || null,
+        businessName: r.tenantId ? names.get(r.tenantId) || 'Cliente' : '',
+        at: r.createdAt,
+      })),
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).send(err.message || 'No pude leer la actividad.');
+  }
+}
+
+/**
+ * Restablece la verificación en dos pasos de alguien del equipo que perdió su celular y sus
+ * códigos. Cierra sus sesiones y, al volver a entrar, tiene que activarla de nuevo.
+ */
+async function resetStaffMfa(req, res) {
+  try {
+    const target = (await db.ListPlatformUsers()).find((user) => user.id === String(req.params.id || ''));
+    if (!target) return res.status(404).send('No encontré a esa persona.');
+    if (target.username === req.user.username) {
+      return res.status(400).send('Para cambiar tu propia verificación, hazlo desde Configuración.');
+    }
+    const user = await db.FindUserById(target.id);
+    await db.UpdateUserById(target.id, {
+      mfaEnabled: false,
+      mfaSecretEnc: null,
+      mfaPendingEnc: null,
+      mfaRecovery: [],
+      mfaLastStep: null,
+    });
+    await sessions.revokeAll(user, 'mfa_reset');
+    await audit.record(req, {
+      type: 'staff_mfa_reset',
+      message: `Restableció la verificación en dos pasos de ${target.name} ${target.lastName}`,
+      meta: { username: target.username },
+    });
+    return res.status(200).json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).send(err.message || 'No pude restablecer la verificación.');
+  }
+}
+
 module.exports = {
+  support,
+  tenantActivity,
+  activity,
+  resetStaffMfa,
   listTenants,
   getTenant,
   updateTenant,

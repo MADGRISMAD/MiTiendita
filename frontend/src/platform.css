@@ -1,0 +1,246 @@
+/* Área de plataforma (equipo de Mi Tiendita). Se apoya en admin.css (adm-*) y en los tokens de index.css.
+   Todo lo propio lleva prefijo pf- para no chocar con otras vistas. */
+
+.pf { max-width: 80rem; margin-inline: auto; }
+.pf-muted { color: var(--timber-muted); }
+.pf-num { font-variant-numeric: tabular-nums; }
+.pf-grow { flex: 1 1 auto; min-width: 0; }
+.pf-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.pf-section-title { margin: 0; font-size: 0.78rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--timber-muted); }
+.pf-err { margin: 0; color: var(--timber-danger); font-size: 0.88rem; font-weight: 600; }
+.pf-ok { margin: 0; color: var(--timber-success); font-size: 0.88rem; font-weight: 600; }
+
+/* ———— Avatar de cliente (iniciales con color propio) ———— */
+.pf-avatar {
+  flex: 0 0 auto;
+  display: inline-grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 0.75rem;
+  background: hsl(var(--h, 214) 60% 90%);
+  color: hsl(var(--h, 214) 55% 28%);
+  font-size: 0.85rem;
+  font-weight: 800;
+}
+html[data-theme="dark"] .pf-avatar { background: hsl(var(--h, 214) 35% 24%); color: hsl(var(--h, 214) 70% 85%); }
+
+/* ———— Cola de atención ———— */
+.pf-queue { display: grid; gap: 0.5rem; margin: 0; padding: 0; list-style: none; }
+.pf-queue-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--timber-line);
+  border-left: 4px solid var(--timber-primary);
+  border-radius: 0.85rem;
+  background: var(--timber-panel);
+}
+.pf-queue-item.bad { border-left-color: var(--timber-danger); }
+.pf-queue-item.warn { border-left-color: var(--timber-warning); }
+.pf-queue-item .who { min-width: 0; flex: 1 1 auto; display: grid; gap: 0.1rem; }
+.pf-queue-item strong { font-size: 0.95rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pf-queue-item .what { font-size: 0.86rem; font-weight: 700; }
+.pf-queue-item .detail { font-size: 0.8rem; color: var(--timber-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pf-queue-item .when { flex: 0 0 auto; font-size: 0.78rem; font-weight: 700; color: var(--timber-muted); white-space: nowrap; }
+.pf-queue-item .when.bad { color: var(--timber-danger); }
+.pf-queue-item .when.warn { color: var(--timber-warning); }
+.pf-allclear {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem;
+  border: 1px dashed var(--timber-line);
+  border-radius: 0.85rem;
+  color: var(--timber-muted);
+  font-weight: 600;
+}
+.pf-allclear svg { color: var(--timber-success); flex: 0 0 auto; }
+
+/* ———— Dos paneles (lista | detalle) ———— */
+.pf-split { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.75rem; align-items: start; }
+.pf-split > .pf-pane-detail { display: none; }
+.pf-split.detail > .pf-pane-list { display: none; }
+.pf-split.detail > .pf-pane-detail { display: block; }
+@media (min-width: 62rem) {
+  .pf-split { grid-template-columns: minmax(20rem, 26rem) minmax(0, 1fr); }
+  .pf-split > .pf-pane-detail,
+  .pf-split.detail > .pf-pane-list,
+  .pf-split.detail > .pf-pane-detail { display: block; }
+  .pf-pane-list { position: sticky; top: 0.5rem; max-height: calc(100dvh - 9.5rem); overflow-y: auto; }
+  .pf-back { display: none !important; }
+}
+.pf-back { align-self: flex-start; }
+
+.pf-list { display: grid; margin: 0; padding: 0; list-style: none; }
+.pf-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.7rem;
+  width: 100%;
+  padding: 0.7rem 0.85rem;
+  border: 0;
+  border-bottom: 1px solid var(--timber-line);
+  border-left: 3px solid transparent;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.pf-row:last-child { border-bottom: 0; }
+.pf-row:hover { background: var(--timber-panel-elevated); }
+.pf-row:focus-visible { outline: 3px solid color-mix(in srgb, var(--timber-primary) 45%, transparent); outline-offset: -3px; }
+.pf-row.on { background: var(--timber-primary-soft); border-left-color: var(--timber-primary); }
+.pf-row.unread { border-left-color: var(--timber-warning); }
+.pf-row.unread.late { border-left-color: var(--timber-danger); }
+.pf-row .body { min-width: 0; flex: 1 1 auto; display: grid; gap: 0.12rem; }
+.pf-row .top { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; }
+.pf-row .top strong { font-size: 0.92rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pf-row .top time { flex: 0 0 auto; font-size: 0.74rem; font-weight: 700; color: var(--timber-muted); }
+.pf-row .top time.warn { color: var(--timber-warning); }
+.pf-row .top time.bad { color: var(--timber-danger); }
+.pf-row .sub { font-size: 0.84rem; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pf-row .prev { font-size: 0.8rem; color: var(--timber-muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.pf-row .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; margin-top: 0.15rem; }
+.pf-empty-list { padding: 1.5rem 1rem; text-align: center; color: var(--timber-muted); font-size: 0.9rem; }
+
+/* ———— Filtros y herramientas ———— */
+.pf-tools { min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.6rem; }
+.pf-tools .adm-search { flex: 1 1 14rem; max-width: 26rem; }
+.pf-select { min-height: 2.5rem; padding: 0 0.7rem; border: 1px solid var(--timber-line); border-radius: 0.75rem; background: var(--timber-panel); color: var(--timber-ink); font: inherit; font-size: 0.88rem; font-weight: 700; }
+
+/* ———— Hilo de correo ———— */
+.pf-thread-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 0.5rem 1rem; }
+.pf-thread-head h2 { margin: 0; font-size: 1.1rem; font-weight: 800; overflow-wrap: anywhere; }
+.pf-thread-head p { margin: 0.15rem 0 0; font-size: 0.84rem; color: var(--timber-muted); font-weight: 600; }
+.pf-thread { display: grid; gap: 0.6rem; margin: 0; padding: 0; list-style: none; }
+.pf-bubble { max-width: min(46rem, 92%); padding: 0.65rem 0.85rem; border-radius: 1rem; border: 1px solid var(--timber-line); background: var(--timber-panel-elevated); }
+.pf-bubble.out { justify-self: end; border-color: transparent; background: var(--timber-primary-soft); }
+.pf-bubble header { display: flex; justify-content: space-between; gap: 1rem; margin-bottom: 0.25rem; font-size: 0.76rem; color: var(--timber-muted); font-weight: 700; }
+.pf-bubble p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 0.92rem; line-height: 1.45; }
+.pf-reply { display: grid; gap: 0.5rem; padding-top: 0.75rem; border-top: 1px solid var(--timber-line); }
+.pf-reply textarea { min-height: 6.5rem; resize: vertical; font: inherit; }
+.pf-reply-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem; }
+.pf-reply-foot small { color: var(--timber-muted); font-weight: 600; }
+
+/* ———— Detalle de cliente ———— */
+.pf-detail-head { display: flex; align-items: center; gap: 0.8rem; flex-wrap: wrap; }
+.pf-detail-head h2 { margin: 0; font-size: 1.2rem; font-weight: 800; overflow-wrap: anywhere; }
+.pf-detail-head .acts { margin-left: auto; display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.pf-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: 0.6rem; margin: 0; }
+.pf-fact { display: grid; gap: 0.1rem; padding: 0.65rem 0.8rem; border: 1px solid var(--timber-line); border-radius: 0.8rem; background: var(--timber-panel-elevated); min-width: 0; }
+.pf-fact dt { font-size: 0.74rem; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: var(--timber-muted); }
+.pf-fact dd { margin: 0; font-size: 0.95rem; font-weight: 700; overflow-wrap: anywhere; }
+.pf-fact small { color: var(--timber-muted); font-weight: 600; }
+.pf-meter { height: 0.4rem; border-radius: 99px; background: var(--timber-line); overflow: hidden; margin-top: 0.3rem; }
+.pf-meter i { display: block; height: 100%; background: var(--timber-primary); border-radius: 99px; }
+.pf-meter.warn i { background: var(--timber-warning); }
+.pf-meter.bad i { background: var(--timber-danger); }
+.pf-plans { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: 0.5rem; }
+.pf-plans button { padding: 0.65rem 0.7rem; border: 1.5px solid var(--timber-line); border-radius: 0.8rem; background: var(--timber-panel); color: inherit; font: inherit; font-weight: 800; text-align: left; cursor: pointer; }
+.pf-plans button small { display: block; font-weight: 600; color: var(--timber-muted); }
+.pf-plans button[aria-pressed="true"] { border-color: var(--timber-primary); background: var(--timber-primary-soft); }
+.pf-plans button:disabled { opacity: 0.6; cursor: not-allowed; }
+.pf-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: 0.75rem; }
+.pf-form .wide { grid-column: 1 / -1; }
+
+/* ———— Línea de tiempo ———— */
+.pf-timeline { display: grid; margin: 0; padding: 0; list-style: none; }
+.pf-timeline li { position: relative; display: grid; grid-template-columns: 1.6rem minmax(0, 1fr) auto; gap: 0.6rem; padding: 0.55rem 0; border-bottom: 1px solid var(--timber-line); align-items: start; }
+.pf-timeline li:last-child { border-bottom: 0; }
+.pf-timeline .dot { width: 0.7rem; height: 0.7rem; margin: 0.35rem 0 0 0.45rem; border-radius: 50%; background: var(--timber-primary); }
+.pf-timeline .dot.billing { background: var(--timber-success); }
+.pf-timeline p { margin: 0; font-size: 0.9rem; font-weight: 600; overflow-wrap: anywhere; }
+.pf-timeline small { color: var(--timber-muted); font-weight: 600; }
+.pf-timeline time { font-size: 0.76rem; font-weight: 700; color: var(--timber-muted); white-space: nowrap; }
+
+/* ———— Tablas ———— */
+.pf-table-wrap { overflow-x: auto; }
+.pf-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.pf-table th { padding: 0.5rem 0.7rem; text-align: left; font-size: 0.74rem; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; color: var(--timber-muted); border-bottom: 1px solid var(--timber-line); white-space: nowrap; }
+.pf-table td { padding: 0.65rem 0.7rem; border-bottom: 1px solid var(--timber-line); vertical-align: middle; }
+.pf-table tr:last-child td { border-bottom: 0; }
+.pf-table .num { text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; }
+.pf-table td .who { display: flex; align-items: center; gap: 0.6rem; min-width: 0; }
+.pf-table td .who strong { display: block; }
+.pf-table td .who small { color: var(--timber-muted); font-weight: 600; }
+.pf-table .acts { display: flex; gap: 0.4rem; justify-content: flex-end; flex-wrap: wrap; }
+
+/* ———— Gráficas ———— (paleta categórica validada: azul y naranja, claro y oscuro) */
+.pf-viz { --series-1: #2a78d6; --series-2: #eb6834; position: relative; }
+html[data-theme="dark"] .pf-viz { --series-1: #3987e5; --series-2: #d95926; }
+.pf-chart { width: 100%; height: auto; display: block; overflow: visible; }
+.pf-chart text { fill: var(--timber-muted); font-size: 11px; font-weight: 700; font-family: inherit; }
+.pf-chart .grid { stroke: var(--timber-line); stroke-width: 1; }
+.pf-chart .base { stroke: var(--timber-muted); stroke-opacity: 0.5; stroke-width: 1; }
+.pf-chart .s1 { fill: var(--series-1); }
+.pf-chart .s2 { fill: var(--series-2); }
+.pf-chart .band { fill: transparent; outline: none; cursor: default; }
+.pf-chart .band:hover, .pf-chart .band:focus-visible { fill: color-mix(in srgb, var(--timber-ink) 6%, transparent); }
+.pf-chart .band:focus-visible { stroke: var(--timber-primary); stroke-width: 2; }
+.pf-chart .bar { transition: opacity 0.12s ease; }
+.pf-chart .hot .bar { opacity: 0.8; }
+.pf-chart .val { fill: var(--timber-ink); font-weight: 800; }
+.pf-legend { display: flex; flex-wrap: wrap; gap: 0.4rem 1.1rem; font-size: 0.82rem; font-weight: 700; color: var(--timber-ink); }
+.pf-legend span { display: inline-flex; align-items: center; gap: 0.4rem; }
+.pf-legend i { display: inline-block; width: 0.8rem; height: 0.8rem; border-radius: 3px; }
+.pf-legend .k1 { background: var(--series-1); }
+.pf-legend .k2 { background: var(--series-2); }
+.pf-tip {
+  position: absolute;
+  z-index: 3;
+  min-width: 11rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--timber-line);
+  border-radius: 0.7rem;
+  background: var(--timber-panel);
+  box-shadow: var(--timber-shadow);
+  pointer-events: none;
+  transform: translate(-50%, -100%);
+  font-size: 0.8rem;
+}
+.pf-tip strong { display: block; margin-bottom: 0.25rem; font-size: 0.82rem; }
+.pf-tip .row > span { display: inline-flex; align-items: center; white-space: nowrap; }
+.pf-tip .row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.08rem 0; color: var(--timber-muted); font-weight: 600; }
+.pf-tip .row b { color: var(--timber-ink); font-variant-numeric: tabular-nums; font-size: 0.86rem; }
+.pf-tip .key { display: inline-block; width: 0.9rem; height: 3px; margin-right: 0.4rem; vertical-align: middle; border-radius: 2px; }
+.pf-tip .key.k1 { background: var(--series-1); }
+.pf-tip .key.k2 { background: var(--series-2); }
+.pf-spark { display: block; width: 100%; height: 2.4rem; margin-top: 0.35rem; }
+.pf-spark path { fill: none; stroke: var(--timber-primary); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.pf-spark .area { fill: color-mix(in srgb, var(--timber-primary) 14%, transparent); stroke: none; }
+.pf-spark.good path { stroke: var(--timber-success); }
+.pf-spark.good .area { fill: color-mix(in srgb, var(--timber-success) 14%, transparent); }
+
+/* ———— Barra de uso ———— */
+.pf-usage { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 0.2rem 0.8rem; }
+.pf-usage .pf-meter { grid-column: 1 / -1; margin-top: 0; }
+
+/* ———— Pequeños ———— */
+.pf-chip { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.1rem 0.5rem; border-radius: 99px; background: var(--timber-panel-elevated); border: 1px solid var(--timber-line); font-size: 0.74rem; font-weight: 700; color: var(--timber-muted); }
+.pf-chip.bad { color: var(--timber-danger); border-color: color-mix(in srgb, var(--timber-danger) 35%, var(--timber-line)); }
+.pf-chip.warn { color: var(--timber-warning); border-color: color-mix(in srgb, var(--timber-warning) 35%, var(--timber-line)); }
+.pf-hello { margin: 0; font-size: 0.95rem; color: var(--timber-muted); font-weight: 600; }
+.pf-two { display: grid; gap: 0.75rem; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 62rem) { .pf-two { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); } .pf-two.even { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.pf-card-stack > * + * { margin-top: 0.75rem; }
+.pf-expense { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: 0.6rem; align-items: end; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .pf-row, .pf-queue-item { transition: background-color 0.15s ease, border-color 0.15s ease; }
+}
+@media print { .pf-pane-list, .pf-reply, .adm-acts { display: none !important; } }
+
+a.adm-kpi, a.pf-row, .pf-queue-item a { text-decoration: none; }
+a.adm-kpi:hover { border-color: color-mix(in srgb, var(--timber-primary) 40%, var(--timber-line)); }
+
+.adm-head { flex-wrap: wrap; }
+.pf-tools .adm-tabs { max-width: 100%; overflow-x: auto; }
+@media (max-width: 61.99rem) {
+  .hide-narrow { display: none !important; }
+}
+.adm.pf { min-width: 0; max-width: 100%; }
+.adm.pf > * { min-width: 0; }
+.pf-tools .adm-tabs { flex: 0 1 auto; min-width: 0; }

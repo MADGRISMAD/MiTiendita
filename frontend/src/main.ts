@@ -33,7 +33,13 @@ import PrintOrderView from "./views/PrintOrderView.vue";
 import PrintCashCloseView from "./views/PrintCashCloseView.vue";
 import InvoiceRequestView from "./views/InvoiceRequestView.vue";
 import BillingView from "./views/BillingView.vue";
-import PlatformAdminView from "./views/PlatformAdminView.vue";
+import PlatformToday from "./views/platform/PlatformToday.vue";
+import PlatformSupport from "./views/platform/PlatformSupport.vue";
+import PlatformClients from "./views/platform/PlatformClients.vue";
+import PlatformFinance from "./views/platform/PlatformFinance.vue";
+import PlatformTeam from "./views/platform/PlatformTeam.vue";
+
+const PLATFORM_STAFF = ["platform_admin", "platform_support"];
 import NotFoundView from "./views/NotFoundView.vue";
 import LegalView from "./views/LegalView.vue";
 import CustomersView from "./views/CustomersView.vue";
@@ -78,42 +84,47 @@ const routes: RouteRecordRaw[] = [
     component: BillingView,
     meta: { requiresAuth: true, roles: ["admin", "cashier"] },
   },
+  // Área de plataforma (equipo de Mi Tiendita): cada pantalla en su archivo
   {
     path: "/platform",
     name: "platform",
-    component: PlatformAdminView,
-    meta: { requiresAuth: true, roles: ["platform_admin"], owner: true },
+    component: PlatformToday,
+    meta: { requiresAuth: true, roles: PLATFORM_STAFF, owner: true },
+  },
+  {
+    path: "/platform/soporte",
+    name: "platformSupport",
+    component: PlatformSupport,
+    meta: { requiresAuth: true, roles: PLATFORM_STAFF, owner: true },
   },
   {
     path: "/platform/clientes",
     name: "platformClients",
-    component: PlatformAdminView,
-    meta: { requiresAuth: true, roles: ["platform_admin", "platform_support"], owner: true },
+    component: PlatformClients,
+    meta: { requiresAuth: true, roles: PLATFORM_STAFF, owner: true },
+  },
+  {
+    path: "/platform/clientes/:id",
+    name: "platformClient",
+    component: PlatformClients,
+    meta: { requiresAuth: true, roles: PLATFORM_STAFF, owner: true },
+  },
+  {
+    path: "/platform/finanzas",
+    name: "platformFinance",
+    component: PlatformFinance,
+    meta: { requiresAuth: true, roles: ["platform_admin"], owner: true },
   },
   {
     path: "/platform/equipo",
     name: "platformTeam",
-    component: PlatformAdminView,
+    component: PlatformTeam,
     meta: { requiresAuth: true, roles: ["platform_admin"], owner: true },
   },
-  {
-    path: "/platform/ganancias",
-    name: "platformRevenue",
-    component: PlatformAdminView,
-    meta: { requiresAuth: true, roles: ["platform_admin"], owner: true },
-  },
-  {
-    path: "/platform/ia",
-    name: "platformAi",
-    component: PlatformAdminView,
-    meta: { requiresAuth: true, roles: ["platform_admin"], owner: true },
-  },
-  {
-    path: "/platform/gastos",
-    name: "platformExpenses",
-    component: PlatformAdminView,
-    meta: { requiresAuth: true, roles: ["platform_admin"], owner: true },
-  },
+  // Direcciones de antes
+  { path: "/platform/ganancias", redirect: { name: "platformFinance", query: { v: "ingresos" } } },
+  { path: "/platform/ia", redirect: { name: "platformFinance", query: { v: "ia" } } },
+  { path: "/platform/gastos", redirect: { name: "platformFinance", query: { v: "gastos" } } },
   {
     path: "/print/order/:id",
     name: "printOrder",

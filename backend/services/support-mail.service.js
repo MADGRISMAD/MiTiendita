@@ -504,7 +504,11 @@ async function unmatchedInbox(staffEmail) {
   };
 }
 
-async function waitingInbox(staffEmail) {
+/**
+ * Tickets de todos los clientes que le tocan a `staffEmail` (nunca los asignados a otra persona).
+ * onlyOpen: solo los que esperan respuesta.
+ */
+async function collectTickets(staffEmail, { onlyOpen = false } = {}) {
   const sync = await syncInbox();
   const { mailboxOwner } = await staffContext();
   const messages = await db.ListSupportMailAll({ assignedTo: staffEmail, mailboxOwner });
@@ -524,21 +528,21 @@ async function waitingInbox(staffEmail) {
 
   const items = [];
   tenantIds.forEach((tenantId, index) => {
-    const open = mineOnly(
-      buildTickets(byTenant.get(tenantId)).filter((ticket) => ticket.status === 'open'),
-      staffEmail,
-      mailboxOwner
-    );
+    const built = buildTickets(byTenant.get(tenantId)).filter((ticket) => !onlyOpen || ticket.status === 'open');
     const storeName = settings[index]?.businessName || tenants[index]?.name || 'Cliente';
-    for (const ticket of open) {
+    for (const ticket of mineOnly(built, staffEmail, mailboxOwner)) {
       const lastIn = [...ticket.messages].reverse().find((row) => row.direction === 'in') || ticket.messages.at(-1);
+      const last = ticket.messages.at(-1);
       items.push({
         tenantId,
         businessName: storeName,
         ticketId: ticket.id,
         subject: ticket.subject,
+        status: ticket.status,
         from: ticket.to,
         preview: clip(lastIn?.text || '', 160),
+        lastFrom: last?.direction === 'out' ? 'Mi Tiendita' : ticket.to,
+        messageCount: ticket.messages.length,
         updatedAt: ticket.updatedAt,
       });
     }
@@ -548,6 +552,37 @@ async function waitingInbox(staffEmail) {
   return { items, inboxError: sync.ok ? '' : sync.reason || '' };
 }
 
+async function waitingInbox(staffEmail) {
+  return collectTickets(staffEmail, { onlyOpen: true });
+}
+
+/**
+ * Bandeja de soporte: todos los tickets de la persona, con filtro por estado y búsqueda.
+ * Primero los que esperan respuesta (los más viejos arriba: llevan más tiempo esperando).
+ */
+async function ticketBoard(staffEmail, { status = 'all', q = '', limit = 200 } = {}) {
+  const { items, inboxError } = await collectTickets(staffEmail);
+  const counts = {
+    open: items.filter((t) => t.status === 'open').length,
+    answered: items.filter((t) => t.status === 'answered').length,
+  };
+  const needle = String(q || '').trim().toLowerCase();
+  let list = items;
+  if (status === 'open' || status === 'answered') list = list.filter((t) => t.status === status);
+  if (needle) {
+    list = list.filter((t) =>
+      [t.businessName, t.subject, t.from, t.preview].some((v) => String(v || '').toLowerCase().includes(needle))
+    );
+  }
+  list = [...list].sort((a, b) => {
+    if (a.status !== b.status) return a.status === 'open' ? -1 : 1;
+    const da = new Date(a.updatedAt || 0);
+    const dbb = new Date(b.updatedAt || 0);
+    return a.status === 'open' ? da - dbb : dbb - da;
+  });
+  return { items: list.slice(0, Math.min(500, Math.max(1, Number(limit) || 200))), counts, inboxError };
+}
+
 module.exports = {
   threadFor,
   threadForLocal,
@@ -555,4 +590,5 @@ module.exports = {
   sendToClient,
   unmatchedInbox,
   waitingInbox,
+  ticketBoard,
 };
