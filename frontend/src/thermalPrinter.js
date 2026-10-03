@@ -282,7 +282,7 @@ export async function printBytes(bytes, { prompt = false } = {}) {
 }
 
 function cols() {
-  return printerStore.paper === "58" ? 32 : 48;
+  return printerStore.paper === "58" ? 32 : 42;
 }
 
 export function printTestPage({ prompt = false } = {}) {
