@@ -1141,14 +1141,49 @@
               </template>
 
               <template v-else-if="payMethod === 'card'">
+                <!-- Terminal integrada -->
+                <div
+                  v-if="point.configured && !point.useManual"
+                  class="point-box"
+                  :class="point.phase !== 'idle' || point.checking ? 'busy' : point.ok ? 'ok' : 'bad'"
+                  role="status"
+                  aria-live="polite"
+                >
+                  <template v-if="['starting', 'waiting', 'cancelling'].includes(point.phase)">
+                    <strong>{{ point.phase === 'cancelling' ? 'Cancelando…' : 'Pasa o inserta la tarjeta en la terminal' }}</strong>
+                    <span>Cobrando {{ money(chargeTotal) }}. No cierres esta ventana.</span>
+                    <button type="button" class="btn" :disabled="point.phase === 'cancelling'" @click="cancelPointCharge">
+                      Cancelar cobro
+                    </button>
+                  </template>
+                  <template v-else-if="point.checking">
+                    <strong>Verificando terminal…</strong>
+                  </template>
+                  <template v-else-if="point.ok">
+                    <strong>Terminal lista</strong>
+                    <span>El cobro llegará solo a la terminal.</span>
+                  </template>
+                  <template v-else>
+                    <strong>Reconecta tu terminal</strong>
+                    <span>{{ point.message }}</span>
+                    <div class="point-acts">
+                      <router-link to="/settings?s=terminal" class="btn primary">Ir a reconectar</router-link>
+                      <button type="button" class="btn" @click="loadPointStatus">Reintentar</button>
+                      <button type="button" class="btn ghost" @click="point.useManual = true">Cobrar manual</button>
+                    </div>
+                  </template>
+                </div>
+
                 <label v-if="cardFeeOn" class="fee-row">
-                  <input v-model="cardFee" type="checkbox" />
+                  <input v-model="cardFee" type="checkbox" :disabled="sending" />
                   <span>
                     <strong>Comisión por tarjeta ({{ feePctText }})</strong>
                     <small>+{{ money(cardFeeFor(total)) }} para cubrir lo que cobra la terminal</small>
                   </span>
                 </label>
-                <p class="pay-note">
+
+                <!-- Sin terminal vinculada, o cobro manual elegido -->
+                <p v-if="!point.configured || point.useManual" class="pay-note">
                   Cobra <strong>{{ money(chargeTotal) }}</strong> en la terminal y confirma cuando salga aprobado.
                 </p>
               </template>
@@ -1178,8 +1213,8 @@
 
               <div class="dlg-acts">
                 <button type="button" class="btn" :disabled="sending" @click="closePayment">Cancelar</button>
-                <button ref="payConfirmBtn" type="submit" class="btn accent" :disabled="sending || cashBlocked">
-                  {{ sending ? 'Cobrando…' : 'Confirmar cobro' }}
+                <button ref="payConfirmBtn" type="submit" class="btn accent" :disabled="sending || cashBlocked || pointBlocked">
+                  {{ sending ? (point.phase === 'waiting' ? 'Esperando terminal…' : 'Cobrando…') : (pointActive ? 'Cobrar en terminal' : 'Confirmar cobro') }}
                   <kbd class="only-pc">Enter</kbd>
                 </button>
               </div>
@@ -1597,6 +1632,99 @@ export default {
     const payCashReceived = ref("");
     const payCardAmount = ref("");
     const payError = ref("");
+
+    // ── Terminal Mercado Pago integrada ──
+    const point = reactive({
+      configured: false, // el negocio ya vinculó terminal
+      ok: false, // lista para cobrar AHORA
+      code: "",
+      message: "",
+      checking: false,
+      phase: "idle", // idle | starting | waiting | cancelling | approved
+      chargeId: "",
+      cancelRequested: false,
+      useManual: false, // el cajero eligió cobrar a mano esta vez
+    });
+    const pointActive = computed(() => payMethod.value === "card" && point.configured && !point.useManual);
+    const pointBlocked = computed(() => pointActive.value && (!point.ok || point.checking));
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+    async function loadPointStatus() {
+      point.checking = true;
+      try {
+        const s = await apiSvc.pointStatus();
+        point.configured = Boolean(s.configured);
+        point.ok = Boolean(s.ok);
+        point.code = s.code || "";
+        point.message = s.message || "";
+      } catch (e) {
+        // Sin internet o error del servidor: no se puede usar la terminal integrada ahora
+        point.ok = false;
+        point.code = "offline";
+        point.message = isNetworkError(e)
+          ? "Sin internet: no se puede cobrar con la terminal integrada. Revisa tu conexión."
+          : "No se pudo verificar la terminal. Intenta de nuevo.";
+      } finally {
+        point.checking = false;
+      }
+    }
+
+    // Al elegir «Tarjeta» (o abrir el cobro con Tarjeta) se verifica la terminal ANTES de cobrar
+    watch([showPayment, payMethod], ([open, method]) => {
+      if (open && method === "card") {
+        point.useManual = false;
+        loadPointStatus();
+      }
+    });
+
+    /** Manda el cobro a la terminal y espera la aprobación. Devuelve el id del cobro aprobado. */
+    async function runPointCharge(clientSaleId, amount) {
+      point.cancelRequested = false;
+      point.phase = "starting";
+      const started = await apiSvc.pointStartCharge({ clientSaleId, amount });
+      point.chargeId = started.id;
+      point.phase = "waiting";
+      const deadline = Date.now() + 4 * 60 * 1000;
+      while (Date.now() < deadline) {
+        try {
+          const s = await apiSvc.pointChargeStatus(started.id);
+          if (s.status === "paid") {
+            point.phase = "approved";
+            return started.id;
+          }
+          if (s.status === "failed") {
+            throw Object.assign(new Error("La terminal canceló o rechazó el cobro."), { final: true });
+          }
+        } catch (e) {
+          if (e.final) throw e;
+          if (!isNetworkError(e)) throw e; // errores de red momentáneos: se sigue intentando
+        }
+        if (point.cancelRequested) throw Object.assign(new Error("Cobro cancelado."), { final: true });
+        await sleep(2000);
+      }
+      try {
+        await apiSvc.pointCancelCharge(started.id);
+      } catch {
+        /* se revisa abajo */
+      }
+      throw Object.assign(
+        new Error("Se agotó el tiempo de espera en la terminal. Si el cliente ya pagó, revisa en Mercado Pago antes de repetir el cobro."),
+        { final: true }
+      );
+    }
+
+    async function cancelPointCharge() {
+      if (!["starting", "waiting"].includes(point.phase)) return;
+      point.cancelRequested = true;
+      point.phase = "cancelling";
+      try {
+        await apiSvc.pointCancelCharge(point.chargeId);
+      } catch {
+        /* el ciclo de espera revisa el estado final */
+      }
+      // Si en ese instante el cliente alcanzó a pagar, el ciclo lo detecta como «paid» y la venta SÍ se registra
+      if (point.phase === "cancelling") point.phase = "waiting";
+    }
     const takesCash = computed(() => payMethod.value === "cash" || payMethod.value === "split");
     const payCashPortion = computed(() => {
       if (payMethod.value === "cash") return round2(total.value);
@@ -3231,6 +3359,11 @@ export default {
         return;
       }
 
+      if (pointActive.value && !point.ok) {
+        payError.value = point.message || "La terminal no está lista. Reconéctala o cobra manualmente.";
+        return;
+      }
+
       sending.value = true;
       msg.value = "";
       const clientSaleId = newClientSaleId();
@@ -3269,6 +3402,20 @@ export default {
         change: Number(payChange.value || 0),
       };
       try {
+        // Cobro en la terminal Mercado Pago: la venta se registra SOLO si sale aprobado
+        if (pointActive.value) {
+          try {
+            const chargeId = await runPointCharge(clientSaleId, chargeTotal.value);
+            payload.pointChargeId = chargeId;
+          } catch (e) {
+            payError.value = e.final
+              ? e.message
+              : isNetworkError(e)
+                ? "Sin internet: no se pudo enviar el cobro a la terminal."
+                : e.response?.data?.message || e.message || "No se pudo cobrar en la terminal.";
+            return; // el finally de abajo libera `sending`
+          }
+        }
         let order;
         let offline = false;
         try {
@@ -3321,6 +3468,8 @@ export default {
           "Error al registrar la venta.";
       } finally {
         sending.value = false;
+        point.phase = "idle";
+        point.chargeId = "";
       }
     }
 
@@ -4103,6 +4252,11 @@ export default {
       openCashFromPay,
       venueStore,
       offlineStore,
+      point,
+      pointActive,
+      pointBlocked,
+      loadPointStatus,
+      cancelPointCharge,
     };
   },
 };
@@ -6655,5 +6809,26 @@ html[data-theme="dark"] .avatar {
   background: var(--timber-primary);
   color: var(--timber-on-primary);
 }
+
+/* —— Terminal Mercado Pago integrada —— */
+.point-box {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.8rem 0.95rem;
+  border-radius: 0.9rem;
+  font-size: 0.9rem;
+  line-height: 1.35;
+}
+.point-box strong { font-size: 0.98rem; }
+.point-box.ok { background: var(--timber-success-soft); color: var(--timber-success); }
+.point-box.busy { background: var(--timber-primary-soft); color: var(--timber-primary); }
+.point-box.bad {
+  background: var(--timber-danger-soft);
+  color: var(--timber-danger);
+  border: 1px solid color-mix(in srgb, var(--timber-danger) 35%, transparent);
+}
+.point-box span { color: var(--timber-ink); }
+.point-acts { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.25rem; }
+.point-acts .btn { min-height: 2.6rem; font-size: 0.88rem; }
 
 </style>
