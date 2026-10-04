@@ -38,9 +38,27 @@ function httpError(msg, status = 400, code) {
 }
 
 /* ───────────── OAuth: conectar la cuenta MP del negocio ───────────── */
+const STATE_TTL_MS = 15 * 60 * 1000;
+const stateSecret = () => {
+  const s = process.env.OAUTH_STATE_SECRET;
+  if (!s) throw httpError('Falta OAUTH_STATE_SECRET en el servidor.', 500, 'not_configured');
+  return s;
+};
+
+function requireOAuthConfig() {
+  const missing = ['MP_CLIENT_ID', 'MP_CLIENT_SECRET', 'MP_OAUTH_REDIRECT', 'OAUTH_STATE_SECRET', 'TOKEN_ENC_KEY'].filter(
+    (k) => !process.env[k]
+  );
+  if (missing.length) {
+    throw httpError('La conexión con Mercado Pago no está configurada en el servidor.', 503, 'not_configured');
+  }
+}
+
 function buildAuthUrl(tenantId) {
-  const nonce = crypto.randomBytes(8).toString('hex');
-  const sig = crypto.createHmac('sha256', process.env.OAUTH_STATE_SECRET).update(`${tenantId}.${nonce}`).digest('hex');
+  requireOAuthConfig();
+  // El nonce lleva la hora de emisión: el enlace de autorización caduca
+  const nonce = `${Date.now().toString(36)}${crypto.randomBytes(6).toString('hex')}`;
+  const sig = crypto.createHmac('sha256', stateSecret()).update(`${tenantId}.${nonce}`).digest('hex');
   const q = new URLSearchParams({
     client_id: process.env.MP_CLIENT_ID,
     response_type: 'code',
@@ -53,10 +71,12 @@ function buildAuthUrl(tenantId) {
 
 function parseState(state) {
   const [tenantId, nonce, sig] = String(state || '').split('.');
-  const expected = crypto.createHmac('sha256', process.env.OAUTH_STATE_SECRET).update(`${tenantId}.${nonce}`).digest('hex');
+  const expected = crypto.createHmac('sha256', stateSecret()).update(`${tenantId}.${nonce}`).digest('hex');
   if (!sig || sig.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) {
     throw httpError('state inválido', 400);
   }
+  const issuedAt = parseInt(String(nonce).slice(0, -12), 36);
+  if (!issuedAt || Date.now() - issuedAt > STATE_TTL_MS) throw httpError('El enlace de conexión caducó', 400);
   return tenantId;
 }
 
@@ -204,6 +224,9 @@ function verifyWebhookSignature(req) {
 }
 
 module.exports = {
+  encrypt,
+  decrypt,
+  parseState,
   mp,
   httpError,
   verifyWebhookSignature,

@@ -1,6 +1,7 @@
 const db = require('../database/mongodb');
 const { normalizeOrder, orderStatuses, paymentMethods, newToken } = require('../models/order.model');
 const { storeDayRange } = require('../utils/store-time');
+const pointCharges = require('../services/point.charges.service');
 
 /**
  * Rango de un reporte. Un día «AAAA-MM-DD» se toma en la zona de la tienda
@@ -137,6 +138,21 @@ async function settlePayment(req, existing, body, { requireCash = true, paidAt }
   const deliveryFee = Number(existing.deliveryFee || 0);
   const total = Number((totals.total + deliveryFee).toFixed(2));
 
+  // Cobro con terminal Mercado Pago: debe estar aprobado, ser de esta tienda, por este monto y usarse una sola vez
+  let pointChargeId = null;
+  if (body?.pointChargeId) {
+    if (method !== 'card') throw httpError(400, 'El cobro con terminal solo aplica a pagos con tarjeta');
+    try {
+      const charge = await pointCharges.consumeCharge(req.tenantId, String(body.pointChargeId), {
+        clientSaleId: existing.clientSaleId || String(existing.id),
+        total,
+      });
+      pointChargeId = charge.id;
+    } catch (err) {
+      throw httpError(err.status || 409, err.message);
+    }
+  }
+
   let stockShortages = [];
   if (settings?.inventoryEnabled && !existing.inventoryApplied) {
     // Una venta hecha sin internet ya se entregó: se registra aunque falte stock y queda para revisión
@@ -190,6 +206,7 @@ async function settlePayment(req, existing, body, { requireCash = true, paidAt }
       cardAmount: method === 'split' ? cardAmount : null,
       change: change > 0 ? change : 0,
       paymentReference: paymentReference || null,
+      pointChargeId,
       inventoryApplied: Boolean(settings?.inventoryEnabled),
       stockReview: stockShortages.length > 0,
       stockShortages,

@@ -96,6 +96,20 @@ cd backend && npm run seed:platform-admin
 - **Límites de peticiones** por IP, guardados en MongoDB (`rate_limits`, con TTL) para que valgan entre instancias/serverless: global, login, registro, recuperar contraseña, 2FA, refresh y rutas públicas (factura, invitaciones).
 - **Cabeceras de seguridad** (equivalentes a helmet) en todas las respuestas de la API.
 
+## Terminal de cobro Mercado Pago (Point)
+
+Cada tienda conecta **su propia** cuenta de Mercado Pago y elige su terminal en *Configuración → Terminal de cobro*. Al cobrar con tarjeta, el monto aparece solo en la terminal y la venta se registra únicamente si el pago sale aprobado.
+
+**Configuración del servidor** (una vez, ver `backend/.env.example`):
+
+1. En [Tus integraciones](https://www.mercadopago.com.mx/developers/panel/app) crea una aplicación y copia `MP_CLIENT_ID` y `MP_CLIENT_SECRET`.
+2. Redirect URL de la app = `MP_OAUTH_REDIRECT` = `{API_PUBLIC_URL}/point/oauth/callback`.
+3. Webhooks → evento *Order*: `{API_PUBLIC_URL}/point/webhook`, con la clave secreta en `MP_WEBHOOK_SECRET`.
+4. Genera `OAUTH_STATE_SECRET` y `TOKEN_ENC_KEY` (32 bytes en hex): `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`.
+   Los tokens de cada tienda se guardan cifrados (AES-256-GCM); si cambias `TOKEN_ENC_KEY` hay que reconectar las cuentas.
+
+**Garantías:** el cobro se crea en la terminal antes de registrar la venta; la venta lo "consume" una sola vez, solo si está aprobado, es de la misma tienda y por el mismo monto. Si el monto aprobado no coincide, queda en revisión y no se usa. Si la terminal o la cuenta se desconectan, se avisa antes de cobrar y se puede cobrar manual.
+
 ## Docker
 ```bash
 docker compose up --build -d

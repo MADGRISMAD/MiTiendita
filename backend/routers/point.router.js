@@ -1,38 +1,27 @@
 /**
- * backend/routers/point.router.js
- * Se monta con:  app.use('/point', require('./routers/point.router'));
- *
- * ⚠️ AJUSTA SOLO EL BLOQUE "Middleware": copia cómo importa `auth` tu cash.router.js.
- *    Abajo intento detectar el nombre de la función exportada por auth.middleware.js.
+ * Terminal de cobro Mercado Pago Point. Se monta en /point.
+ * Dueño (admin): conecta la cuenta y elige la terminal. Dueño y cajero: ven el estado y cobran.
  */
 const express = require('express');
 const svc = require('../services/mercadopago.point.service');
 const charges = require('../services/point.charges.service');
-const authMw = require('../middleware/auth.middleware');
-const { normalizeRole, isPlatformStaff } = require('../models/tenant.model');
+const { requireAuth, requireActiveSubscription, requireRoles } = require('../middleware/auth.middleware');
+const { rateLimit } = require('../services/rate-limit.service');
 
 /* ───────────── Middleware ───────────── */
-const pick = (...names) => {
-  if (typeof authMw === 'function') return authMw;
-  for (const n of names) if (typeof authMw[n] === 'function') return authMw[n];
-  return null;
-};
-const auth = pick('auth', 'authenticate', 'authMiddleware', 'verifyToken', 'requireAuth', 'authRequired');
-if (!auth) {
-  throw new Error('point.router.js: no encontré la función de auth en middleware/auth.middleware.js. Copia el import de cash.router.js.');
-}
-// Solo el dueño (admin) conecta cuenta y terminal; el cajero solo cobra
-function adminOnly(req, res, next) {
-  const role = normalizeRole(req.user?.role);
-  if (role === 'admin' || isPlatformStaff(role)) return next();
-  return res.status(403).json({ message: 'Solo el administrador puede hacer esto.' });
-}
+const auth = [requireAuth, requireActiveSubscription, requireRoles('admin', 'cashier')];
+const adminOnly = requireRoles('admin');
 
 const router = express.Router();
+const who = (req) => req.user?.username || req.ip;
+const startLimit = rateLimit({ name: 'point-start', windowMs: 10 * 60 * 1000, max: 60, key: who });
+const pollLimit = rateLimit({ name: 'point-poll', windowMs: 10 * 60 * 1000, max: 1500, key: who });
+const adminLimit = rateLimit({ name: 'point-admin', windowMs: 10 * 60 * 1000, max: 40, key: who });
+const outcome = (c) => (['paid', 'pending', 'review'].includes(c.status) ? c.status : 'failed');
 const fail = (res, err) => res.status(err.status || 500).json({ message: err.message, code: err.code });
 
 /* ───────────── Conexión de cuenta (admin) ───────────── */
-router.get('/connect', auth, adminOnly, (req, res) => {
+router.get('/connect', auth, adminOnly, adminLimit, (req, res) => {
   try { res.json({ url: svc.buildAuthUrl(req.tenantId) }); } catch (e) { fail(res, e); }
 });
 
@@ -49,7 +38,7 @@ router.get('/oauth/callback', async (req, res) => {
   }
 });
 
-router.delete('/connection', auth, adminOnly, async (req, res) => {
+router.delete('/connection', auth, adminOnly, adminLimit, async (req, res) => {
   try { await charges.disconnect(req.tenantId); res.sendStatus(204); } catch (e) { fail(res, e); }
 });
 
@@ -57,7 +46,7 @@ router.delete('/connection', auth, adminOnly, async (req, res) => {
 router.get('/terminals', auth, adminOnly, async (req, res) => {
   try { res.json(await svc.listTerminals(req.tenantId)); } catch (e) { fail(res, e); }
 });
-router.post('/terminal', auth, adminOnly, async (req, res) => {
+router.post('/terminal', auth, adminOnly, adminLimit, async (req, res) => {
   try { res.json(await svc.registerTerminal(req.tenantId, String(req.body?.terminalId || ''))); } catch (e) { fail(res, e); }
 });
 
@@ -66,24 +55,24 @@ router.get('/status', auth, async (req, res) => {
   try { res.json(await charges.status(req.tenantId)); } catch (e) { fail(res, e); }
 });
 
-router.post('/charges', auth, async (req, res) => {
+router.post('/charges', auth, startLimit, async (req, res) => {
   try {
     const { clientSaleId, amount } = req.body || {};
     res.status(201).json(await charges.startCharge({ tenantId: req.tenantId, clientSaleId, amount }));
   } catch (e) { fail(res, e); }
 });
 
-router.get('/charges/:id', auth, async (req, res) => {
+router.get('/charges/:id', auth, pollLimit, async (req, res) => {
   try {
     const c = await charges.syncCharge(req.tenantId, req.params.id);
-    res.json({ status: c.status === 'paid' ? 'paid' : c.status === 'pending' ? 'pending' : 'failed', mpStatus: c.mpStatus });
+    res.json({ status: outcome(c), mpStatus: c.mpStatus });
   } catch (e) { fail(res, e); }
 });
 
-router.post('/charges/:id/cancel', auth, async (req, res) => {
+router.post('/charges/:id/cancel', auth, startLimit, async (req, res) => {
   try {
     const c = await charges.cancelCharge(req.tenantId, req.params.id);
-    res.json({ status: c.status === 'paid' ? 'paid' : c.status === 'pending' ? 'pending' : 'failed' });
+    res.json({ status: outcome(c) });
   } catch (e) { fail(res, e); }
 });
 

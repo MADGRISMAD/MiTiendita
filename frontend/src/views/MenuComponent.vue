@@ -1695,6 +1695,12 @@ export default {
           if (s.status === "failed") {
             throw Object.assign(new Error("La terminal canceló o rechazó el cobro."), { final: true });
           }
+          if (s.status === "review") {
+            throw Object.assign(
+              new Error("El cobro se aprobó por un monto distinto al de la venta. Revísalo en Mercado Pago antes de repetirlo."),
+              { final: true }
+            );
+          }
         } catch (e) {
           if (e.final) throw e;
           if (!isNetworkError(e)) throw e; // errores de red momentáneos: se sigue intentando
