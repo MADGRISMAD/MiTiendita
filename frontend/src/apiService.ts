@@ -348,6 +348,32 @@ export const apiService = {
     return axios.get(`/cash/session/${id}`).then((r) => r.data);
   },
 
+    // ── Terminal Mercado Pago (Point) ──
+  pointStatus() {
+    return axios.get('/point/status').then((r) => r.data);
+  },
+  pointConnect() {
+    return axios.get('/point/connect').then((r) => r.data);
+  },
+  pointTerminals() {
+    return axios.get('/point/terminals').then((r) => r.data);
+  },
+  pointRegisterTerminal(terminalId: string) {
+    return axios.post('/point/terminal', { terminalId }).then((r) => r.data);
+  },
+  pointDisconnect() {
+    return axios.delete('/point/connection').then((r) => r.status === 204);
+  },
+  pointStartCharge(body: { clientSaleId: string; amount: number }) {
+    return axios.post('/point/charges', body, { timeout: 20000 }).then((r) => r.data);
+  },
+  pointChargeStatus(id: string) {
+    return axios.get(`/point/charges/${id}`, { timeout: 15000 }).then((r) => r.data);
+  },
+  pointCancelCharge(id: string) {
+    return axios.post(`/point/charges/${id}/cancel`, {}, { timeout: 20000 }).then((r) => r.data);
+  },
+
   getBillingPlans() {
     return axios.get('/billing/plans').then((r) => r.data);
   },

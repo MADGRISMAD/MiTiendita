@@ -304,6 +304,11 @@
             </router-link>
           </template>
 
+          <!-- ======= Terminal de cobro (Mercado Pago Point) ======= -->
+          <template v-else-if="section === 'terminal'">
+            <PointTerminalSettings />
+          </template>
+
           <!-- ======= Impresora ======= -->
           <template v-else-if="section === 'impresora'">
             <section class="adm-card cfg-card">
@@ -640,6 +645,7 @@ import AppShell from "../components/AppShell.vue";
 import PosIcon from "../components/PosIcon.js";
 import TicketHeader from "../components/TicketHeader.vue";
 import WhatsAppHelp from "../components/WhatsAppHelp.vue";
+import PointTerminalSettings from "../components/PointTerminalSettings.vue";
 import { MIN_PASSWORD, passwordProblem } from "../passwordPolicy";
 import { apiService, logoutSession } from "../apiService";
 import { currentVenueSettings, fetchVenueSettings, saveVenueSettings, venueStore } from "../venueStore";
@@ -694,6 +700,7 @@ const SECTIONS = {
   negocio: { label: "Mi negocio", icon: "store", desc: "Nombre, giro, dirección y logo", lead: "Así te ven tus clientes en el ticket y en la app.", tone: "info" },
   ventas: { label: "Ventas e IVA", icon: "percent", desc: "IVA y comisión por tarjeta", lead: "El impuesto de tus ventas y la comisión al pagar con tarjeta.", tone: "good" },
   inventario: { label: "Inventario", icon: "box", desc: "Existencias y costo de compras", lead: "Cómo se mueven tus existencias y tus costos.", tone: "warn" },
+  terminal: { label: "Terminal de cobro", icon: "card", desc: "Vincula tu terminal Mercado Pago", lead: "Cobra con tarjeta directo en tu terminal.", tone: "good" },
   bascula: { label: "Báscula", icon: "hash", desc: "Pesar a granel y agregar solo", lead: "La báscula de esta caja.", tone: "good" },
   impresora: { label: "Impresora", icon: "printer", desc: "Ticket directo en térmica y cajón", lead: "Cómo sale el ticket en esta caja.", tone: "info" },
   apariencia: { label: "Apariencia", icon: "sun", desc: "Tema claro u oscuro", lead: "Cómo se ve la app en este dispositivo.", tone: "" },
@@ -701,7 +708,7 @@ const SECTIONS = {
   soporte: { label: "Soporte", icon: "chat", desc: "Escríbenos y ve las respuestas", lead: "Estamos para ayudarte.", tone: "info" },
 };
 const NAV = [
-  { title: "Tu tienda", items: ["negocio", "ventas", "inventario"].map((id) => ({ id, ...SECTIONS[id] })) },
+  { title: "Tu tienda", items: ["negocio", "ventas", "inventario", "terminal"].map((id) => ({ id, ...SECTIONS[id] })) },
   {
     title: "Equipo y plan",
     items: [
