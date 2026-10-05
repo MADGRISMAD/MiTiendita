@@ -76,6 +76,12 @@ global.fetch = async (url, opts = {}) => {
     mp.orders[mp.nextOrder] = { id: mp.nextOrder, status: 'created', transactions: { payments: [{ amount: body.transactions.payments[0].amount }] } };
     return reply(201, mp.orders[mp.nextOrder]);
   }
+  const rf = /^\/v1\/orders\/([^/]+)\/refund$/.exec(u);
+  if (rf) {
+    if (mp.refundFails) return reply(400, { message: 'insufficient funds' });
+    if (mp.orders[rf[1]]) mp.orders[rf[1]].status = 'refunded';
+    return reply(200, mp.orders[rf[1]] || {});
+  }
   const m = /^\/v1\/orders\/([^/]+)(\/cancel)?$/.exec(u);
   if (m) {
     const order = mp.orders[m[1]];
@@ -173,6 +179,27 @@ test('cobro: se crea en la terminal, es idempotente y al pagarse queda listo par
   await assert.rejects(charges.consumeCharge('t1', a.id, { clientSaleId: 'sale-0002', total: 125.5 }), (e) => e.code === 'charge_used');
   // otra tienda no puede usar el cobro
   await assert.rejects(charges.consumeCharge('t2', a.id, { clientSaleId: 'sale-0003', total: 125.5 }), (e) => e.code === 'charge_not_found');
+});
+
+test('devolver: reembolsa en MP una sola vez y si MP rechaza no queda marcado', async () => {
+  store.charges.length = 0;
+  await ready('t1');
+  mp.nextOrder = 'ORD-R';
+  const a = await charges.startCharge({ tenantId: 't1', clientSaleId: 'sale-r1', amount: 8 });
+  mp.orders['ORD-R'].status = 'processed';
+  mp.orders['ORD-R'].transactions.payments[0].paid_amount = '8.00';
+  await charges.syncCharge('t1', a.id);
+
+  mp.refundFails = true;
+  await assert.rejects(charges.refundCharge('t1', a.id), (e) => /Mercado Pago no pudo devolver/.test(e.message));
+  assert.equal(store.charges.find((c) => c.id === a.id).refundedAt, undefined);
+
+  mp.refundFails = false;
+  await charges.refundCharge('t1', a.id);
+  await charges.refundCharge('t1', a.id);
+  assert.equal(mp.calls.filter((c) => c.url === '/v1/orders/ORD-R/refund' && c.method === 'POST').length, 2, 'uno rechazado + uno aceptado; el tercero no llama');
+  assert.ok(store.charges.find((c) => c.id === a.id).refundedAt);
+  await assert.rejects(charges.refundCharge('t2', a.id), (e) => e.code === 'charge_not_found');
 });
 
 test('cobro rechazado o cancelado queda fallido; si pagó justo al cancelar, queda pagado', async () => {

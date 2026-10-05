@@ -145,10 +145,34 @@ async function consumeCharge(tenantId, chargeId, { clientSaleId, total }) {
   return claimed;
 }
 
+/**
+ * Devuelve el dinero al cliente en Mercado Pago (reembolso total de la orden).
+ * Idempotente: si el cobro ya se reembolsó no vuelve a llamar a MP. Lanza si MP lo rechaza.
+ */
+async function refundCharge(tenantId, chargeId) {
+  const charge = await db.GetPointCharge(chargeId, tenantId);
+  if (!charge) throw svc.httpError('No encontré el cobro de esta venta en Mercado Pago.', 404, 'charge_not_found');
+  if (charge.refundedAt) return charge;
+  if (charge.status !== 'paid' && charge.status !== 'review') {
+    throw svc.httpError('Este cobro no está aprobado en Mercado Pago, no hay nada que devolver.', 409, 'charge_not_paid');
+  }
+  try {
+    await svc.mp(tenantId, `/v1/orders/${charge.mpOrderId}/refund`, {
+      method: 'POST',
+      headers: { 'X-Idempotency-Key': crypto.createHash('sha256').update(`refund:${charge.mpOrderId}`).digest('hex') },
+    });
+  } catch (err) {
+    if (!/already.*refund|ya.*reembols/i.test(err.message)) {
+      throw svc.httpError(`Mercado Pago no pudo devolver el dinero: ${err.message}`, err.status === 409 ? 409 : 502, err.code || 'refund_failed');
+    }
+  }
+  return db.UpdatePointCharge(chargeId, { refundedAt: new Date(), updatedAt: new Date() }, tenantId);
+}
+
 /** Webhook: solo refresca el cobro (el POS ya espera por polling). */
 async function onWebhook(mpOrderId) {
   const charge = await db.GetPointChargeByMpOrderId(String(mpOrderId));
   if (charge) await syncCharge(charge.tenantId, charge.id);
 }
 
-module.exports = { status, disconnect, startCharge, syncCharge, cancelCharge, consumeCharge, onWebhook };
+module.exports = { status, disconnect, startCharge, syncCharge, cancelCharge, consumeCharge, refundCharge, onWebhook };
