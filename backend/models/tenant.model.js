@@ -4,9 +4,11 @@ const crypto = require('crypto');
 const { ALL_PLANS } = require('../services/plans.catalog');
 
 const PLATFORM_ROLES = ['platform_admin', 'platform_support'];
+// Socios (vendedores/proveedores de Mi Tiendita): el dueño del socio y sus trabajadores
+const PARTNER_ROLES = ['partner_admin', 'partner_staff'];
 // Una tienda solo tiene dueño (admin) y cajeros. Los roles de restaurante ya no existen.
 const TENANT_ROLES = ['admin', 'cashier'];
-const ROLES = [...TENANT_ROLES, ...PLATFORM_ROLES];
+const ROLES = [...TENANT_ROLES, ...PLATFORM_ROLES, ...PARTNER_ROLES];
 const LEGACY_ROLES = ['hosstess', 'waiter', 'kitchen'];
 
 /** Rol vigente de una cuenta: los roles de restaurante pasan a cajero. */
@@ -17,6 +19,15 @@ function normalizeRole(role) {
 
 function isPlatformStaff(role) {
   return PLATFORM_ROLES.includes(String(role || ''));
+}
+
+function isPartnerRole(role) {
+  return PARTNER_ROLES.includes(String(role || ''));
+}
+
+/** Cuentas que no pertenecen a una tienda: ven datos de muchas, así que la 2FA es obligatoria. */
+function isOutsideTenant(role) {
+  return isPlatformStaff(role) || isPartnerRole(role);
 }
 const PLANS = ALL_PLANS;
 const PUBLIC_PLANS = ['basic', 'growth', 'pro'];
@@ -75,6 +86,9 @@ module.exports = {
   normalizeRole,
   PLATFORM_ROLES,
   isPlatformStaff,
+  PARTNER_ROLES,
+  isPartnerRole,
+  isOutsideTenant,
   PLANS,
   PUBLIC_PLANS,
   BILLING_STATUSES,

@@ -3,7 +3,7 @@ const service = require('../services/usuario.service');
 const hasher = require('../utils/bcrypt.utils');
 const jwtCreator = require('../utils/jwt.utils');
 const db = require('../database/mongodb');
-const { createTenantDoc, newResetToken, ROLES, TRIAL_DAYS, isPlatformStaff } = require('../models/tenant.model');
+const { createTenantDoc, newResetToken, ROLES, TRIAL_DAYS, isPartnerRole, isOutsideTenant } = require('../models/tenant.model');
 const {
   sendPasswordResetEmail,
   sendWelcomeEmail,
@@ -171,8 +171,11 @@ const LoginUsuario = async (req, res) => {
     const ok = await hasher.checkPassword(req.body?.password || '', user.password);
     if (!ok) return failAttempt(res, user, BAD_LOGIN);
 
-    const isPlatform = isPlatformStaff(user.role);
-    if (!isPlatform && !user.tenantId) {
+    const outside = isOutsideTenant(user.role);
+    if (isPartnerRole(user.role) && !user.partnerId) {
+      return res.status(403).send('Esta cuenta no está ligada a ningún socio.');
+    }
+    if (!outside && !user.tenantId) {
       return res.status(403).send('Usuario sin tenant asignado');
     }
 
@@ -182,7 +185,7 @@ const LoginUsuario = async (req, res) => {
         mfaToken: jwtCreator.signPurposeToken('mfa', { uid: String(user._id) }, '5m'),
       });
     }
-    if (isPlatform) {
+    if (outside) {
       return res.status(200).json({
         mfaSetupRequired: true,
         mfaToken: jwtCreator.signPurposeToken('mfa-setup', { uid: String(user._id) }, '15m'),
@@ -302,8 +305,8 @@ const MfaDisable = async (req, res) => {
   try {
     const user = await service.FindUserByUsername(req.user.username);
     if (!user) return res.status(404).send('Usuario no encontrado');
-    if (isPlatformStaff(user.role)) {
-      return res.status(400).send('El equipo de Mi Tiendita debe tener la verificación en dos pasos siempre activa.');
+    if (isOutsideTenant(user.role)) {
+      return res.status(400).send('Esta cuenta debe tener la verificación en dos pasos siempre activa.');
     }
     if (!user.mfaEnabled) return res.status(200).json({ ok: true });
     const ok = await hasher.checkPassword(req.body?.password || '', user.password);
@@ -397,6 +400,7 @@ const Me = async (req, res) => {
       username: req.user.username,
       role: req.user.role,
       tenantId: req.tenantId,
+      partnerId: req.partnerId || null,
       email: String(user?.email || req.user.email || '').trim().toLowerCase(),
       roles: ROLES,
       mfaEnabled: Boolean(user?.mfaEnabled),

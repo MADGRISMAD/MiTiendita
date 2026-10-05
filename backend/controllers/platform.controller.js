@@ -10,6 +10,7 @@ const audit = require('../services/platform-audit.service');
 const limits = require('../services/plan-limits.service');
 const sessions = require('../services/session.service');
 const referrals = require('../services/referral.service');
+const partners = require('../services/partner.service');
 const refTiers = require('../services/referral.tiers');
 
 const SHORT_MONTHS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
@@ -945,6 +946,46 @@ async function voidCommission(req, res) {
   }
 }
 
+// Accesos al portal de socios que da el admin de la plataforma
+async function referrerUsers(req, res) {
+  try {
+    return res.status(200).json(await partners.listTeam(req.params.id));
+  } catch (err) {
+    return refFail(res, err);
+  }
+}
+
+async function createReferrerUser(req, res) {
+  try {
+    const created = await partners.createMember(req.params.id, req.body || {});
+    await audit.record(req, {
+      type: 'partner_user_created',
+      message: `Dio acceso al portal de socios a ${created.username} (${created.roleName})`,
+      meta: { referrerId: req.params.id, userId: created.id },
+    });
+    return res.status(201).json(created);
+  } catch (err) {
+    if (err instanceof partners.PartnerError) return res.status(err.status).send(err.message);
+    return refFail(res, err);
+  }
+}
+
+async function setReferrerUserActive(req, res) {
+  try {
+    const active = req.body?.active !== false;
+    await partners.setActive(req.params.id, req.params.userId, active, null);
+    await audit.record(req, {
+      type: active ? 'partner_user_reactivated' : 'partner_user_disabled',
+      message: `${active ? 'Reactivó' : 'Desactivó'} un acceso al portal de socios`,
+      meta: { referrerId: req.params.id, userId: req.params.userId },
+    });
+    return res.status(200).json(await partners.listTeam(req.params.id));
+  } catch (err) {
+    if (err instanceof partners.PartnerError) return res.status(err.status).send(err.message);
+    return refFail(res, err);
+  }
+}
+
 /** Asigna (o quita) el vendedor de una tienda que ya existe. */
 async function setTenantReferrer(req, res) {
   try {
@@ -1011,6 +1052,9 @@ async function manualPayment(req, res) {
 }
 
 module.exports = {
+  referrerUsers,
+  createReferrerUser,
+  setReferrerUserActive,
   listReferrers,
   getReferrer,
   createReferrer,

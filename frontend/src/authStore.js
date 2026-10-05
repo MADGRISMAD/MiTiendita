@@ -11,17 +11,19 @@ function normalizeRole(role) {
 function load() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { token: null, role: null, tenantId: null, username: null, email: null };
+    if (!raw) return { token: null, role: null, tenantId: null, partnerId: null, partnerName: null, username: null, email: null };
     const parsed = JSON.parse(raw);
     return {
       token: parsed.token || null,
       role: normalizeRole(parsed.role),
       tenantId: parsed.tenantId || null,
+      partnerId: parsed.partnerId || null,
+      partnerName: parsed.partnerName || null,
       username: parsed.username || null,
       email: parsed.email || null,
     };
   } catch {
-    return { token: null, role: null, tenantId: null, username: null, email: null };
+    return { token: null, role: null, tenantId: null, partnerId: null, partnerName: null, username: null, email: null };
   }
 }
 
@@ -36,16 +38,19 @@ function persist() {
       token: authStore.token,
       role: authStore.role,
       tenantId: authStore.tenantId,
+      partnerId: authStore.partnerId,
+      partnerName: authStore.partnerName,
       username: authStore.username,
       email: authStore.email,
     })
   );
 }
 
-export function setSession({ token, role, tenantId, username, email }) {
+export function setSession({ token, role, tenantId, partnerId, username, email }) {
   authStore.token = token || null;
   authStore.role = normalizeRole(role);
   authStore.tenantId = tenantId || null;
+  if (partnerId !== undefined) authStore.partnerId = partnerId || null;
   authStore.username = username || null;
   authStore.email = email || null;
   persist();
@@ -55,6 +60,8 @@ export function clearSession() {
   authStore.token = null;
   authStore.role = null;
   authStore.tenantId = null;
+  authStore.partnerId = null;
+  authStore.partnerName = null;
   authStore.username = null;
   authStore.email = null;
   localStorage.removeItem(STORAGE_KEY);
@@ -82,12 +89,28 @@ export function isPlatformStaff() {
   return isPlatformAdmin() || isPlatformSupport();
 }
 
+/** Nombre del socio para la barra superior (llega con el inicio del portal). */
+export function setPartnerName(name) {
+  authStore.partnerName = name || null;
+  persist();
+}
+
+export function isPartnerAdmin() {
+  return authStore.role === "partner_admin";
+}
+
+export function isPartner() {
+  return authStore.role === "partner_admin" || authStore.role === "partner_staff";
+}
+
 /** Home y permisos orientados a POS de abarrotes */
 export const roleHome = {
   admin: "pos",
   cashier: "pos",
   platform_admin: "platform",
   platform_support: "platform",
+  partner_admin: "partner",
+  partner_staff: "partner",
 };
 
 export const routeRoles = {
@@ -107,6 +130,11 @@ export const routeRoles = {
   platformTeam: ["platform_admin"],
   platformReferrers: ["platform_admin"],
   platformReferrer: ["platform_admin"],
+  partner: ["partner_admin", "partner_staff"],
+  partnerClients: ["partner_admin", "partner_staff"],
+  partnerClient: ["partner_admin", "partner_staff"],
+  partnerTeam: ["partner_admin", "partner_staff"],
+  partnerCommissions: ["partner_admin"],
   printOrder: ["admin", "cashier"],
   printOffline: ["admin", "cashier"],
   printCash: ["admin", "cashier"],

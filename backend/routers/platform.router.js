@@ -39,6 +39,9 @@ router.post('/referrers', ...adminOnly, writeLimit, platform.createReferrer);
 router.get('/referrers/:id', ...adminOnly, platform.getReferrer);
 router.patch('/referrers/:id', ...adminOnly, writeLimit, platform.updateReferrer);
 router.post('/referrers/:id/payouts', ...adminOnly, writeLimit, platform.payReferrer);
+router.get('/referrers/:id/users', ...adminOnly, platform.referrerUsers);
+router.post('/referrers/:id/users', ...adminOnly, writeLimit, platform.createReferrerUser);
+router.put('/referrers/:id/users/:userId/active', ...adminOnly, writeLimit, platform.setReferrerUserActive);
 router.post('/commissions/:id/void', ...adminOnly, writeLimit, platform.voidCommission);
 
 module.exports = router;
