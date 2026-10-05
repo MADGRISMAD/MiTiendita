@@ -257,14 +257,20 @@ function validMember(input) {
  * Crea una cuenta del socio. La usan el dueño del socio (para su equipo) y el admin de la plataforma
  * (para dar el primer acceso). Entra con la contraseña inicial y activa la 2FA al primer ingreso.
  */
-async function createMember(partnerId, input) {
-  const partner = await refDb.GetReferrerById(partnerId);
-  if (!partner) throw new PartnerError(404, 'Socio no encontrado.');
+/** Revisa los datos de una cuenta nueva (sin crearla). */
+async function checkMember(input) {
   const data = validMember(input);
   const weak = passwordProblem(input.password, { email: data.email, username: data.username, name: data.name });
   if (weak) throw new PartnerError(400, weak);
   if (await db.FindUserByUsername(data.username)) throw new PartnerError(409, 'Ese usuario ya existe. Prueba con otro.');
   if (await db.FindUserByEmail(data.email)) throw new PartnerError(409, 'Ya hay una cuenta con ese correo.');
+  return data;
+}
+
+async function createMember(partnerId, input) {
+  const partner = await refDb.GetReferrerById(partnerId);
+  if (!partner) throw new PartnerError(404, 'Socio no encontrado.');
+  const data = await checkMember(input);
   await db.CreateUser({
     ...data,
     password: await hasher.hashPassword(String(input.password)),
@@ -287,6 +293,44 @@ async function loadMember(partnerId, id, actor) {
   if (!target) throw new PartnerError(404, 'Esa persona no es de tu equipo.');
   if (actor && target.username === actor.username) throw new PartnerError(400, 'No puedes cambiar tu propia cuenta desde aquí.');
   return target;
+}
+
+/**
+ * Alguien se postula desde la página para ser proveedor oficial: se crea el socio en revisión
+ * y su cuenta de dueño. Puede entrar a su portal (activa la 2FA), pero su código no sirve
+ * hasta que la plataforma lo apruebe.
+ */
+async function apply(input) {
+  const member = { ...input, role: 'partner_admin' };
+  await checkMember(member);
+  const fullNameText = `${String(input.name || '').trim()} ${String(input.lastName || '').trim()}`.trim();
+  const state = String(input.state || '').trim();
+  if (state.length < 2) throw new PartnerError(400, 'Escribe tu estado.');
+  let partner;
+  try {
+    partner = await referrals.createReferrer(
+      {
+        name: fullNameText,
+        email: input.email,
+        phone: input.cellphone,
+        state,
+        city: input.city,
+        notes: input.notes,
+      },
+      { status: 'pending', source: 'signup' }
+    );
+  } catch (err) {
+    if (err instanceof referrals.ReferralError) throw new PartnerError(err.status, err.message);
+    throw err;
+  }
+  try {
+    const user = await createMember(partner.id, member);
+    return { partner, user };
+  } catch (err) {
+    // No dejar un socio sin cuenta si algo falló al crearla
+    await refDb.DeleteReferrer(partner.id).catch(() => {});
+    throw err;
+  }
 }
 
 /** Cambio que puede dejar al socio sin dueño activo: se vuelve a contar y se deshace si quedó en cero. */
@@ -337,7 +381,9 @@ module.exports = {
   assign,
   home,
   commissions,
+  checkMember,
   createMember,
+  apply,
   listTeam,
   setActive,
   changeRole,

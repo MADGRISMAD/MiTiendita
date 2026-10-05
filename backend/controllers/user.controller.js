@@ -64,6 +64,53 @@ const CheckReferralCode = async (req, res) => {
   }
 };
 
+/** Solicitud pública para ser proveedor oficial (socio). Queda en revisión. */
+const ApplyPartner = async (req, res) => {
+  const partners = require('../services/partner.service');
+  try {
+    const body = req.body || {};
+    const { partner, user } = await partners.apply({
+      name: body.name,
+      lastName: body.lastName,
+      email: body.email,
+      username: body.username,
+      password: body.password,
+      cellphone: body.cellphone,
+      state: body.state,
+      city: body.city,
+      notes: body.notes,
+    });
+    await db
+      .CreatePlatformAudit({
+        tenantId: null,
+        type: 'partner_applied',
+        message: `Nueva solicitud de proveedor: ${partner.name} (${partner.state || 'sin estado'})`,
+        meta: { referrerId: partner.id },
+        actor: user.username,
+        actorRole: 'partner_admin',
+        createdAt: new Date(),
+      })
+      .catch(() => {});
+    const inbox = String(process.env.SUPPORT_EMAIL || process.env.SMTP_USER || '').trim();
+    if (inbox.includes('@')) {
+      const { sendMail } = require('../utils/mail.utils');
+      const esc = (v) => String(v || '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+      safeSend(() =>
+        sendMail({
+          to: inbox,
+          subject: `Nueva solicitud de proveedor: ${partner.name}`,
+          html: `<p><strong>${esc(partner.name)}</strong> quiere ser proveedor oficial.</p><p>${esc(partner.email)} · ${esc(partner.phone || 'sin teléfono')} · ${esc([partner.city, partner.state].filter(Boolean).join(', '))}</p><p>Revísalo en Admin → Vendedores para aprobarlo.</p>`,
+        })
+      );
+    }
+    return res.status(201).json({ ok: true, status: 'pending', username: user.username });
+  } catch (err) {
+    if (err.status) return res.status(err.status).send(err.message);
+    console.error(err);
+    return res.status(500).send('No pudimos registrar tu solicitud. Intenta de nuevo.');
+  }
+};
+
 const CreateUser = async (req, res) => {
   try {
     const { error, value } = schema.validate(req.body);
@@ -439,6 +486,7 @@ const ChangePassword = async (req, res) => {
 
 module.exports = {
   CreateUser,
+  ApplyPartner,
   CheckReferralCode,
   LoginUsuario,
   LoginMfa,

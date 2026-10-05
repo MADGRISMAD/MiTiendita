@@ -39,7 +39,8 @@
                 <span class="meta">
                   <span class="pf-chip">{{ r.clients }} {{ r.clients === 1 ? "cliente" : "clientes" }}</span>
                   <span v-if="r.pending > 0" class="adm-pill warn">Por pagar {{ money(r.pending) }}</span>
-                  <span v-if="r.status !== 'active'" class="adm-pill">Pausado</span>
+                  <span v-if="r.status === 'pending'" class="adm-pill info">Solicitud nueva</span>
+                  <span v-else-if="r.status !== 'active'" class="adm-pill">Pausado</span>
                 </span>
               </span>
             </button>
@@ -102,7 +103,9 @@ const showNew = ref(false);
 const subtitle = computed(() => {
   if (loading.value && !items.value.length) return "Cargando…";
   const n = items.value.length;
-  return n ? `${n} ${n === 1 ? "vendedor" : "vendedores"} · ${totals.value.clients} clientes referidos` : "Sin vendedores todavía";
+  const pending = items.value.filter((r) => r.status === "pending").length;
+  const tail = pending ? ` · ${pending} ${pending === 1 ? "solicitud" : "solicitudes"} por revisar` : "";
+  return n ? `${n} ${n === 1 ? "vendedor" : "vendedores"} · ${totals.value.clients} clientes referidos${tail}` : "Sin vendedores todavía";
 });
 
 const shown = computed(() => {
@@ -110,7 +113,9 @@ const shown = computed(() => {
   const list = q
     ? items.value.filter((r) => [r.name, r.code, r.email, r.state, r.city].some((v) => String(v || "").toLowerCase().includes(q)))
     : items.value;
-  return [...list].sort((a, b) => b.clients - a.clients || a.name.localeCompare(b.name, "es"));
+  // Las solicitudes nuevas arriba para no dejarlas esperando
+  const pend = (r) => (r.status === "pending" ? 0 : 1);
+  return [...list].sort((a, b) => pend(a) - pend(b) || b.clients - a.clients || a.name.localeCompare(b.name, "es"));
 });
 
 function open(rid) {

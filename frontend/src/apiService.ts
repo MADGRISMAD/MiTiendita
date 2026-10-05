@@ -190,6 +190,9 @@ export const apiService = {
   mfaDisable(password: string, code: string) {
     return axios.post('/usuarios/mfa/disable', { password, code }).then((r) => r.data);
   },
+  registerPartner(payload: Record<string, unknown>) {
+    return axios.post('/usuarios/register-partner', payload).then((r) => r.data);
+  },
   register(payload: Record<string, unknown>) {
     return axios.post('/usuarios/register', payload).then((r) => r.data);
   },

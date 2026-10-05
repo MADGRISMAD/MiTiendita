@@ -324,3 +324,28 @@ button.auth-back {
   .wide .auth-input { min-height: 2.75rem; }
   .wide .auth-btn { min-height: 2.95rem; }
 }
+
+/* Registro: elegir entre tienda y proveedor oficial */
+.auth-kind { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; margin: 0 0 1rem; }
+.auth-kind button {
+  display: grid;
+  gap: 0.15rem;
+  padding: 0.8rem 0.9rem;
+  border: 2px solid var(--timber-line);
+  border-radius: 0.9rem;
+  background: var(--timber-panel);
+  color: var(--timber-ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.auth-kind button strong { font-size: 0.98rem; font-weight: 800; }
+.auth-kind button small { font-size: 0.78rem; color: var(--timber-muted); font-weight: 600; }
+.auth-kind button.on { border-color: var(--timber-primary); background: color-mix(in srgb, var(--timber-primary) 8%, var(--timber-panel)); }
+.auth-kind button.on strong { color: var(--timber-primary); }
+.auth-kind button:focus-visible { outline: 3px solid color-mix(in srgb, var(--timber-primary) 40%, transparent); outline-offset: 2px; }
+.auth-done { display: grid; gap: 0.8rem; justify-items: start; }
+.auth-done h1 { margin: 0; font-size: 1.6rem; }
+.auth-done p { margin: 0; line-height: 1.5; }
+.auth-done-ico { width: 3rem; height: 3rem; display: grid; place-items: center; border-radius: 50%; background: var(--timber-success); color: #fff; font-size: 1.5rem; font-weight: 900; }
+.auth-done .auth-btn { text-decoration: none; text-align: center; width: 100%; }
