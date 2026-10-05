@@ -33,8 +33,9 @@ router.get('/oauth/callback', async (req, res) => {
     await svc.handleOAuthCallback({ code: req.query.code, state: req.query.state });
     res.redirect(`${back}&mp=ok`);
   } catch (err) {
-    console.error('[point oauth]', err.message);
-    res.redirect(`${back}&mp=error`);
+    console.error('[point oauth]', err.code || '', err.status || '', err.message);
+    const reason = err.message === 'cancelled' ? 'cancelled' : err.code || (err.status === 400 ? 'state' : 'unknown');
+    res.redirect(`${back}&mp=error&reason=${encodeURIComponent(reason)}&detail=${encodeURIComponent(String(err.message).slice(0, 120))}`);
   }
 });
 
