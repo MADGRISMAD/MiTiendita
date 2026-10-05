@@ -4,7 +4,12 @@ const db = require('../database/mongodb');
 const { sendMail, safeSend, sendSupportReceivedEmail, hasSmtpConfig } = require('../utils/mail.utils');
 const templates = require('../utils/mail-templates');
 
-const SYNC_MS = 25_000;
+// La bandeja de Gmail (IMAP) se lee como mucho una vez por minuto entre TODAS las instancias,
+// solo trae lo nuevo y las pantallas no esperan más de READ_WAIT_MS por ella: usan lo guardado.
+const SYNC_MS = 60_000;
+const LEASE_MS = 90_000;
+const READ_WAIT_MS = 1_500;
+const STATE_ID = 'support-inbox';
 let lastSync = 0;
 let syncing = null;
 
@@ -160,15 +165,13 @@ async function backfillAssignees() {
 async function clientDirectory() {
   const tenants = await db.ListTenants();
   const byEmail = new Map();
-  await Promise.all(
-    tenants.map(async (tenant) => {
-      const users = await db.ListUsersByTenant(tenant.id);
-      for (const user of users) {
-        const email = String(user.email || '').trim().toLowerCase();
-        if (email.includes('@')) byEmail.set(email, tenant.id);
-      }
-    })
-  );
+  const usersByTenant = await db.ListUsersByTenants(tenants.map((t) => t.id));
+  for (const [tenantId, users] of usersByTenant) {
+    for (const user of users) {
+      const email = String(user.email || '').trim().toLowerCase();
+      if (email.includes('@')) byEmail.set(email, tenantId);
+    }
+  }
   return byEmail;
 }
 
@@ -176,14 +179,12 @@ async function rememberMessage(doc) {
   await db.SaveSupportMail(doc);
 }
 
-async function pullInbox() {
+async function pullInbox(state = {}) {
   if (!canReadInbox()) {
     await backfillAssignees().catch(() => {});
     return { ok: false, reason: 'sin buzón' };
   }
   const ours = mailboxAddress();
-  const { mailboxOwner, staffEmails } = await backfillAssignees();
-  const directory = await clientDirectory();
   const client = new ImapFlow({
     host: process.env.IMAP_HOST || 'imap.gmail.com',
     port: Number(process.env.IMAP_PORT || 993),
@@ -198,14 +199,37 @@ async function pullInbox() {
   await client.connect();
   const lock = await client.getMailboxLock('INBOX');
   try {
-    const since = new Date();
-    since.setDate(since.getDate() - 45);
-    const uids = await client.search({ since });
-    const recent = (uids || []).slice(-80);
-    if (!recent.length) return { ok: true, added: 0 };
+    const uidValidity = String(client.mailbox?.uidValidity || '');
+    const sameBox = state.uidValidity && state.uidValidity === uidValidity && Number(state.lastUid) > 0;
+    let uids;
+    if (sameBox) {
+      // Solo lo que llegó después de la última lectura
+      uids = (await client.search({ uid: `${Number(state.lastUid) + 1}:*` }, { uid: true })) || [];
+      uids = uids.filter((uid) => uid > Number(state.lastUid));
+    } else {
+      const since = new Date();
+      since.setDate(since.getDate() - 45);
+      uids = (await client.search({ since }, { uid: true })) || [];
+    }
+    const recent = uids.slice(-80);
+    const maxUid = recent.length ? Math.max(...recent) : Number(state.lastUid) || 0;
+    if (!recent.length) return { ok: true, added: 0, uidValidity, lastUid: maxUid };
 
+    // Primero solo los encabezados: lo que ya está guardado no se descarga ni se vuelve a procesar
+    const heads = [];
+    for await (const msg of client.fetch(recent, { envelope: true, uid: true }, { uid: true })) {
+      heads.push({ uid: msg.uid, messageId: String(msg.envelope?.messageId || '').trim() });
+    }
+    const known = new Set(
+      (await db.FindSupportMailByMessageIds(heads.map((h) => h.messageId).filter(Boolean))).map((row) => row.messageId)
+    );
+    const fresh = heads.filter((h) => !h.messageId || !known.has(h.messageId)).map((h) => h.uid);
+    if (!fresh.length) return { ok: true, added: 0, uidValidity, lastUid: maxUid };
+
+    const { mailboxOwner, staffEmails } = await backfillAssignees();
+    const directory = await clientDirectory();
     let added = 0;
-    for await (const msg of client.fetch(recent, { envelope: true, source: true, uid: true })) {
+    for await (const msg of client.fetch(fresh, { envelope: true, source: true, uid: true }, { uid: true })) {
       const parsed = await simpleParser(msg.source);
       const messageId = String(parsed.messageId || msg.envelope?.messageId || `uid-${msg.uid}`).trim();
       const from = addressList(parsed.from?.value)[0] || '';
@@ -254,18 +278,65 @@ async function pullInbox() {
       });
       added += 1;
     }
-    return { ok: true, added };
+    return { ok: true, added, uidValidity, lastUid: maxUid };
   } finally {
     lock.release();
     await client.logout().catch(() => {});
   }
 }
 
+/** Toma el turno de leer la bandeja (una instancia a la vez, como mucho cada SYNC_MS). */
+async function takeSyncTurn() {
+  const col = db.appState ? db.appState() : null;
+  if (!col) return { taken: true, state: {} };
+  const now = Date.now();
+  try {
+    const r = await col.findOneAndUpdate(
+      {
+        _id: STATE_ID,
+        $and: [
+          { $or: [{ lastSync: { $lt: now - SYNC_MS } }, { lastSync: { $exists: false } }] },
+          { $or: [{ lockUntil: { $lt: now } }, { lockUntil: { $exists: false } }] },
+        ],
+      },
+      { $set: { lockUntil: now + LEASE_MS } },
+      { upsert: true, returnDocument: 'before' }
+    );
+    const before = r && Object.prototype.hasOwnProperty.call(r, 'value') ? r.value : r;
+    return { taken: true, state: before || {} };
+  } catch (err) {
+    // Clave repetida: otra instancia tiene el turno o ya leyó hace poco
+    if (err && err.code === 11000) return { taken: false };
+    throw err;
+  }
+}
+
+async function releaseSyncTurn(result) {
+  const col = db.appState ? db.appState() : null;
+  if (!col) return;
+  const patch = { lockUntil: 0, lastSync: Date.now() };
+  if (result?.uidValidity) {
+    patch.uidValidity = result.uidValidity;
+    patch.lastUid = result.lastUid || 0;
+  }
+  await col.updateOne({ _id: STATE_ID }, { $set: patch }, { upsert: true }).catch(() => {});
+}
+
 async function syncInbox() {
   const now = Date.now();
   if (now - lastSync < SYNC_MS) return { ok: true, cached: true };
   if (syncing) return syncing;
-  syncing = pullInbox()
+  syncing = (async () => {
+    const turn = await takeSyncTurn();
+    if (!turn.taken) return { ok: true, cached: true };
+    let result = null;
+    try {
+      result = await pullInbox(turn.state);
+      return result;
+    } finally {
+      await releaseSyncTurn(result);
+    }
+  })()
     .then((result) => {
       lastSync = Date.now();
       return result;
@@ -278,6 +349,15 @@ async function syncInbox() {
       syncing = null;
     });
   return syncing;
+}
+
+/**
+ * Para pantallas: espera la lectura de la bandeja solo un momento. Si Gmail tarda, se responde
+ * con lo ya guardado y la lectura sigue por su cuenta.
+ */
+async function syncForRead() {
+  const timeout = new Promise((resolve) => setTimeout(() => resolve({ ok: true, pending: true }), READ_WAIT_MS));
+  return Promise.race([syncInbox(), timeout]);
 }
 
 function counterparty(messages) {
@@ -366,7 +446,7 @@ async function threadForLocal(tenantId, opts = {}) {
 }
 
 async function threadFor(tenantId, opts = {}) {
-  const sync = await syncInbox();
+  const sync = await syncForRead();
   const { mailboxOwner } = await staffContext();
   const messages = await db.ListSupportMail(tenantId, {
     assignedTo: opts.staffEmail,
@@ -496,7 +576,7 @@ async function sendToClient({ tenantId, to, subject, message, storeName, ticketI
 }
 
 async function unmatchedInbox(staffEmail) {
-  const sync = await syncInbox();
+  const sync = await syncForRead();
   const { mailboxOwner } = await staffContext();
   return {
     messages: await db.ListUnmatchedSupportMail({ assignedTo: staffEmail, mailboxOwner }),
@@ -509,7 +589,7 @@ async function unmatchedInbox(staffEmail) {
  * onlyOpen: solo los que esperan respuesta.
  */
 async function collectTickets(staffEmail, { onlyOpen = false } = {}) {
-  const sync = await syncInbox();
+  const sync = await syncForRead();
   const { mailboxOwner } = await staffContext();
   const messages = await db.ListSupportMailAll({ assignedTo: staffEmail, mailboxOwner });
   const byTenant = new Map();
@@ -521,10 +601,10 @@ async function collectTickets(staffEmail, { onlyOpen = false } = {}) {
   }
 
   const tenantIds = [...byTenant.keys()];
-  const [tenants, settings] = await Promise.all([
-    Promise.all(tenantIds.map((id) => db.GetTenantById(id))),
-    Promise.all(tenantIds.map((id) => db.GetSettings(id))),
-  ]);
+  const [tenantRows, settingsMap] = await Promise.all([db.ListTenants(), db.GetSettingsMany(tenantIds)]);
+  const tenantMap = new Map(tenantRows.map((t) => [String(t.id), t]));
+  const tenants = tenantIds.map((id) => tenantMap.get(id) || null);
+  const settings = tenantIds.map((id) => settingsMap.get(id) || null);
 
   const items = [];
   tenantIds.forEach((tenantId, index) => {

@@ -66,12 +66,14 @@ function dateInput(value) {
   return date.toISOString().slice(0, 10);
 }
 
-async function clientCard(tenant, { withUsers = false } = {}) {
-  const [settings, users, aiUsed] = await Promise.all([
-    db.GetSettings(tenant.id),
-    db.ListUsersByTenant(tenant.id),
-    db.GetAiUsage(tenant.id),
-  ]);
+/**
+ * Ficha de un cliente. `pre` trae lo ya leído en lote (lista de clientes) para no hacer
+ * tres consultas por tienda.
+ */
+async function clientCard(tenant, { withUsers = false, pre = null } = {}) {
+  const [settings, users, aiUsed] = pre
+    ? [pre.settings.get(tenant.id) || null, pre.users.get(tenant.id) || [], pre.ai.get(tenant.id) || 0]
+    : await Promise.all([db.GetSettings(tenant.id), db.ListUsersByTenant(tenant.id), db.GetAiUsage(tenant.id)]);
   const owner = ownerOf(users);
   const plan = tenant.plan || 'basic';
   const card = {
@@ -124,8 +126,15 @@ async function listTenants(req, res) {
       if (!current.at || new Date(item.updatedAt || 0) > new Date(current.at)) current.at = item.updatedAt;
       waiting.set(item.tenantId, current);
     }
+    const ids = tenants.map((t) => t.id);
+    const [settings, users, ai] = await Promise.all([
+      db.GetSettingsMany(ids),
+      db.ListUsersByTenants(ids),
+      db.ListAiUsage(db.aiMonthKey()),
+    ]);
+    const pre = { settings, users, ai: new Map(ai.map((row) => [row.tenantId, row.count])) };
     const enriched = await Promise.all(tenants.map(async (tenant) => {
-      const card = await clientCard(tenant);
+      const card = await clientCard(tenant, { pre });
       const open = waiting.get(tenant.id) || { count: 0, at: null };
       return { ...card, waiting: open.count, waitingAt: open.at };
     }));
@@ -421,7 +430,8 @@ async function buildBooks() {
       db.ListPlatformExpensesAll(),
       db.ListPlatformSnapshots(),
     ]);
-    const settingsList = await Promise.all(tenants.map((tenant) => db.GetSettings(tenant.id)));
+    const settingsMap = await db.GetSettingsMany(tenants.map((tenant) => tenant.id));
+    const settingsList = tenants.map((tenant) => settingsMap.get(tenant.id) || null);
     const nameOf = (tenant, settings) => settings?.businessName || tenant.name || 'Sin nombre';
     const usageByTenant = new Map(usage.map((row) => [row.tenantId, row.count]));
 
@@ -796,12 +806,11 @@ async function activity(req, res) {
     const rows = await db.ListPlatformAudit({ limit: Number(req.query.limit) || 60 });
     const tenantIds = [...new Set(rows.map((r) => r.tenantId).filter(Boolean))];
     const names = new Map();
-    await Promise.all(
-      tenantIds.map(async (id) => {
-        const [tenant, settings] = await Promise.all([db.GetTenantById(id), db.GetSettings(id)]);
-        names.set(id, settings?.businessName || tenant?.name || 'Cliente');
-      })
-    );
+    const [tenantRows, settingsMap] = await Promise.all([db.ListTenants(), db.GetSettingsMany(tenantIds)]);
+    const tenantMap = new Map(tenantRows.map((t) => [String(t.id), t]));
+    for (const id of tenantIds) {
+      names.set(id, settingsMap.get(id)?.businessName || tenantMap.get(id)?.name || 'Cliente');
+    }
     return res.status(200).json({
       items: rows.map((r) => ({
         id: r.id,
