@@ -278,3 +278,8 @@ a.adm-kpi:hover { border-color: color-mix(in srgb, var(--timber-primary) 40%, va
 @media (max-width: 30rem) {
   .pf .adm-tabs button { padding: 0 0.6rem; font-size: 0.82rem; }
 }
+
+.pf-pay { display: grid; gap: 0.6rem; margin: 0; padding: 0.8rem; border: 1px dashed var(--timber-line); border-radius: 0.9rem; }
+.pf-pay legend { padding: 0 0.4rem; font-size: 0.8rem; font-weight: 800; color: var(--timber-muted); }
+.pf-payto { display: grid; gap: 0.35rem; padding: 0.75rem 0.9rem; border-radius: 0.9rem; background: var(--timber-surface); font-size: 0.9rem; }
+.pf-payto p { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }

@@ -10,6 +10,26 @@
           {{ confirmPay ? `¿Confirmas pagar ${money(detail.pending)}?` : "Liquidar" }}
         </button>
       </div>
+      <div class="pf-payto">
+        <strong>Págale desde tu Mercado Pago o tu banco a:</strong>
+        <template v-if="hasPayout">
+          <p v-if="detail.payoutHolder">{{ detail.payoutHolder }}<template v-if="detail.payoutBank"> · {{ detail.payoutBank }}</template></p>
+          <p v-if="detail.payoutClabe">
+            CLABE <b>{{ detail.payoutClabe }}</b>
+            <button type="button" class="adm-btn sm" @click="copy(detail.payoutClabe)">Copiar</button>
+          </p>
+          <p v-if="detail.payoutMpEmail">
+            Cuenta Mercado Pago <b>{{ detail.payoutMpEmail }}</b>
+            <button type="button" class="adm-btn sm" @click="copy(detail.payoutMpEmail)">Copiar</button>
+          </p>
+          <p v-if="detail.pending > 0">
+            Monto <b>{{ money(detail.pending) }}</b>
+            <button type="button" class="adm-btn sm" @click="copy(detail.pending.toFixed(2))">Copiar monto</button>
+          </p>
+        </template>
+        <p v-else class="pf-muted">Aún no tiene datos de pago. Agrégalos en <em>Editar</em> (CLABE o correo de Mercado Pago).</p>
+        <small v-if="copied" class="pf-ok">{{ copied }}</small>
+      </div>
       <label v-if="confirmPay" class="adm-field">
         <span>Nota de la liquidación (opcional)</span>
         <input v-model="note" class="adm-inp" maxlength="200" placeholder="Ej. transferencia SPEI del 5 de octubre" @keyup.enter="pay" />
@@ -74,7 +94,7 @@
 </template>
 
 <script setup>
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import { apiService } from "../../apiService";
 import { dateTime, money, shortDate } from "../../platform/format";
 
@@ -87,6 +107,18 @@ const STATUS = {
   paid: { label: "Pagada", tone: "good" },
   void: { label: "Anulada", tone: "" },
 };
+
+const hasPayout = computed(() => Boolean(props.detail.payoutClabe || props.detail.payoutMpEmail));
+const copied = ref("");
+async function copy(text) {
+  try {
+    await navigator.clipboard.writeText(String(text));
+    copied.value = "Copiado.";
+  } catch {
+    copied.value = `Cópialo a mano: ${text}`;
+  }
+  setTimeout(() => (copied.value = ""), 3000);
+}
 
 const busy = ref(false);
 const error = ref("");

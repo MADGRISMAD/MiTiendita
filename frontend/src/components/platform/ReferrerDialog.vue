@@ -21,6 +21,18 @@
           <label class="adm-field"><span>Ciudad</span><input v-model="form.city" class="adm-inp" maxlength="60" autocomplete="off" /></label>
         </div>
         <label class="adm-field"><span>Notas (opcional)</span><input v-model="form.notes" class="adm-inp" maxlength="300" placeholder="Ej. cómo se le paga, zona que cubre" /></label>
+        <fieldset class="pf-pay">
+          <legend>Cómo pagarle sus comisiones</legend>
+          <label class="adm-field"><span>Nombre del titular</span><input v-model="form.payoutHolder" class="adm-inp" maxlength="80" autocomplete="off" /></label>
+          <div class="adm-row2">
+            <label class="adm-field"><span>CLABE (18 dígitos)</span><input v-model="form.payoutClabe" class="adm-inp" inputmode="numeric" maxlength="22" autocomplete="off" /></label>
+            <label class="adm-field"><span>Banco</span><input v-model="form.payoutBank" class="adm-inp" maxlength="60" autocomplete="off" /></label>
+          </div>
+          <label class="adm-field">
+            <span>O correo de su cuenta de Mercado Pago</span>
+            <input v-model="form.payoutMpEmail" class="adm-inp" type="email" autocomplete="off" />
+          </label>
+        </fieldset>
         <p v-if="error" class="pf-err" role="alert">{{ error }}</p>
         <div class="adm-dlg-acts">
           <button type="button" class="adm-btn" @click="$emit('close')">Cancelar</button>
@@ -46,6 +58,10 @@ const form = reactive({
   state: r?.state || "",
   city: r?.city || "",
   notes: r?.notes || "",
+  payoutHolder: r?.payoutHolder || "",
+  payoutClabe: r?.payoutClabe || "",
+  payoutBank: r?.payoutBank || "",
+  payoutMpEmail: r?.payoutMpEmail || "",
 });
 const saving = ref(false);
 const error = ref("");

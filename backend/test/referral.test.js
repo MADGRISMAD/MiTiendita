@@ -228,3 +228,13 @@ test('lista de vendedores: cuántos clientes maneja cada uno', async () => {
   assert.equal(rita.activeClients, 6);
   assert.ok(rita.code);
 });
+
+test('datos de pago: CLABE de 18 dígitos o correo de Mercado Pago válidos', async () => {
+  const s = await svc.createReferrer({ name: 'Cuenta Pago', email: 'pago@mail.com', payoutClabe: '0123 4567 8901 2345 67', payoutMpEmail: 'MP@Mail.com' });
+  assert.equal(s.payoutClabe, '012345678901234567');
+  assert.equal(s.payoutMpEmail, 'mp@mail.com');
+  await assert.rejects(svc.updateReferrer(s.id, { payoutClabe: '123' }), /18 dígitos/);
+  await assert.rejects(svc.updateReferrer(s.id, { payoutMpEmail: 'no' }), (e) => e.status === 400);
+  const d = await svc.detail(s.id);
+  assert.equal(d.payoutClabe, '012345678901234567');
+});
