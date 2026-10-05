@@ -100,11 +100,20 @@
           <em v-if="status.promo?.eligible">La promoción de lanzamiento solo aplica al plan mensual.</em>
         </p>
 
+        <p v-if="!isPerpetual && status.subscribedInTrial" class="promo-note" role="status">
+          <span class="promo-tag">Prueba respetada</span>
+          <span>
+            Tu plan ya está contratado y <strong>no se te cobra nada hasta que termine tu prueba</strong>
+            ({{ status.trialDaysLeft }} {{ status.trialDaysLeft === 1 ? "día" : "días" }}). El primer cobro es el
+            {{ new Date(status.firstChargeAt).toLocaleDateString("es-MX", { day: "numeric", month: "long" }) }}.
+          </span>
+        </p>
+
         <p v-if="!isPerpetual && status.promo?.eligible && interval === 'month'" class="promo-note" role="status">
           <span class="promo-tag">Promoción</span>
           <span>
             <strong>Tus primeros {{ status.promo.months }} meses a 1/3 del precio</strong>; después, precio normal.
-            Va aparte de tus días de prueba y solo aplica a clientes nuevos.
+            Va aparte de tu prueba: si contratas ahora, el primer cobro espera a que termine. Solo aplica a clientes nuevos.
           </span>
         </p>
         <p v-else-if="!isPerpetual && status.promo?.active" class="promo-note" role="status">

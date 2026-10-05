@@ -19,8 +19,15 @@ function daysLeft(trialEndsAt) {
   return Math.max(0, Math.ceil(ms / (24 * 60 * 60 * 1000)));
 }
 
-function periodEndFor(interval) {
-  const periodEnd = new Date();
+/** Días que le quedan de prueba (0 si ya terminó o no está en prueba). */
+function trialDaysLeftNow(tenant) {
+  if ((tenant?.billingStatus || 'trialing') !== 'trialing' || !tenant?.trialEndsAt) return 0;
+  const ms = new Date(tenant.trialEndsAt).getTime() - Date.now();
+  return ms > 0 ? Math.ceil(ms / (24 * 60 * 60 * 1000)) : 0;
+}
+
+function periodEndFor(interval, from) {
+  const periodEnd = from ? new Date(from) : new Date();
   if (interval === 'year') periodEnd.setFullYear(periodEnd.getFullYear() + 1);
   else periodEnd.setMonth(periodEnd.getMonth() + 1);
   return periodEnd;
@@ -36,12 +43,16 @@ async function applyPreapprovalToTenant(tenant, pre, dataId) {
     mpPreapprovalId: String(dataId || pre.id || tenant.mpPreapprovalId || ''),
   };
 
+  // Se suscribió durante la prueba: la prueba se respeta completa y el primer cobro llega al terminar
+  const waitingTrial = billingStatus === 'active' && Boolean(tenant.subscribedInTrial) && trialDaysLeftNow(tenant) > 0;
+
   if (billingStatus === 'active') {
     const parts = String(pre.external_reference || '').split(':');
     const plan = parts[1];
     const interval = parts[2] === 'year' ? 'year' : 'month';
-    patch.currentPeriodEnd = periodEndFor(interval);
+    patch.currentPeriodEnd = periodEndFor(interval, waitingTrial ? tenant.trialEndsAt : undefined);
     patch.billingInterval = interval;
+    if (waitingTrial) patch.billingStatus = 'trialing';
     patch.suspendedAt = null;
     patch.suspendedReason = null;
     patch.cancelAtPeriodEnd = false;
@@ -64,14 +75,18 @@ async function applyPreapprovalToTenant(tenant, pre, dataId) {
   const updated = await db.UpdateTenant(tenant.id, patch);
   await recordEvent({
     tenantId: tenant.id,
-    type: billingStatus === 'active' ? 'activated' : billingStatus || 'webhook',
+    type: waitingTrial ? 'subscribed_in_trial' : billingStatus === 'active' ? 'activated' : billingStatus || 'webhook',
     plan: updated?.plan || tenant.plan,
     interval: updated?.billingInterval || tenant.billingInterval,
     amount: chargedAmount(updated || tenant, null),
     mpStatus: pre.status,
-    note: billingStatus === 'active' ? 'Pago confirmado' : `Mercado Pago: ${pre.status || billingStatus}`,
+    note: waitingTrial
+      ? 'Suscripción lista: el primer cobro es al terminar la prueba'
+      : billingStatus === 'active'
+        ? 'Pago confirmado'
+        : `Mercado Pago: ${pre.status || billingStatus}`,
   });
-  if (billingStatus === 'active' && tenant.billingStatus !== 'active') {
+  if (billingStatus === 'active' && !waitingTrial && tenant.billingStatus !== 'active') {
     notifyPayment(updated || tenant).catch(() => {});
     // Primer cobro: la promoción avanza y el vendedor que refirió la tienda gana su comisión (sobre lo realmente cobrado)
     const activationKey = `act:${patch.mpPreapprovalId}:${new Date(patch.currentPeriodEnd).toISOString().slice(0, 10)}`;
@@ -197,6 +212,8 @@ async function getStatus(req, res) {
       aiQuotaLabel: aiOn ? formatAiQuota(planAiQuota(plan)) : 'No incluido',
       limits: usage,
       promo: promo.describe(tenant),
+      subscribedInTrial: Boolean(tenant.subscribedInTrial) && daysLeft(tenant.trialEndsAt) > 0,
+      firstChargeAt: tenant.subscribedInTrial && daysLeft(tenant.trialEndsAt) > 0 ? tenant.trialEndsAt : null,
     });
   } catch (err) {
     console.error(err);
@@ -257,6 +274,8 @@ async function checkout(req, res) {
 
     // Promoción de lanzamiento (clientes nuevos, plan mensual): los primeros cobros a 1/3 del precio
     const withPromo = promo.isEligible(tenant, plan, interval);
+    // La prueba se respeta completa: si aún le quedan días, el primer cobro espera a que termine
+    const freeTrialDays = trialDaysLeftNow(tenant);
     const preapproval = await mp.createPreapproval({
       plan,
       tenantId: req.tenantId,
@@ -264,6 +283,7 @@ async function checkout(req, res) {
       interval,
       externalReference: `${req.tenantId}:${plan}:${interval}`,
       amountOverride: withPromo ? promoPrice(plan) : null,
+      freeTrialDays,
     });
     await promo.onCheckout(tenant, plan, interval);
 
@@ -273,6 +293,7 @@ async function checkout(req, res) {
       cancelAtPeriodEnd: false,
       mpPreapprovalId: preapproval.id || null,
       mpPayerEmail: email,
+      subscribedInTrial: freeTrialDays > 0,
     });
     await recordEvent({
       tenantId: req.tenantId,
@@ -280,7 +301,7 @@ async function checkout(req, res) {
       plan,
       interval,
       amount: preapproval.amount || mp.planPrice(plan, interval),
-      note: (preapproval.mock ? 'Checkout (modo desarrollo)' : 'Checkout Mercado Pago') + (withPromo ? ` · promoción ${PROMO.months} meses a 1/3` : ''),
+      note: (preapproval.mock ? 'Checkout (modo desarrollo)' : 'Checkout Mercado Pago') + (withPromo ? ` · promoción ${PROMO.months} meses a 1/3` : '') + (freeTrialDays > 0 ? ` · primer cobro al terminar la prueba (${freeTrialDays} días)` : ''),
     });
 
     return res.status(200).json({
@@ -321,11 +342,13 @@ async function devActivate(req, res) {
       return res.status(400).send('Esta tienda tiene licencia perpetua. Para un plan con magia, pídelo en soporte.');
     }
 
+    const keepTrial = trialDaysLeftNow(tenant) > 0;
     const updated = await db.UpdateTenant(req.tenantId, {
       plan,
       billingInterval: interval,
-      billingStatus: 'active',
-      currentPeriodEnd: periodEndFor(interval),
+      billingStatus: keepTrial ? 'trialing' : 'active',
+      subscribedInTrial: keepTrial,
+      currentPeriodEnd: periodEndFor(interval, keepTrial ? tenant.trialEndsAt : undefined),
       cancelAtPeriodEnd: false,
       suspendedAt: null,
       suspendedReason: null,
@@ -339,6 +362,16 @@ async function devActivate(req, res) {
       amount: promo.isEligible(tenant, plan, interval) ? promoPrice(plan) : mp.planPrice(plan, interval),
       note: 'Activación en modo desarrollo',
     });
+    if (keepTrial) {
+      await promo.onCheckout(tenant, plan, interval);
+      return res.status(200).json({
+        ok: true,
+        plan: updated.plan,
+        billingInterval: interval,
+        billingStatus: updated.billingStatus,
+        currentPeriodEnd: updated.currentPeriodEnd,
+      });
+    }
     const devKey = `act:${updated.mpPreapprovalId}:${new Date(updated.currentPeriodEnd).toISOString().slice(0, 10)}`;
     await promo.onCheckout(tenant, plan, interval);
     const fresh = (await db.GetTenantById(req.tenantId)) || updated;
@@ -457,6 +490,18 @@ async function webhook(req, res) {
             mpStatus: payment.status,
             note: 'Cobro de la suscripción',
           });
+          // Primer cobro tras la prueba (o cobro que regulariza un atraso): la tienda pasa a plan activo
+          if (['trialing', 'past_due'].includes(tenant.billingStatus || 'trialing') && !tenant.suspendedReason) {
+            const interval = tenant.billingInterval === 'year' ? 'year' : 'month';
+            const activated = await db.UpdateTenant(tenant.id, {
+              billingStatus: 'active',
+              currentPeriodEnd: periodEndFor(interval),
+              subscribedInTrial: false,
+              suspendedAt: null,
+              suspendedReason: null,
+            });
+            if (tenant.billingStatus === 'trialing') notifyPayment({ ...(activated || tenant), promo: tenant.promo }).catch(() => {});
+          }
           const paymentKey = `ap:${payment.id || dataId}`;
           const afterPromo = await promo.onPayment(tenant, { key: paymentKey, source: 'authorized_payment' }).catch(() => null);
           await creditReferral(tenant, {
