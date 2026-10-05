@@ -6,6 +6,7 @@ const { requireAuth } = require('../middleware/auth.middleware');
 const { limits } = require('../services/rate-limit.service');
 
 router.post('/register', limits.register(), upload.none(), userController.CreateUser);
+router.get('/referral/:code', limits.referral(), userController.CheckReferralCode);
 router.post('/login', limits.login(), upload.none(), userController.LoginUsuario);
 router.post('/login/mfa', limits.mfa(), userController.LoginMfa);
 router.post('/refresh', limits.refresh(), userController.RefreshSession);

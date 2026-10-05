@@ -9,6 +9,8 @@ const hasher = require('../utils/bcrypt.utils');
 const audit = require('../services/platform-audit.service');
 const limits = require('../services/plan-limits.service');
 const sessions = require('../services/session.service');
+const referrals = require('../services/referral.service');
+const refTiers = require('../services/referral.tiers');
 
 const SHORT_MONTHS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 
@@ -103,6 +105,8 @@ async function clientCard(tenant, { withUsers = false } = {}) {
     aiLimit: hasAiFeatures(plan) ? planAiQuota(plan) : 0,
     aiEnabled: hasAiFeatures(plan),
     isPerpetual: isPerpetual(plan),
+    referrerId: tenant.referrerId || null,
+    referralCode: tenant.referralCode || '',
   };
   if (withUsers) card.users = users;
   return card;
@@ -845,7 +849,175 @@ async function resetStaffMfa(req, res) {
   }
 }
 
+
+// ───────── Vendedores (referidos) ─────────
+const refFail = (res, err) => {
+  if (err instanceof referrals.ReferralError) return res.status(err.status).send(err.message);
+  console.error(err);
+  return res.status(500).send(err.message || 'No pude completar la acción.');
+};
+
+async function listReferrers(req, res) {
+  try {
+    const items = await referrals.listSummaries();
+    return res.status(200).json({
+      items,
+      ladder: refTiers.LADDER,
+      totals: {
+        sellers: items.length,
+        clients: items.reduce((n, r) => n + r.clients, 0),
+        pending: Math.round(items.reduce((n, r) => n + r.pending, 0) * 100) / 100,
+        paid: Math.round(items.reduce((n, r) => n + r.paid, 0) * 100) / 100,
+      },
+    });
+  } catch (err) {
+    return refFail(res, err);
+  }
+}
+
+async function getReferrer(req, res) {
+  try {
+    return res.status(200).json(await referrals.detail(req.params.id));
+  } catch (err) {
+    return refFail(res, err);
+  }
+}
+
+async function createReferrer(req, res) {
+  try {
+    const created = await referrals.createReferrer(req.body || {});
+    await audit.record(req, {
+      type: 'referrer_created',
+      message: `Dio de alta al vendedor ${created.name} (${created.code})`,
+      meta: { referrerId: created.id },
+    });
+    return res.status(201).json(await referrals.detail(created.id));
+  } catch (err) {
+    return refFail(res, err);
+  }
+}
+
+async function updateReferrer(req, res) {
+  try {
+    const updated = await referrals.updateReferrer(req.params.id, req.body || {});
+    const paused = req.body?.status === 'paused';
+    await audit.record(req, {
+      type: paused ? 'referrer_paused' : 'referrer_updated',
+      message: paused ? `Pausó al vendedor ${updated.name}` : `Actualizó al vendedor ${updated.name}`,
+      meta: { referrerId: updated.id },
+    });
+    return res.status(200).json(await referrals.detail(updated.id));
+  } catch (err) {
+    return refFail(res, err);
+  }
+}
+
+async function payReferrer(req, res) {
+  try {
+    const payout = await referrals.payOut(req.params.id, {
+      by: req.user?.username,
+      note: req.body?.note,
+    });
+    await audit.record(req, {
+      type: 'referrer_paid',
+      message: `Liquidó $${Number(payout.total).toFixed(2)} en comisiones (${payout.count} cobros)`,
+      meta: { referrerId: req.params.id, payoutId: payout.id, total: payout.total },
+    });
+    return res.status(201).json(await referrals.detail(req.params.id));
+  } catch (err) {
+    return refFail(res, err);
+  }
+}
+
+async function voidCommission(req, res) {
+  try {
+    const updated = await referrals.voidCommission(req.params.id, { reason: req.body?.reason });
+    await audit.record(req, {
+      tenantId: updated.tenantId,
+      type: 'commission_voided',
+      message: `Anuló una comisión de $${Number(updated.commission).toFixed(2)}`,
+      meta: { commissionId: updated.id },
+    });
+    return res.status(200).json(updated);
+  } catch (err) {
+    return refFail(res, err);
+  }
+}
+
+/** Asigna (o quita) el vendedor de una tienda que ya existe. */
+async function setTenantReferrer(req, res) {
+  try {
+    const tenant = await db.GetTenantById(req.params.id);
+    if (!tenant) return res.status(404).send('No encontré ese cliente.');
+    const raw = req.body?.code;
+    if (raw === null || raw === '') {
+      await db.UpdateTenant(tenant.id, { referrerId: null, referralCode: '', referredAt: null });
+      await audit.record(req, { tenantId: tenant.id, type: 'referrer_removed', message: 'Quitó el vendedor de esta tienda' });
+      return res.status(200).json({ referrerId: null, referralCode: '' });
+    }
+    const referrer = await referrals.findActiveByCode(raw);
+    if (!referrer) return res.status(400).send('Ese código no existe o el vendedor está pausado.');
+    const fields = referrals.referralFields(referrer);
+    await db.UpdateTenant(tenant.id, fields);
+    await audit.record(req, {
+      tenantId: tenant.id,
+      type: 'referrer_assigned',
+      message: `Asignó la tienda al vendedor ${referrer.name} (${referrer.code})`,
+      meta: { referrerId: referrer.id },
+    });
+    return res.status(200).json({ referrerId: referrer.id, referralCode: referrer.code, seller: referrer.name });
+  } catch (err) {
+    return refFail(res, err);
+  }
+}
+
+/** Un cobro que no pasó por Mercado Pago (efectivo, transferencia, licencia perpetua): también paga comisión. */
+async function manualPayment(req, res) {
+  try {
+    const tenant = await db.GetTenantById(req.params.id);
+    if (!tenant) return res.status(404).send('No encontré ese cliente.');
+    const amount = Number(req.body?.amount);
+    if (!Number.isFinite(amount) || amount <= 0) return res.status(400).send('Escribe un monto mayor a cero.');
+    const note = String(req.body?.note || '').trim().slice(0, 200) || 'Cobro registrado a mano';
+    await db.CreateBillingEvent({
+      tenantId: tenant.id,
+      type: 'payment',
+      plan: tenant.plan,
+      interval: tenant.billingInterval,
+      amount,
+      note,
+    });
+    let commission = null;
+    if (tenant.referrerId) {
+      commission = await referrals.recordPayment({
+        tenant,
+        amount,
+        source: 'manual',
+        key: `manual:${tenant.id}:${Date.now()}`,
+        note,
+      });
+    }
+    await audit.record(req, {
+      tenantId: tenant.id,
+      type: 'manual_payment',
+      message: `Registró un cobro de $${amount.toFixed(2)}${commission ? ` (comisión $${commission.commission.toFixed(2)})` : ''}`,
+      meta: { amount },
+    });
+    return res.status(201).json({ ok: true, commission });
+  } catch (err) {
+    return refFail(res, err);
+  }
+}
+
 module.exports = {
+  listReferrers,
+  getReferrer,
+  createReferrer,
+  updateReferrer,
+  payReferrer,
+  voidCommission,
+  setTenantReferrer,
+  manualPayment,
   support,
   tenantActivity,
   activity,
