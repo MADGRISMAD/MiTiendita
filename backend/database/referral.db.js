@@ -37,6 +37,10 @@ async function GetReferrerByCode(code) {
 async function GetReferrerByEmail(email) {
   return out(await (await col('referrers')).findOne({ email: String(email).toLowerCase() }));
 }
+async function DeleteReferrer(id) {
+  const o = oid(id);
+  if (o) await (await col('referrers')).deleteOne({ _id: o });
+}
 async function ListReferrers() {
   const rows = await (await col('referrers')).find({}).sort({ createdAt: -1 }).toArray();
   return rows.map(out);
@@ -151,7 +155,7 @@ async function MarkPendingPaid(referrerId, payoutId, paidAt) {
 }
 
 module.exports = {
-  CreateReferrer, GetReferrerById, GetReferrerByCode, GetReferrerByEmail, ListReferrers, UpdateReferrer,
+  CreateReferrer, DeleteReferrer, GetReferrerById, GetReferrerByCode, GetReferrerByEmail, ListReferrers, UpdateReferrer,
   ListTenantsByReferrer, ListReferredTenants,
   InsertCommission, GetCommission, FindCommissionByKey, ListCommissions, UpdateCommission,
   CountClosedTenants, ListPayingTenantIds, SumCommissions,

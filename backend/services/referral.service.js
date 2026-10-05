@@ -64,18 +64,22 @@ function validateReferrer(input, { partial = false } = {}) {
   if (!partial || input.city !== undefined) out.city = cleanText(input.city, 60);
   if (!partial || input.notes !== undefined) out.notes = cleanText(input.notes, 300);
   if (input.status !== undefined) {
-    if (!['active', 'paused'].includes(input.status)) throw new ReferralError(400, 'Estado inválido.');
+    if (!['active', 'paused', 'pending'].includes(input.status)) throw new ReferralError(400, 'Estado inválido.');
     out.status = input.status;
   }
   return out;
 }
 
-async function createReferrer(input) {
-  const data = validateReferrer(input);
+/**
+ * Alta de vendedor. El admin lo crea activo; quien se postula desde la página queda `pending`
+ * (su código no sirve hasta que lo aprueben).
+ */
+async function createReferrer(input, { status = 'active', source = 'admin' } = {}) {
+  const data = validateReferrer({ ...input, status: undefined });
   if (await refDb.GetReferrerByEmail(data.email)) throw new ReferralError(409, 'Ya hay un vendedor con ese correo.');
   const now = new Date();
   try {
-    return await refDb.CreateReferrer({ ...data, status: 'active', code: await uniqueCode(), createdAt: now, updatedAt: now });
+    return await refDb.CreateReferrer({ ...data, status, source, code: await uniqueCode(), createdAt: now, updatedAt: now });
   } catch (err) {
     if (err && err.code === 11000) throw new ReferralError(409, 'Código repetido, intenta de nuevo.');
     throw err;
@@ -226,6 +230,7 @@ function summarize(referrer, { tenants = [], sums = [], closed = 0 }) {
     notes: referrer.notes || '',
     code: referrer.code,
     status: referrer.status,
+    source: referrer.source || 'admin',
     createdAt: referrer.createdAt,
     clients: tenants.length,
     activeClients: tenants.filter((t) => t.billingStatus === 'active').length,

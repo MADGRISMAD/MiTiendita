@@ -1,9 +1,34 @@
 <template>
   <AuthLayout wide>
+    <!-- Solicitud de proveedor enviada -->
+    <section v-if="partnerSent" class="auth-done" role="status">
+      <span class="auth-done-ico" aria-hidden="true">✓</span>
+      <h1>¡Recibimos tu solicitud!</h1>
+      <p>
+        Revisamos tus datos y te escribimos a <strong>{{ email }}</strong>. Mientras, ya puedes entrar a tu portal de proveedor
+        con tu usuario <strong>{{ username }}</strong>: la primera vez activarás la verificación en dos pasos.
+      </p>
+      <p class="auth-note">Tu código para registrar tiendas se activa cuando aprobemos tu solicitud.</p>
+      <router-link class="auth-btn" to="/login">Entrar a mi portal</router-link>
+    </section>
+
+    <template v-else>
     <header class="auth-head">
-      <h1>Crea tu tienda</h1>
-      <p>14 días gratis. Toma menos de un minuto y puedes cobrar hoy mismo.</p>
+      <h1>{{ isPartner ? "Sé proveedor oficial" : "Crea tu tienda" }}</h1>
+      <p v-if="isPartner">Vende Mi Tiendita en tu zona y gana del 10% al 20% de cada cobro de las tiendas que traigas.</p>
+      <p v-else>14 días gratis. Toma menos de un minuto y puedes cobrar hoy mismo.</p>
     </header>
+
+    <div class="auth-kind" role="radiogroup" aria-label="¿Qué quieres crear?">
+      <button type="button" role="radio" :aria-checked="!isPartner" :class="{ on: !isPartner }" @click="setKind('store')">
+        <strong>Mi tienda</strong>
+        <small>Para cobrar y llevar inventario</small>
+      </button>
+      <button type="button" role="radio" :aria-checked="isPartner" :class="{ on: isPartner }" @click="setKind('partner')">
+        <strong>Proveedor oficial</strong>
+        <small>Para vender Mi Tiendita a tiendas</small>
+      </button>
+    </div>
 
     <form class="auth-form" novalidate @submit.prevent="register">
       <p v-if="serverError" class="auth-alert" role="alert">
@@ -44,7 +69,7 @@
           </div>
         </div>
         <div class="auth-row">
-          <div class="auth-field">
+          <div v-if="!isPartner" class="auth-field">
             <label for="reg-shop">Nombre de la tienda <em>(opcional)</em></label>
             <input
               id="reg-shop"
@@ -74,7 +99,29 @@
             <p v-if="shown.phone" id="reg-phone-err" class="auth-err">{{ shown.phone }}</p>
           </div>
         </div>
-        <div class="auth-field">
+        <div v-if="isPartner" class="auth-row">
+          <div class="auth-field">
+            <label for="reg-state">Estado</label>
+            <input
+              id="reg-state"
+              v-model="partnerState"
+              class="auth-input"
+              type="text"
+              maxlength="60"
+              placeholder="Ej. Sonora"
+              autocomplete="address-level1"
+              :aria-invalid="Boolean(shown.state)"
+              aria-describedby="reg-state-err"
+              @blur="touch('state')"
+            />
+            <p v-if="shown.state" id="reg-state-err" class="auth-err">{{ shown.state }}</p>
+          </div>
+          <div class="auth-field">
+            <label for="reg-city">Ciudad <em>(opcional)</em></label>
+            <input id="reg-city" v-model="partnerCity" class="auth-input" type="text" maxlength="60" autocomplete="address-level2" />
+          </div>
+        </div>
+        <div v-if="!isPartner" class="auth-field">
           <label for="reg-ref">Código de vendedor <em>(opcional)</em></label>
           <input
             id="reg-ref"
@@ -192,9 +239,12 @@
 
       <button type="submit" class="auth-btn" :disabled="loading">
         <span v-if="loading" class="auth-spin" aria-hidden="true"></span>
-        {{ loading ? 'Creando tu tienda…' : 'Crear mi tienda' }}
+        <template v-if="isPartner">{{ loading ? 'Enviando…' : 'Enviar mi solicitud' }}</template>
+        <template v-else>{{ loading ? 'Creando tu tienda…' : 'Crear mi tienda' }}</template>
       </button>
     </form>
+
+    </template>
 
     <div class="auth-alt compact">
       <span>
@@ -218,11 +268,12 @@ import "../auth.css";
 import { MIN_PASSWORD, passwordProblem } from "../passwordPolicy";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-const FIELD_ORDER = ["firstName", "lastName", "phone", "email", "username", "password", "confirm", "terms"];
+const FIELD_ORDER = ["firstName", "lastName", "phone", "state", "email", "username", "password", "confirm", "terms"];
 const FIELD_ID = {
   firstName: "reg-name",
   lastName: "reg-last",
   phone: "reg-phone",
+  state: "reg-state",
   email: "reg-email",
   username: "reg-user",
   password: "reg-pass",
@@ -233,6 +284,10 @@ export default {
   components: { AuthLayout, PosIcon },
   data() {
     return {
+      kind: "store",
+      partnerState: "",
+      partnerCity: "",
+      partnerSent: false,
       businessName: "",
       referralCode: "",
       referralState: "",
@@ -255,6 +310,7 @@ export default {
     };
   },
   mounted() {
+    if (["proveedor", "partner"].includes(String(this.$route?.query?.tipo || ""))) this.kind = "partner";
     // El enlace de un vendedor (?ref=MT-XXXXXX) se recuerda por si el cliente antes recorre la página
     let code = String(this.$route?.query?.ref || "");
     try {
@@ -272,6 +328,9 @@ export default {
     clearTimeout(this.referralTimer);
   },
   computed: {
+    isPartner() {
+      return this.kind === "partner";
+    },
     phoneDisplay() {
       return formatMxPhone(this.phone);
     },
@@ -290,6 +349,7 @@ export default {
       });
       if (weak) e.password = weak;
       if (this.confirmPassword !== this.password) e.confirm = "Las contraseñas no coinciden.";
+      if (this.isPartner && this.partnerState.trim().length < 2) e.state = "Escribe tu estado.";
       if (!this.acceptedTerms) e.terms = "Acepta los términos para continuar.";
       return { ...e, ...this.serverErrors };
     },
@@ -324,6 +384,11 @@ export default {
     },
   },
   methods: {
+    setKind(kind) {
+      this.kind = kind;
+      this.serverError = "";
+      this.$router.replace({ query: { ...this.$route.query, tipo: kind === "partner" ? "proveedor" : undefined } }).catch(() => {});
+    },
     touch(field) {
       this.touched = { ...this.touched, [field]: true };
     },
@@ -367,6 +432,8 @@ export default {
     },
     mapServerError(text) {
       const msg = String(text || "");
+      if (/usuario ya existe/i.test(msg)) return { field: "username", text: "Ese usuario ya existe. Prueba con otro." };
+      if (/cuenta con ese correo|vendedor con ese correo/i.test(msg)) return { field: "email", text: "Ya hay una cuenta con ese correo." };
       if (/nombre de usuario/i.test(msg)) return { field: "username", text: "Ese usuario ya existe. Prueba con otro." };
       if (/correo ya registrado/i.test(msg)) return { field: "email", text: "Ya hay una cuenta con ese correo. Inicia sesión o recupera tu contraseña." };
       if (/"email"/.test(msg)) return { field: "email", text: "Ese correo no parece válido." };
@@ -391,6 +458,12 @@ export default {
           password: this.password,
           cellphone: this.phone,
         };
+        if (this.isPartner) {
+          await apiService.registerPartner({ ...payload, state: this.partnerState.trim(), city: this.partnerCity.trim() });
+          this.partnerSent = true;
+          window.scrollTo?.(0, 0);
+          return;
+        }
         if (this.businessName.trim()) payload.businessName = this.businessName.trim();
         if (this.referralCode.trim()) payload.referralCode = this.referralCode.trim();
         const res = await apiService.register(payload);

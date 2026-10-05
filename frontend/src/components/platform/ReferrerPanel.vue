@@ -11,14 +11,18 @@
         <div class="pf-grow">
           <h2>{{ detail.name }}</h2>
           <div class="meta" style="display: flex; gap: 0.4rem; flex-wrap: wrap; margin-top: 0.25rem">
-            <span class="adm-pill" :class="detail.status === 'active' ? 'good' : 'warn'">{{ detail.status === "active" ? "Activo" : "Pausado" }}</span>
+            <span class="adm-pill" :class="detail.status === 'active' ? 'good' : detail.status === 'pending' ? 'info' : 'warn'">{{ STATUS_NAME[detail.status] || detail.status }}</span>
             <span class="pf-chip">{{ Math.round(detail.rate * 100) }}% de comisión</span>
             <span class="pf-chip">{{ detail.code }}</span>
           </div>
         </div>
         <div class="acts">
           <button type="button" class="adm-btn sm" @click="showEdit = true">Editar</button>
-          <button type="button" class="adm-btn sm" :class="detail.status === 'active' ? 'danger-ghost' : 'primary'" :disabled="busy" @click="toggle">
+          <template v-if="detail.status === 'pending'">
+            <button type="button" class="adm-btn sm primary" :disabled="busy" @click="setStatus('active', 'Solicitud aprobada: su código ya funciona.')">Aprobar</button>
+            <button type="button" class="adm-btn sm danger-ghost" :disabled="busy" @click="setStatus('paused', 'Solicitud rechazada.')">Rechazar</button>
+          </template>
+          <button v-else type="button" class="adm-btn sm" :class="detail.status === 'active' ? 'danger-ghost' : 'primary'" :disabled="busy" @click="toggle">
             {{ detail.status === "active" ? "Pausar" : "Reactivar" }}
           </button>
         </div>
@@ -32,7 +36,10 @@
 
       <p v-if="error" class="pf-err" role="alert">{{ error }}</p>
       <p v-if="ok" class="pf-ok" role="status">{{ ok }}</p>
-      <p v-if="detail.status !== 'active'" class="adm-banner warn" role="status">
+      <p v-if="detail.status === 'pending'" class="adm-banner warn" role="status">
+        Se postuló desde la página{{ detail.state ? ` (${detail.state})` : "" }}. Revisa sus datos y apruébalo para que su código funcione; ya tiene cuenta de dueño en el portal de socios.
+      </p>
+      <p v-else-if="detail.status !== 'active'" class="adm-banner warn" role="status">
         Está pausado: su código ya no sirve para registros nuevos. Sus tiendas actuales siguen generándole comisión.
       </p>
 
@@ -110,6 +117,22 @@ function saved(next) {
   detail.value = next;
   emit("updated", next);
   say("Cambios guardados.");
+}
+
+const STATUS_NAME = { active: "Activo", paused: "Pausado", pending: "Solicitud" };
+
+async function setStatus(status, message) {
+  busy.value = true;
+  error.value = "";
+  try {
+    detail.value = await apiService.platformUpdateReferrer(props.id, { status });
+    emit("updated", detail.value);
+    say(message);
+  } catch (e) {
+    error.value = typeof e.response?.data === "string" ? e.response.data : "No pude cambiar su estado.";
+  } finally {
+    busy.value = false;
+  }
 }
 
 async function toggle() {

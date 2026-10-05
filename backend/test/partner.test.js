@@ -242,3 +242,43 @@ test('cuentas de socio: 2FA obligatoria, socio ligado, y sin acceso a tiendas ni
   // y el dueño de una tienda no entra al portal de socios
   assert.equal((await call('GET', '/partner/home', 'lupita')).status, 403);
 });
+
+test('postularse como proveedor: queda en revisión, con cuenta de dueño, y sin duplicar', async () => {
+  const partners = require('../services/partner.service');
+  const created = [];
+  const deleted = [];
+  const refDb = require('../database/referral.db');
+  refDb.GetReferrerByEmail = async (email) => referrers.find((r) => r.email === email) || null;
+  refDb.GetReferrerByCode = async () => null;
+  refDb.CreateReferrer = async (doc) => {
+    const row = { ...doc, id: `r${referrers.length + 1}` };
+    referrers.push(row);
+    created.push(row);
+    return row;
+  };
+  refDb.DeleteReferrer = async (id) => {
+    deleted.push(id);
+    referrers.splice(referrers.findIndex((r) => r.id === id), 1);
+  };
+  // El servicio de referidos real (aquí estaba simulado): se usa el de verdad para el alta
+  const realReferrals = require.resolve('../services/referral.service');
+  delete require.cache[realReferrals];
+  delete require.cache[require.resolve('../services/partner.service')];
+  const fresh = require('../services/partner.service');
+
+  const out = await fresh.apply({
+    name: 'Rosa', lastName: 'Mena', email: 'rosa@prov.mx', username: 'rosamena', password: 'una frase larga y segura 2026', cellphone: '6641112233', state: 'Sonora', city: 'Hermosillo',
+  });
+  assert.equal(out.partner.status, 'pending');
+  assert.equal(out.partner.source, 'signup');
+  const user = users.find((u) => u.username === 'rosamena');
+  assert.equal(user.role, 'partner_admin');
+  assert.equal(user.partnerId, out.partner.id);
+
+  // mismo correo: no crea nada; contraseña débil: tampoco
+  await assert.rejects(fresh.apply({ name: 'Rosa', email: 'rosa@prov.mx', username: 'otra', password: 'una frase larga y segura 2026', state: 'Sonora' }), (e) => e.status === 409);
+  await assert.rejects(fresh.apply({ name: 'Ana', email: 'ana@prov.mx', username: 'anaprov', password: '123', state: 'Sonora' }), (e) => e.status === 400);
+  await assert.rejects(fresh.apply({ name: 'Ana', email: 'ana@prov.mx', username: 'anaprov', password: 'una frase larga y segura 2026', state: '' }), /estado/);
+  assert.equal(created.length, 1);
+  assert.ok(partners);
+});

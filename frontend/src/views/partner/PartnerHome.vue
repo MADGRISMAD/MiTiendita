@@ -1,6 +1,9 @@
 <template>
   <PartnerFrame title="Inicio" :subtitle="subtitle">
     <p v-if="error" class="adm-banner err" role="alert">{{ error }}</p>
+    <p v-if="data?.partner?.status === 'pending'" class="adm-banner warn" role="status">
+      Estamos revisando tu solicitud. Cuando la aprobemos, tu código empezará a registrar tiendas a tu nombre; te avisamos por correo.
+    </p>
     <p v-if="data?.partner?.status === 'paused'" class="adm-banner warn" role="status">
       Tu código está en pausa: las tiendas nuevas no se registran con él. Tus tiendas actuales siguen contigo. Escribe a Mi Tiendita.
     </p>

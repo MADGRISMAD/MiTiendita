@@ -16,6 +16,7 @@
         <a href="#inventario-magico">La Magia</a>
         <a href="#por-que-nube">¿Por qué nube?</a>
         <a href="#planes">Planes</a>
+        <a href="#proveedores">Sé proveedor</a>
       </nav>
       <div class="nav-actions">
         <template v-if="loggedIn">
@@ -619,6 +620,14 @@
         </div>
       </section>
 
+      <!-- ═══ PROVEEDORES OFICIALES ═══ -->
+      <PartnersSection :plans="plans">
+        <template #actions>
+          <router-link class="btn amber lg" :to="{ path: '/register', query: { tipo: 'proveedor' } }">Quiero ser proveedor</router-link>
+          <a class="btn line lg" :href="partnerWhatsapp" target="_blank" rel="noopener">Preguntar por WhatsApp</a>
+        </template>
+      </PartnersSection>
+
       <!-- ═══ CTA FINAL ═══ -->
       <section class="band final-cta" data-scene="enter">
         <div class="tunnel" aria-hidden="true">
@@ -713,7 +722,10 @@ import { authStore, homeForRole } from "../authStore";
 import InventarioMagicoTerm from "../components/InventarioMagicoTerm.vue";
 import { useLandingMotion, vTilt } from "../landingMotion";
 import WhatsAppHelp from "../components/WhatsAppHelp.vue";
-import { PERPETUAL_MESSAGE, PRESALE_MESSAGE } from "../support";
+import PartnersSection from "../components/landing/PartnersSection.vue";
+import { PERPETUAL_MESSAGE, PRESALE_MESSAGE, whatsappLink } from "../support";
+
+const partnerWhatsapp = whatsappLink("Hola, me interesa ser proveedor oficial de Mi Tiendita en mi zona. ¿Cómo funciona?");
 
 const route = useRoute();
 const root = ref(null);
