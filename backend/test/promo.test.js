@@ -41,16 +41,16 @@ const fresh = (id, extra = {}) => {
 };
 const pay = async (id, key, source = 'authorized_payment') => promo.onPayment({ ...tenants.get(id) }, { key, source });
 
-test('precios nuevos: Crecimiento 700, Pro 1350 y anual a 10 meses', () => {
+test('precios nuevos: Crecimiento 750, Pro 1350 y anual a 10 meses', () => {
   assert.equal(plans.planPrice('basic', 'month'), 349);
-  assert.equal(plans.planPrice('growth', 'month'), 700);
-  assert.equal(plans.planPrice('growth', 'year'), 7000);
+  assert.equal(plans.planPrice('growth', 'month'), 750);
+  assert.equal(plans.planPrice('growth', 'year'), 7500);
   assert.equal(plans.planPrice('pro', 'month'), 1350);
   assert.equal(plans.planPrice('pro', 'year'), 13500);
   const list = plans.listPlans();
   const growth = list.find((p) => p.id === 'growth');
-  assert.equal(growth.price, 700);
-  assert.equal(growth.promoPrice, 233);
+  assert.equal(growth.price, 750);
+  assert.equal(growth.promoPrice, 250);
   assert.equal(growth.promoMonths, 3);
   assert.equal(list.find((p) => p.id === 'pro').promoPrice, 450);
   assert.equal(list.find((p) => p.id === 'basic').promoPrice, 116);
@@ -71,12 +71,12 @@ test('3 cobros a 1/3 y al terminar el 3º sube a precio normal en Mercado Pago',
   const t = fresh('b');
   await promo.onCheckout(t, 'growth', 'month');
   assert.equal(tenants.get('b').promo.state, 'pending');
-  assert.equal(tenants.get('b').promo.amount, 233);
+  assert.equal(tenants.get('b').promo.amount, 250);
 
   await pay('b', 'act:pre_b:2026-11-01', 'activation');
   assert.equal(tenants.get('b').promo.state, 'active');
   assert.equal(tenants.get('b').promo.paymentsDone, 1);
-  assert.equal(promo.currentMonthly(tenants.get('b')), 233);
+  assert.equal(promo.currentMonthly(tenants.get('b')), 250);
 
   // el mismo primer cobro avisado como pago autorizado no cuenta dos veces
   await pay('b', 'ap:1');
@@ -89,10 +89,10 @@ test('3 cobros a 1/3 y al terminar el 3º sube a precio normal en Mercado Pago',
   assert.equal(tenants.get('b').promo.paymentsDone, 2);
   assert.equal(amounts.length, 0, 'aún no se sube el precio');
   await pay('b', 'ap:3');
-  assert.deepEqual(amounts, [{ id: 'pre_b', amount: 700 }]);
+  assert.deepEqual(amounts, [{ id: 'pre_b', amount: 750 }]);
   assert.equal(tenants.get('b').promo.state, 'ended');
   assert.equal(tenants.get('b').promoEligible, false);
-  assert.equal(promo.currentMonthly(tenants.get('b')), 700);
+  assert.equal(promo.currentMonthly(tenants.get('b')), 750);
   assert.equal(events.at(-1).type, 'promo_ended');
 
   // después ya no hay promoción: un cobro más no la reabre

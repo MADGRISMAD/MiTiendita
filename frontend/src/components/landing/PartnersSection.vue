@@ -241,7 +241,7 @@ const planOptions = computed(() => {
     ? list
     : [
         { id: "basic", name: "Básico", price: 349 },
-        { id: "growth", name: "Crecimiento", price: 700 },
+        { id: "growth", name: "Crecimiento", price: 750 },
         { id: "pro", name: "Pro", price: 1350 },
       ];
 });
@@ -287,7 +287,7 @@ let tickerTimer = 0;
 let seq = 0;
 function pushFeed() {
   const store = STORES[seq % STORES.length];
-  const prices = [349, 700, 1350];
+  const prices = [349, 750, 1350];
   const amount = Math.round(prices[seq % 3] * rateFor(ticker.stores));
   const label = seq % 4 === 3 ? "Nueva tienda con tu código" : "Pagó su plan";
   if (seq % 4 === 3) ticker.stores += 1;
