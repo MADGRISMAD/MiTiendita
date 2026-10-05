@@ -1107,6 +1107,40 @@
                 <p class="dlg-note">Resto en efectivo: <strong>{{ money(payCashPortion) }}</strong></p>
               </template>
 
+              <!-- Terminal integrada -->
+              <div
+                v-if="pointActive"
+                class="point-box"
+                :class="point.phase !== 'idle' || point.checking ? 'busy' : point.ok ? 'ok' : 'bad'"
+                role="status"
+                aria-live="polite"
+              >
+                <template v-if="['starting', 'waiting', 'cancelling'].includes(point.phase)">
+                  <strong>{{ point.phase === 'cancelling' ? 'Cancelando…' : 'Pasa o inserta la tarjeta en la terminal' }}</strong>
+                  <span>Cobrando {{ money(pointAmount) }}. No cierres esta ventana.</span>
+                  <button type="button" class="btn" :disabled="point.phase === 'cancelling'" @click="cancelPointCharge">
+                    Cancelar cobro
+                  </button>
+                </template>
+                <template v-else-if="point.checking">
+                  <strong>Verificando terminal…</strong>
+                </template>
+                <template v-else-if="point.ok">
+                  <strong>Terminal lista</strong>
+                  <span>El cobro de {{ money(pointAmount) }} llegará solo a la terminal.</span>
+                </template>
+                <template v-else>
+                  <strong>Reconecta tu terminal</strong>
+                  <span>{{ point.message }}</span>
+                  <div class="point-acts">
+                    <router-link to="/settings?s=terminal" class="btn primary">Ir a reconectar</router-link>
+                    <button type="button" class="btn" @click="loadPointStatus">Reintentar</button>
+                    <button type="button" class="btn ghost" @click="point.useManual = true">Cobrar manual</button>
+                  </div>
+                </template>
+              </div>
+
+
               <template v-if="payMethod === 'cash' || payMethod === 'split'">
                 <label class="field">
                   <span>Efectivo recibido</span>
@@ -1141,39 +1175,6 @@
               </template>
 
               <template v-else-if="payMethod === 'card'">
-                <!-- Terminal integrada -->
-                <div
-                  v-if="point.configured && !point.useManual"
-                  class="point-box"
-                  :class="point.phase !== 'idle' || point.checking ? 'busy' : point.ok ? 'ok' : 'bad'"
-                  role="status"
-                  aria-live="polite"
-                >
-                  <template v-if="['starting', 'waiting', 'cancelling'].includes(point.phase)">
-                    <strong>{{ point.phase === 'cancelling' ? 'Cancelando…' : 'Pasa o inserta la tarjeta en la terminal' }}</strong>
-                    <span>Cobrando {{ money(chargeTotal) }}. No cierres esta ventana.</span>
-                    <button type="button" class="btn" :disabled="point.phase === 'cancelling'" @click="cancelPointCharge">
-                      Cancelar cobro
-                    </button>
-                  </template>
-                  <template v-else-if="point.checking">
-                    <strong>Verificando terminal…</strong>
-                  </template>
-                  <template v-else-if="point.ok">
-                    <strong>Terminal lista</strong>
-                    <span>El cobro llegará solo a la terminal.</span>
-                  </template>
-                  <template v-else>
-                    <strong>Reconecta tu terminal</strong>
-                    <span>{{ point.message }}</span>
-                    <div class="point-acts">
-                      <router-link to="/settings?s=terminal" class="btn primary">Ir a reconectar</router-link>
-                      <button type="button" class="btn" @click="loadPointStatus">Reintentar</button>
-                      <button type="button" class="btn ghost" @click="point.useManual = true">Cobrar manual</button>
-                    </div>
-                  </template>
-                </div>
-
                 <label v-if="cardFeeOn" class="fee-row">
                   <input v-model="cardFee" type="checkbox" :disabled="sending" />
                   <span>
@@ -1645,7 +1646,13 @@ export default {
       cancelRequested: false,
       useManual: false, // el cajero eligió cobrar a mano esta vez
     });
-    const pointActive = computed(() => payMethod.value === "card" && point.configured && !point.useManual);
+    const pointActive = computed(
+      () => (payMethod.value === "card" || payMethod.value === "split") && point.configured && !point.useManual
+    );
+    // Con pago mixto la terminal cobra solo la parte de tarjeta
+    const pointAmount = computed(() =>
+      payMethod.value === "split" ? round2(Number(payCardAmount.value || 0)) : chargeTotal.value
+    );
     const pointBlocked = computed(() => pointActive.value && (!point.ok || point.checking));
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -1671,7 +1678,7 @@ export default {
 
     // Al elegir «Tarjeta» (o abrir el cobro con Tarjeta) se verifica la terminal ANTES de cobrar
     watch([showPayment, payMethod], ([open, method]) => {
-      if (open && method === "card") {
+      if (open && (method === "card" || method === "split")) {
         point.useManual = false;
         loadPointStatus();
       }
@@ -3411,7 +3418,7 @@ export default {
         // Cobro en la terminal Mercado Pago: la venta se registra SOLO si sale aprobado
         if (pointActive.value) {
           try {
-            const chargeId = await runPointCharge(clientSaleId, chargeTotal.value);
+            const chargeId = await runPointCharge(clientSaleId, pointAmount.value);
             payload.pointChargeId = chargeId;
           } catch (e) {
             payError.value = e.final
@@ -4260,6 +4267,7 @@ export default {
       offlineStore,
       point,
       pointActive,
+      pointAmount,
       pointBlocked,
       loadPointStatus,
       cancelPointCharge,

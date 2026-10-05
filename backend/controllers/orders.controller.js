@@ -141,11 +141,18 @@ async function settlePayment(req, existing, body, { requireCash = true, paidAt }
   // Cobro con terminal Mercado Pago: debe estar aprobado, ser de esta tienda, por este monto y usarse una sola vez
   let pointChargeId = null;
   if (body?.pointChargeId) {
-    if (method !== 'card') throw httpError(400, 'El cobro con terminal solo aplica a pagos con tarjeta');
+    if (method !== 'card' && method !== 'split') {
+      throw httpError(400, 'El cobro con terminal solo aplica a pagos con tarjeta');
+    }
+    // Pago mixto: la terminal cobra solo la parte de tarjeta
+    const cardPortion = Number(body?.cardAmount ?? 0);
+    if (method === 'split' && !(cardPortion > 0 && cardPortion < total)) {
+      throw httpError(400, 'El monto de tarjeta debe ser mayor a 0 y menor al total');
+    }
     try {
       const charge = await pointCharges.consumeCharge(req.tenantId, String(body.pointChargeId), {
         clientSaleId: existing.clientSaleId || String(existing.id),
-        total,
+        total: method === 'split' ? cardPortion : total,
       });
       pointChargeId = charge.id;
     } catch (err) {
