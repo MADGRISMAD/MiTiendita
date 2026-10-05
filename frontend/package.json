@@ -6,7 +6,7 @@
   "main": "dist/assets/index-BtlbeA5U.js",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && node seo-sync.test.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

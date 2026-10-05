@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { VitePWA } from 'vite-plugin-pwa'
+import seoPlugin from './seo-plugin.mjs'
 import os from 'node:os'
 
 /** Primera IPv4 de la LAN (Wi‑Fi/Ethernet), para abrir desde el celular. */
@@ -28,6 +29,7 @@ const lan = lanHost()
 export default defineConfig({
   plugins: [
     vue(),
+    seoPlugin(),
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['logo.svg', 'icons/apple-touch-icon.png', 'icons/favicon-32.png'],

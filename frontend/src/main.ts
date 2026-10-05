@@ -13,6 +13,8 @@ import {
 } from "./authStore";
 import "./apiService";
 import { startOfflineRuntime } from "./offlineSync";
+import { applySeo } from "./seo/apply";
+import { VERTICALS } from "./seo/site.mjs";
 
 import Login from "./views/LoginComponent.vue";
 import LandingView from "./views/LandingView.vue";
@@ -30,6 +32,13 @@ const authMeta = (roles?: string[]) => ({
 const routes: RouteRecordRaw[] = [
   { path: "/", name: "landing", component: LandingView },
   { path: "/login", name: "login", component: Login },
+  // Páginas por giro (SEO): una por búsqueda importante
+  ...VERTICALS.map((v) => ({
+    path: `/${v.slug}`,
+    name: `seo-${v.slug}`,
+    component: () => import("./views/VerticalView.vue"),
+    props: { slug: v.slug },
+  })),
   { path: "/register", name: "register", component: () => import("./views/RegisterComponent.vue") },
   { path: "/forgot", name: "forgot", component: () => import("./views/ForgotPasswordView.vue") },
   { path: "/reset/:token", name: "reset", component: () => import("./views/ResetPasswordView.vue") },
@@ -211,6 +220,7 @@ router.beforeEach(async (to) => {
 });
 
 const app = createApp(App);
+router.afterEach((to) => applySeo(to.path));
 app.use(router);
 app.mount("#app");
 

@@ -7,7 +7,50 @@
       "buildCommand": "npm run build",
       "outputDirectory": "dist",
       "rewrites": [
-        { "source": "/(.*)", "destination": "/index.html" }
+        {
+          "source": "/ayuda",
+          "destination": "/ayuda/index.html"
+        },
+        {
+          "source": "/register",
+          "destination": "/register/index.html"
+        },
+        {
+          "source": "/terminos",
+          "destination": "/terminos/index.html"
+        },
+        {
+          "source": "/privacidad",
+          "destination": "/privacidad/index.html"
+        },
+        {
+          "source": "/punto-de-venta-para-abarrotes",
+          "destination": "/punto-de-venta-para-abarrotes/index.html"
+        },
+        {
+          "source": "/punto-de-venta-para-farmacia",
+          "destination": "/punto-de-venta-para-farmacia/index.html"
+        },
+        {
+          "source": "/punto-de-venta-para-ferreteria",
+          "destination": "/punto-de-venta-para-ferreteria/index.html"
+        },
+        {
+          "source": "/punto-de-venta-para-papeleria",
+          "destination": "/punto-de-venta-para-papeleria/index.html"
+        },
+        {
+          "source": "/punto-de-venta-con-bascula",
+          "destination": "/punto-de-venta-con-bascula/index.html"
+        },
+        {
+          "source": "/punto-de-venta-sin-internet",
+          "destination": "/punto-de-venta-sin-internet/index.html"
+        },
+        {
+          "source": "/(.*)",
+          "destination": "/index.html"
+        }
       ]
     },
     "backend": {
@@ -19,7 +62,17 @@
     }
   },
   "rewrites": [
-    { "source": "/api/(.*)", "destination": { "service": "backend" } },
-    { "source": "/(.*)", "destination": { "service": "frontend" } }
+    {
+      "source": "/api/(.*)",
+      "destination": {
+        "service": "backend"
+      }
+    },
+    {
+      "source": "/(.*)",
+      "destination": {
+        "service": "frontend"
+      }
+    }
   ]
 }
