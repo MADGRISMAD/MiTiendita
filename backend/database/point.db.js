@@ -38,7 +38,20 @@ async function GetTenantById(id) {
   return out(t);
 }
 async function UpdateTenant(id, patch) {
-  await (await database()).collection(TENANTS).updateOne(idFilter(id), { $set: patch });
+  const col = (await database()).collection(TENANTS);
+  // Tenants desvinculados antes quedaron con `point: null`; Mongo no puede escribir 'point.x' dentro de null
+  if (Object.keys(patch).some((k) => k.startsWith('point.'))) {
+    await col.updateOne({ ...idFilter(id), point: null }, { $set: { point: {} } });
+  }
+  await col.updateOne(idFilter(id), { $set: patch });
+}
+
+/** Quita por completo la configuración de la terminal del negocio. */
+async function ClearTenantPoint(id) {
+  await (await database()).collection(TENANTS).updateOne(idFilter(id), {
+    $unset: { point: '' },
+    $set: { updatedAt: new Date() },
+  });
 }
 
 // ───────── Cobros con terminal ─────────
@@ -83,6 +96,7 @@ async function ClaimPointCharge(id, tenantId, clientSaleId) {
 module.exports = {
   GetTenantById,
   UpdateTenant,
+  ClearTenantPoint,
   CreatePointCharge,
   GetPointCharge,
   GetPointChargeBySale,
