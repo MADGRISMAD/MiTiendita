@@ -140,6 +140,8 @@ async function openUsb(prompt) {
   };
 }
 
+const serialQueue = new WeakMap();
+
 async function openSerial(prompt) {
   // Recordar el puerto de la impresora para no confundirlo con el de la báscula
   let port;
@@ -163,15 +165,24 @@ async function openSerial(prompt) {
   const info = port.getInfo?.() || {};
   return {
     name: info.usbProductId ? `Puerto COM (USB ${info.usbVendorId?.toString(16)}:${info.usbProductId.toString(16)})` : "Puerto COM",
-    async write(bytes) {
-      const writer = port.writable.getWriter();
-      try {
-        await writer.write(bytes);
-      } finally {
-        writer.releaseLock();
-      }
+    // Un solo escritor a la vez: dos impresiones simultáneas dejaban el stream bloqueado
+    write(bytes) {
+      const run = async () => {
+        const writer = port.writable.getWriter();
+        try {
+          await writer.write(bytes);
+        } finally {
+          try { writer.releaseLock(); } catch { /* escritura pendiente: se libera sola */ }
+        }
+      };
+      const next = (serialQueue.get(port) || Promise.resolve()).then(run, run);
+      serialQueue.set(port, next.catch(() => {}));
+      return next;
     },
-    close: () => port.close(),
+    close: async () => {
+      await (serialQueue.get(port) || Promise.resolve());
+      return port.close();
+    },
   };
 }
 
