@@ -196,6 +196,47 @@ async function ListUsersByTenant(tenantId) {
     mfaEnabled: Boolean(user.mfaEnabled),
   }));
 }
+/** Usuarios de varias tiendas en UNA consulta: Map tenantId → usuarios (mismo formato que ListUsersByTenant). */
+async function ListUsersByTenants(tenantIds) {
+  const ids = [...new Set((tenantIds || []).map(String))];
+  const out = new Map(ids.map((id) => [id, []]));
+  if (!ids.length) return out;
+  const users = await dbConnection
+    .collection('users')
+    .find({ tenantId: { $in: ids } })
+    .project({ password: 0, resetToken: 0, resetExpires: 0, mfaSecretEnc: 0, mfaPendingEnc: 0, mfaRecovery: 0 })
+    .toArray();
+  for (const user of users) {
+    out.get(String(user.tenantId))?.push({
+      id: String(user._id),
+      name: user.name || '',
+      lastName: user.lastName || '',
+      username: user.username || '',
+      email: user.email || '',
+      cellphone: user.cellphone || '',
+      role: normalizeRoleValue(user.role),
+      disabled: Boolean(user.disabled),
+      disabledAt: user.disabledAt || null,
+      lastLoginAt: user.lastLoginAt || null,
+      mfaEnabled: Boolean(user.mfaEnabled),
+    });
+  }
+  return out;
+}
+
+/** Configuración de varias tiendas en UNA consulta: Map tenantId → settings. */
+async function GetSettingsMany(tenantIds) {
+  const ids = [...new Set((tenantIds || []).map(String))];
+  if (!ids.length) return new Map();
+  const rows = await dbConnection.collection('settings').find({ tenantId: { $in: ids } }).toArray();
+  return new Map(rows.map((row) => [String(row.tenantId), row]));
+}
+
+/** Estado compartido entre instancias (p. ej. cuándo se leyó la bandeja por última vez). */
+function appState() {
+  return dbConnection.collection('app_state');
+}
+
 function normalizeRoleValue(role) {
   return ['hosstess', 'waiter', 'kitchen'].includes(role) ? 'cashier' : role || '';
 }
@@ -1256,7 +1297,7 @@ module.exports = {
   GetSettings, CreateSettings, UpdateSettings,
   GetMenus, GetMenuById, CreateMenu, UpdateMenu, DeleteMenu,
   GetFoods, CountFoods, CountPaidOrders, CountCashSessions, GetFoodById, GetFoodByBarcode, CreateFood, UpdateFood, ReserveSaleStock, ConsumeSaleLots, RestoreSaleStock, IncrementFoodStock, DeleteFood, GetLowStockFoods, SearchFoods,
-  CreateBillingEvent, ListBillingEvents, getCollection,
+  CreateBillingEvent, ListBillingEvents, getCollection, ListUsersByTenants, GetSettingsMany, appState,
   RecordLoginFailure, ClearLoginFailures, FindUserById, BumpUserTokenVersion, CountActiveAdmins, FindUserInTenant,
   CreateSession, FindSessionByHash, RevokeSession, RevokeUserSessions,
   GetOrders, GetOrderById, GetOrderByInvoiceToken, GetOrderByClientSaleId, CreateOrder, UpdateOrder, DeleteOrder, GetOrdersByCashSession,

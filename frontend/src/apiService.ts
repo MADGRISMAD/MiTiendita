@@ -38,7 +38,39 @@ export function appPublicOrigin() {
 import { isNetworkError } from './net';
 import { noteOffline, noteOnline } from './offlineFlags';
 
+// ── Caché corta de lecturas del panel (plataforma y socios) ──
+// Al cambiar de pestaña la pantalla aparece al instante con lo último leído, y dos pantallas que
+// piden lo mismo a la vez comparten una sola petición. Cualquier cambio (POST/PUT/PATCH/DELETE)
+// del panel borra la caché para no mostrar datos viejos.
+const GET_CACHE = new Map<string, { at: number; data?: unknown; pending?: Promise<unknown> }>();
+const PANEL_URL = /^\/(platform|partner)\//;
+
+export function clearPanelCache() {
+  GET_CACHE.clear();
+}
+
+function cachedGet<T = any>(url: string, params?: Record<string, unknown>, ttl = 20000): Promise<T> {
+  const key = `${authStore.username || ''}|${url}|${JSON.stringify(params || {})}`;
+  const hit = GET_CACHE.get(key);
+  if (hit?.pending) return hit.pending as Promise<T>;
+  if (hit && 'data' in hit && Date.now() - hit.at < ttl) return Promise.resolve(hit.data as T);
+  const pending = axios
+    .get(url, { params })
+    .then((r) => {
+      GET_CACHE.set(key, { at: Date.now(), data: r.data });
+      return r.data as T;
+    })
+    .catch((err) => {
+      GET_CACHE.delete(key);
+      throw err;
+    });
+  GET_CACHE.set(key, { at: hit?.at || 0, data: hit?.data, pending });
+  return pending;
+}
+
 axios.interceptors.request.use((config) => {
+  const method = String(config.method || 'get').toLowerCase();
+  if (method !== 'get' && PANEL_URL.test(String(config.url || ''))) GET_CACHE.clear();
   const token = authStore.token;
   if (token) {
     config.headers = config.headers || {};
@@ -462,7 +494,7 @@ export const apiService = {
   },
 
   platformOverview() {
-    return axios.get('/platform/overview').then((r) => r.data);
+    return cachedGet('/platform/overview');
   },
   platformReport() {
     return axios.get('/platform/report', { responseType: 'text' }).then((r) => r.data);
@@ -474,7 +506,7 @@ export const apiService = {
     return axios.delete(`/platform/expenses/${id}`).then((r) => r.data);
   },
   platformListTenants() {
-    return axios.get('/platform/tenants').then((r) => r.data);
+    return cachedGet('/platform/tenants');
   },
   platformGetTenant(id: string) {
     return axios.get(`/platform/tenants/${id}`).then((r) => r.data);
@@ -490,19 +522,19 @@ export const apiService = {
   },
   /** Bandeja de soporte: tickets de todos los clientes que le tocan a quien pregunta. */
   platformSupport(params: { status?: 'open' | 'answered' | 'all'; q?: string; limit?: number } = {}) {
-    return axios.get('/platform/support', { params }).then((r) => r.data);
+    return cachedGet('/platform/support', params, 15000);
   },
   platformTenantActivity(id: string) {
     return axios.get(`/platform/tenants/${id}/activity`).then((r) => r.data);
   },
   platformActivity(limit = 60) {
-    return axios.get('/platform/activity', { params: { limit } }).then((r) => r.data);
+    return cachedGet('/platform/activity', { limit });
   },
   platformResetStaffMfa(id: string) {
     return axios.post(`/platform/staff/${id}/reset-mfa`).then((r) => r.data);
   },
   platformInbox() {
-    return axios.get('/platform/inbox').then((r) => r.data);
+    return cachedGet('/platform/inbox');
   },
   platformSuspendTenant(id: string, reason: string) {
     return axios.post(`/platform/tenants/${id}/suspend`, { reason }).then((r) => r.data);
@@ -514,10 +546,10 @@ export const apiService = {
     return axios.patch(`/platform/tenants/${id}/plan`, { plan }).then((r) => r.data);
   },
   partnerHome() {
-    return axios.get('/partner/home').then((r) => r.data);
+    return cachedGet('/partner/home');
   },
   partnerClients() {
-    return axios.get('/partner/clients').then((r) => r.data);
+    return cachedGet('/partner/clients');
   },
   partnerClient(id: string) {
     return axios.get(`/partner/clients/${id}`).then((r) => r.data);
@@ -532,7 +564,7 @@ export const apiService = {
     return axios.get('/partner/commissions').then((r) => r.data);
   },
   partnerTeam() {
-    return axios.get('/partner/team').then((r) => r.data);
+    return cachedGet('/partner/team');
   },
   partnerCreateMember(payload: Record<string, unknown>) {
     return axios.post('/partner/team', payload).then((r) => r.data);
@@ -553,7 +585,7 @@ export const apiService = {
     return axios.put(`/platform/referrers/${id}/users/${userId}/active`, { active }).then((r) => r.data);
   },
   platformReferrers() {
-    return axios.get('/platform/referrers').then((r) => r.data);
+    return cachedGet('/platform/referrers');
   },
   platformReferrer(id: string) {
     return axios.get(`/platform/referrers/${id}`).then((r) => r.data);

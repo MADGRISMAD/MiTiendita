@@ -95,6 +95,18 @@ function platformDb() {
     async GetAiUsage() {
       return 3;
     },
+    async ListAiUsage() {
+      return tenants.map((t) => ({ tenantId: t.id, count: 3 }));
+    },
+    async GetSettingsMany(ids) {
+      return new Map(ids.map((id) => [id, { tenantId: id, businessName: tenants.find((t) => t.id === id)?.name }]));
+    },
+    async ListUsersByTenants(ids) {
+      return new Map(ids.map((id) => [id, users.filter((u) => u.tenantId === id).map((u) => ({
+        id: String(u._id), name: u.name, lastName: u.lastName, username: u.username, email: u.email, cellphone: '', role: u.role,
+        disabled: false, lastLoginAt: u.lastLoginAt || null, mfaEnabled: false,
+      }))]));
+    },
     async CountUsersByTenant(tid) {
       return users.filter((u) => u.tenantId === tid).length;
     },
