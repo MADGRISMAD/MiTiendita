@@ -104,7 +104,7 @@ Cada tienda conecta **su propia** cuenta de Mercado Pago y elige su terminal en 
 
 1. En [Tus integraciones](https://www.mercadopago.com.mx/developers/panel/app) crea una aplicación y copia `MP_CLIENT_ID` y `MP_CLIENT_SECRET`.
 2. Redirect URL de la app = `MP_OAUTH_REDIRECT` = `{API_PUBLIC_URL}/point/oauth/callback`.
-3. Webhooks → evento *Order*: `{API_PUBLIC_URL}/point/webhook`, con la clave secreta en `MP_WEBHOOK_SECRET`.
+3. Webhooks (modo productivo): una sola URL, `{API_PUBLIC_URL}/point/webhook`, con los eventos *Order (Mercado Pago)* y *Planes y suscripciones* (incluye los pagos recurrentes); los avisos de suscripciones se atienden en facturación. La clave secreta va en `MP_WEBHOOK_SECRET`.
 4. Genera `OAUTH_STATE_SECRET` y `TOKEN_ENC_KEY` (32 bytes en hex): `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`.
    Los tokens de cada tienda se guardan cifrados (AES-256-GCM); si cambias `TOKEN_ENC_KEY` hay que reconectar las cuentas.
 

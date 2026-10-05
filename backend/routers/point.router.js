@@ -78,7 +78,14 @@ router.post('/charges/:id/cancel', auth, startLimit, async (req, res) => {
 });
 
 /* ───────────── Webhook de Mercado Pago (SIN auth, valida firma) ───────────── */
-router.post('/webhook', async (req, res) => {
+router.post('/webhook', async (req, res, next) => {
+  // Mercado Pago permite UNA sola URL por aplicación: si llega un aviso de suscripciones, lo atiende facturación
+  const topic = String(req.body?.type || req.body?.topic || req.query?.topic || req.query?.type || '').toLowerCase();
+  if (topic.includes('subscription') || topic.includes('preapproval')) {
+    return require('../controllers/billing.controller').webhook(req, res);
+  }
+  return next();
+}, async (req, res) => {
   if (!svc.verifyWebhookSignature(req)) return res.sendStatus(401);
   res.sendStatus(200);
   try {
