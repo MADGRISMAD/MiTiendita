@@ -11,6 +11,7 @@ const limits = require('../services/plan-limits.service');
 const sessions = require('../services/session.service');
 const referrals = require('../services/referral.service');
 const partners = require('../services/partner.service');
+const promoSvc = require('../services/promo.service');
 const refTiers = require('../services/referral.tiers');
 
 const SHORT_MONTHS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
@@ -387,6 +388,8 @@ function monthlyFee(tenant) {
   if ((tenant.billingStatus || 'trialing') !== 'active') return 0;
   if (isPerpetual(tenant.plan)) return 0;
   const yearly = tenant.billingInterval === 'year';
+  // Mientras dura la promoción de lanzamiento se cobra el precio promocional
+  if (!yearly && tenant.promo?.state === 'active') return promoSvc.currentMonthly(tenant);
   const price = planPrice(tenant.plan || 'basic', yearly ? 'year' : 'month');
   return yearly ? price / 12 : price;
 }
@@ -555,6 +558,8 @@ async function buildBooks() {
 
 async function overview(req, res) {
   try {
+    // Aprovecha la visita del admin para subir al precio normal las promociones que ya vencieron
+    promoSvc.sweepAll().catch(() => {});
     const staffEmail = await currentStaffEmail(req);
     const [books, inbox] = await Promise.all([buildBooks(), supportMail.waitingInbox(staffEmail)]);
     return res.status(200).json({

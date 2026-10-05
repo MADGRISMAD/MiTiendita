@@ -54,6 +54,8 @@ function createTenantDoc(name = 'Mi negocio') {
     cancelAtPeriodEnd: false,
     suspendedAt: null,
     suspendedReason: null,
+    // Promoción de lanzamiento: solo las tiendas que se crean ahora (las existentes no la tienen)
+    promoEligible: true,
     createdAt: now,
     updatedAt: now,
   };

@@ -5,6 +5,22 @@
 const PLANS = ['basic', 'growth', 'pro'];
 const ALL_PLANS = [...PLANS, 'perpetual'];
 
+/**
+ * Promoción de lanzamiento para clientes NUEVOS (aparte de los 14 días de prueba):
+ * los primeros PROMO.months cobros mensuales a 1/3 del precio; después, precio normal.
+ */
+const PROMO = {
+  months: 3,
+  divisor: 3,
+};
+
+/** Precio promocional mensual de un plan (1/3 del precio, redondeado a pesos). */
+function promoPrice(planId) {
+  const p = PLAN_CATALOG[planId];
+  if (!p || !p.priceMonth) return 0;
+  return Math.round(p.priceMonth / PROMO.divisor);
+}
+
 /** Usos de Inventario Mágico y Precio Mágico (Gemini) por mes calendario. */
 const AI_QUOTAS = {
   basic: 50,
@@ -47,8 +63,8 @@ const PLAN_CATALOG = {
     name: 'Crecimiento',
     tagline: 'Más manos en caja, más catálogo',
     pitch: 'Varios cajeros a la vez y un catálogo grande — cobras desde el celular en el pasillo.',
-    priceMonth: Number(process.env.MP_PLAN_GROWTH_PRICE || 599),
-    priceYear: Number(process.env.MP_PLAN_GROWTH_YEAR_PRICE || 5990),
+    priceMonth: Number(process.env.MP_PLAN_GROWTH_PRICE || 700),
+    priceYear: Number(process.env.MP_PLAN_GROWTH_YEAR_PRICE || 7000),
     aiQuota: AI_QUOTAS.growth,
     limits: PLAN_LIMITS.growth,
     highlight: true,
@@ -68,8 +84,8 @@ const PLAN_CATALOG = {
     name: 'Pro',
     tagline: 'Catálogo grande, Inventario Mágico y Precio Mágico',
     pitch: 'Foto a la factura del camión: Precio Mágico actualiza costos y te sugiere el precio al público. Inventario Mágico mete las piezas al anaquel.',
-    priceMonth: Number(process.env.MP_PLAN_PRO_PRICE || 899),
-    priceYear: Number(process.env.MP_PLAN_PRO_YEAR_PRICE || 8990),
+    priceMonth: Number(process.env.MP_PLAN_PRO_PRICE || 1350),
+    priceYear: Number(process.env.MP_PLAN_PRO_YEAR_PRICE || 13500),
     aiQuota: AI_QUOTAS.pro,
     limits: PLAN_LIMITS.pro,
     highlight: false,
@@ -161,6 +177,8 @@ function listPlans(currency = process.env.MP_CURRENCY || 'MXN') {
       tagline: p.tagline,
       pitch: p.pitch,
       price: p.priceMonth,
+      promoPrice: promoPrice(id),
+      promoMonths: PROMO.months,
       priceYear: p.priceYear,
       monthlyFromYear: monthlyEq,
       currency,
@@ -181,6 +199,8 @@ function listPlans(currency = process.env.MP_CURRENCY || 'MXN') {
 }
 
 module.exports = {
+  PROMO,
+  promoPrice,
   PLANS,
   ALL_PLANS,
   PLAN_CATALOG,

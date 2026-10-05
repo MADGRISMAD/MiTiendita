@@ -490,6 +490,13 @@
             <p class="section-lede">
               14 días de prueba. Sin tarjeta. Cancela cuando quieras. Precios en MXN con IVA.
             </p>
+            <p class="promo-banner" data-reveal>
+              <span class="promo-tag">Lanzamiento</span>
+              <span>
+                <strong>Clientes nuevos: 3 meses a 1/3 del precio</strong> con el plan mensual, después precio normal.
+                <em>Aparte de tus 14 días gratis.</em>
+              </span>
+            </p>
           </div>
 
           <div class="billing-toggle" role="group" aria-label="Periodo de pago">
@@ -525,7 +532,13 @@
               <Transition name="flip" mode="out-in">
                 <div class="price-box" :key="billingInterval">
                   <template v-if="billingInterval === 'month'">
-                    <p class="price">${{ formatInt(p.price) }} <span>/ mes</span></p>
+                    <p v-if="p.promoPrice" class="price promo">
+                      ${{ formatInt(p.promoPrice) }} <span>/ mes × {{ p.promoMonths || 3 }} meses</span>
+                    </p>
+                    <p v-if="p.promoPrice" class="price-note was">
+                      Luego ${{ formatInt(p.price) }}/mes
+                    </p>
+                    <p v-else class="price">${{ formatInt(p.price) }} <span>/ mes</span></p>
                   </template>
                   <template v-else>
                     <p class="price">
@@ -800,6 +813,8 @@ const fallbackPlans = [
     name: "Básico",
     tagline: "Para la tiendita que quiere dejar el cuaderno",
     price: 349,
+    promoPrice: 116,
+    promoMonths: 3,
     priceYear: 3490,
     monthlyFromYear: 291,
     aiQuotaLabel: "50 al mes",
@@ -818,9 +833,11 @@ const fallbackPlans = [
     id: "growth",
     name: "Crecimiento",
     tagline: "Más cajeros, más productos, más control",
-    price: 599,
-    priceYear: 5990,
-    monthlyFromYear: 499,
+    price: 700,
+    promoPrice: 233,
+    promoMonths: 3,
+    priceYear: 7000,
+    monthlyFromYear: 583,
     aiQuotaLabel: "150 al mes",
     highlight: true,
     badge: "Más popular",
@@ -837,9 +854,11 @@ const fallbackPlans = [
     id: "pro",
     name: "Pro",
     tagline: "Para tiendas con catálogo grande y proveedores",
-    price: 899,
-    priceYear: 8990,
-    monthlyFromYear: 749,
+    price: 1350,
+    promoPrice: 450,
+    promoMonths: 3,
+    priceYear: 13500,
+    monthlyFromYear: 1125,
     aiQuotaLabel: "500 al mes",
     highlight: false,
     badge: null,
@@ -2996,6 +3015,18 @@ main,
   color: var(--timber-muted);
   line-height: 1.4;
 }
+.promo-banner {
+  display: inline-flex; align-items: center; gap: 0.7rem; margin: 1rem 0 0; padding: 0.6rem 0.9rem; max-width: 36rem;
+  border-radius: 0.9rem; font-size: 0.92rem; line-height: 1.4;
+  background: color-mix(in srgb, var(--timber-accent) 16%, var(--timber-panel));
+  border: 1px solid color-mix(in srgb, var(--timber-accent) 45%, var(--timber-line));
+}
+.promo-banner em { display: block; font-style: normal; font-weight: 700; color: var(--timber-muted); font-size: 0.82rem; }
+.promo-tag {
+  flex: none; padding: 0.2rem 0.55rem; border-radius: 999px; font-size: 0.7rem; font-weight: 900; letter-spacing: 0.08em;
+  text-transform: uppercase; color: #1a1208; background: var(--timber-accent);
+}
+.plan .price.promo { color: var(--timber-primary); }
 .plan-extra strong { color: var(--timber-ink); font-weight: 700; }
 .plan-extra a {
   color: var(--timber-primary);

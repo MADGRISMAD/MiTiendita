@@ -107,10 +107,11 @@ async function createPreapproval({
   payerEmail,
   externalReference,
   interval = 'month',
+  amountOverride = null,
 }) {
   const appUrl = (process.env.APP_URL || 'http://localhost:5173').replace(/\/$/, '');
   const billingInterval = interval === 'year' ? 'year' : 'month';
-  const amount = planPrice(plan, billingInterval);
+  const amount = amountOverride != null ? Number(amountOverride) : planPrice(plan, billingInterval);
   const currency = process.env.MP_CURRENCY || 'MXN';
   const ref = externalReference || `${tenantId}:${plan}:${billingInterval}`;
 
@@ -183,6 +184,32 @@ async function createPreapproval({
     backUrl,
     localReturn: usedLocalFallback,
   };
+}
+
+/** Cambia el monto de los cobros siguientes de una suscripción (p. ej. al terminar la promoción). */
+async function updatePreapprovalAmount(id, amount) {
+  if (!hasMpConfig() || String(id).startsWith('mock_')) {
+    if (!mockAllowed()) throw mockDisabledError();
+    return { id, amount };
+  }
+  const res = await fetch(`${MP_API}/preapproval/${id}`, {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${process.env.MP_ACCESS_TOKEN}`,
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify({
+      auto_recurring: { transaction_amount: Number(amount), currency_id: process.env.MP_CURRENCY || 'MXN' },
+    }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = new Error(data.message || 'No se pudo cambiar el monto de la suscripción');
+    err.status = res.status;
+    throw err;
+  }
+  return data;
 }
 
 async function getPreapproval(id) {
@@ -267,6 +294,7 @@ module.exports = {
   listPlans,
   createPreapproval,
   getPreapproval,
+  updatePreapprovalAmount,
   getAuthorizedPayment,
   cancelPreapproval,
   mapMpStatusToBilling,
