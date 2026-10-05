@@ -68,8 +68,20 @@ Modelos probados (ir llenando al probar en tienda; formato: modelo · conexión 
 | _pendiente_ | USB ESC/POS genérica 80 mm | Windows · Chrome | _por probar_ |
 | _pendiente_ | Bluetooth 80 mm | Android · Chrome | _por probar_ |
 
+## Cafetería (recetas, insumos y barra)
+
+Elige el giro **Cafetería** en Configuración (o en el asistente inicial) y aparecen **Barra** junto a Vender y **Recetas e insumos** en «Más».
+
+- **Insumos** (`/recetas?tab=ingredients`): la materia prima (café en grano, leches, jarabes, vasos). Se miden en g, ml o pz; el costo se captura como «paquete de 1000 ml a $25» y se guarda por unidad. No salen en la caja. «Surtir» suma lo que llegó y queda en la bitácora de inventario.
+- **Bebidas** (`/recetas`): receta para el tamaño base, tamaños con su precio y un factor que multiplica la receta (Grande ×1.5) y grupos de extras. Cada opción puede cobrar extra y **agregar** un insumo (shot +9 g de café) o **cambiar** uno por otro (leche de almendra en lugar de entera). Se ve el costo y la ganancia por tamaño, y para cuántas tazas alcanza. «Cargar menú de ejemplo» crea 8 insumos y 6 bebidas.
+- **En la caja**, al tocar una bebida se elige tamaño y extras; cada combinación es un renglón distinto del ticket. Al cobrar se pregunta «¿A nombre de quién?».
+- **Al cobrar**, el servidor pone el precio (no lo que mande la caja) y descuenta de cada insumo receta × tamaño × cantidad, con cambios y extras. Si el inventario general está apagado, se descuentan solo los insumos y una existencia en cero no frena la venta (queda marcada para revisión). Con el inventario encendido se respeta «vender sin existencias». Al cancelar la venta se regresa exactamente lo que salió.
+- **Barra** (`/barra`): pedidos con número del día (#1, #2…), nombre y extras, en tres columnas: En cola → Preparando → Para entregar. Se actualiza cada 5 s, suena al llegar un pedido y marca en rojo los que llevan más de 8 minutos. Los entregados recientes se pueden regresar.
+
+API: `GET /orders/prep` (cola de la barra) y `PUT /orders/:id/prep` con `{ status: queued | preparing | ready | delivered }`. Los productos guardan `isIngredient`, `stockUnit`, `recipe`, `sizes`, `modifierGroups` y `prep`; los renglones de venta mandan `sizeId` y `modifierIds` (`"grupo:opción"`).
+
 ## Configuración inicial
-Tras registrarte, el wizard pide nombre de tienda, tipo (abarrotes / conveniencia / farmacia / ferretería) y logo. Puedes cargar 8 productos de ejemplo para cobrar el mismo día. Términos: `/terminos` · Privacidad: `/privacidad`.
+Tras registrarte, el wizard pide nombre de tienda, tipo (abarrotes / conveniencia / farmacia / ferretería / cafetería) y logo. Puedes cargar 8 productos de ejemplo para cobrar el mismo día. Términos: `/terminos` · Privacidad: `/privacidad`.
 
 ## Billing (suscripción Mi Tiendita)
 SaaS **100% nube** (sin instalar). Prueba **14 días**. **Básico** $349 · **Crecimiento** $750 · **Pro** $1,350 /mes (anual: 10 meses: $3,490 · $7,500 · $13,500). Incluyen **Inventario Mágico** y **Precio Mágico** (50 / 150 / 500 usos al mes). **Promoción de lanzamiento (clientes nuevos, aparte de los 14 días):** los primeros **3 cobros mensuales a 1/3 del precio** ($116 · $250 · $450) y después precio normal; solo para tiendas creadas después de activarla y solo en plan mensual. Al terminar el 3er cobro se sube el monto de la suscripción en Mercado Pago (`PUT /preapproval`); si ese aviso no llega, se sube solo unos días después de la fecha del 3er cobro (`backend/services/promo.service.js`). **La prueba siempre se respeta:** si contratas durante los 14 días, la suscripción se crea con `free_trial` por los días que quedan y el primer cobro (ya con la promoción) es al terminar la prueba. En `/billing` se paga, se ve el historial y se cancela la renovación (sigues activo hasta el fin del periodo).

@@ -2,6 +2,7 @@ import { h } from "vue";
 
 /* Íconos de línea (24×24, trazo) usados en la pantalla de venta */
 const ICONS = {
+  cup: '<path d="M4 8h13v5a6 6 0 01-6 6h-1a6 6 0 01-6-6V8z"/><path d="M17 10h1.5a2.5 2.5 0 010 5H17"/><path d="M8 3.5v2M12 3.5v2"/>',
   search: '<circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/>',
   x: '<path d="M6 6l12 12M18 6L6 18"/>',
   tag: '<path d="M3 12V4.5A1.5 1.5 0 014.5 3H12l9 9-9 9-9-9z"/><circle cx="7.5" cy="7.5" r="1.4"/>',

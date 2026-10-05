@@ -1,4 +1,5 @@
 const db = require('../database/mongodb');
+const recipes = require('../services/recipe.service');
 const { roundQty, saleUnitOf } = require('../utils/units');
 const limits = require('../services/plan-limits.service');
 const { seedStarterCatalog, starterProductCount } = require('../services/starter-catalog.service');
@@ -139,6 +140,8 @@ async function createFood(req, res) {
       tracksExpiry: Boolean(tracksExpiry),
       supplierIds: sanitizeSupplierIds(supplierIds),
       saleUnit: saleUnitOf(saleUnit),
+      // Cafetería: insumo (materia prima) o bebida con receta, tamaños y extras
+      ...recipes.sanitizeRecipeFields(req.body || {}),
     });
     return res.status(201).json(created);
   } catch (err) {
@@ -182,6 +185,7 @@ async function updateFood(req, res) {
     if (body.tracksExpiry != null) body.tracksExpiry = Boolean(body.tracksExpiry);
     if (body.saleUnit != null) body.saleUnit = saleUnitOf(body.saleUnit);
     if (body.supplierIds != null) body.supplierIds = sanitizeSupplierIds(body.supplierIds);
+    Object.assign(body, recipes.sanitizeRecipeFields(body));
     const updated = await db.UpdateFood(req.params.id, body, req.tenantId);
     if (!updated) return res.status(404).send('Producto no encontrado');
     return res.status(200).json(updated);

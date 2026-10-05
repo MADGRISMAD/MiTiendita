@@ -232,6 +232,40 @@ async function GetSettingsMany(tenantIds) {
   return new Map(rows.map((row) => [String(row.tenantId), row]));
 }
 
+/** Número de turno de la barra (cafetería): reinicia cada día, atómico entre cajas. */
+async function NextPrepNumber(tenantId, timeZone = 'America/Mexico_City') {
+  let day;
+  try {
+    day = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  } catch {
+    day = new Date().toISOString().slice(0, 10);
+  }
+  const r = await dbConnection.collection('counters').findOneAndUpdate(
+    { _id: `prep:${tenantId}:${day}` },
+    { $inc: { seq: 1 }, $setOnInsert: { createdAt: new Date() } },
+    { upsert: true, returnDocument: 'after' }
+  );
+  const doc = r && Object.prototype.hasOwnProperty.call(r, 'value') ? r.value : r;
+  return Number(doc?.seq) || 1;
+}
+
+/** Pedidos de la barra: los que no se han entregado (y los entregados hace poco). */
+async function ListPrepOrders(tenantId, { since = new Date(Date.now() - 12 * 3600 * 1000) } = {}) {
+  const rows = await dbConnection
+    .collection('orders')
+    .find({
+      tenantId: String(tenantId),
+      'prep.status': { $in: ['queued', 'preparing', 'ready', 'delivered'] },
+      createdAt: { $gte: since },
+      status: { $ne: 'cancelled' },
+    })
+    .project({ items: 1, prep: 1, createdAt: 1, paidAt: 1, total: 1, notes: 1 })
+    .sort({ createdAt: 1 })
+    .limit(300)
+    .toArray();
+  return rows.map(withId);
+}
+
 /** Estado compartido entre instancias (p. ej. cuándo se leyó la bandeja por última vez). */
 function appState() {
   return dbConnection.collection('app_state');
@@ -1297,7 +1331,7 @@ module.exports = {
   GetSettings, CreateSettings, UpdateSettings,
   GetMenus, GetMenuById, CreateMenu, UpdateMenu, DeleteMenu,
   GetFoods, CountFoods, CountPaidOrders, CountCashSessions, GetFoodById, GetFoodByBarcode, CreateFood, UpdateFood, ReserveSaleStock, ConsumeSaleLots, RestoreSaleStock, IncrementFoodStock, DeleteFood, GetLowStockFoods, SearchFoods,
-  CreateBillingEvent, ListBillingEvents, getCollection, ListUsersByTenants, GetSettingsMany, appState,
+  CreateBillingEvent, ListBillingEvents, getCollection, ListUsersByTenants, GetSettingsMany, appState, NextPrepNumber, ListPrepOrders,
   RecordLoginFailure, ClearLoginFailures, FindUserById, BumpUserTokenVersion, CountActiveAdmins, FindUserInTenant,
   CreateSession, FindSessionByHash, RevokeSession, RevokeUserSessions,
   GetOrders, GetOrderById, GetOrderByInvoiceToken, GetOrderByClientSaleId, CreateOrder, UpdateOrder, DeleteOrder, GetOrdersByCashSession,

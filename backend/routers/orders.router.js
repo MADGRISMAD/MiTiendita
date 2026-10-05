@@ -20,6 +20,10 @@ router.get(
   orders.reportSummary
 );
 
+// Barra de la cafetería: pedidos por preparar (va antes de /:id)
+router.get('/prep', requireAuth, requireActiveSubscription, requireRoles('admin', 'cashier'), orders.prepQueue);
+router.put('/:id/prep', requireAuth, requireActiveSubscription, requireRoles('admin', 'cashier'), orders.setPrepStatus);
+
 router.get(
   '/:id',
   requireAuth, requireActiveSubscription,

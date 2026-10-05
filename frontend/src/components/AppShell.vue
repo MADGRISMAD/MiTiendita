@@ -243,6 +243,7 @@ const ico = {
   tag: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20.6 13.4l-7.2 7.2a2 2 0 01-2.8 0L3 13V3h10l7.6 7.6a2 2 0 010 2.8z"/><circle cx="7.5" cy="7.5" r="1.4"/></svg>`,
   people: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="3.2"/><path d="M22 21v-2a3.6 3.6 0 00-3-3.5"/><path d="M16 3.2a3.2 3.2 0 010 6.2"/></svg>`,
   home: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/></svg>`,
+  cup: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h13v5a6 6 0 01-6 6h-1a6 6 0 01-6-6V8z"/><path d="M17 10h1.5a2.5 2.5 0 010 5H17"/><path d="M8 3.5v2M12 3.5v2"/></svg>`,
   inbox: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13l2.5-8h13L21 13"/><path d="M3 13v6h18v-6h-5l-1.5 2h-5L8 13H3z"/></svg>`,
 };
 
@@ -278,8 +279,13 @@ const allDock = [
   { to: "/orders", name: "orders", label: "Caja", icon: ico.cash },
 ];
 
+// Cafetería: la barra junto a Vender y las recetas en «Más»
+const cafeDock = { to: "/barra", name: "barra", label: "Barra", icon: ico.cup };
+const isCafe = computed(() => venueStore.businessType === "cafe");
+
 const allMore = [
   { to: "/dashboard", name: "dashboard", label: "Resumen / Reportes" },
+  { to: "/recetas", name: "recipes", label: "Recetas e insumos", cafe: true },
   { to: "/inventory", name: "inventory", label: "Inventario / Proveedores" },
   { to: "/customers", name: "customers", label: "Clientes" },
   { to: "/staff", name: "staff", label: "Empleados" },
@@ -289,13 +295,16 @@ const allMore = [
 ];
 
 const dock = computed(() => {
-  if (!ownerMode.value) return allDock.filter((i) => canAccessRoute(i.name));
+  if (!ownerMode.value) {
+    const items = isCafe.value ? [allDock[0], cafeDock, ...allDock.slice(1)] : allDock;
+    return items.filter((i) => canAccessRoute(i.name));
+  }
   if (isPartner()) return isPartnerAdmin() ? partnerAdminDock : partnerStaffDock;
   const items = isPlatformAdmin() ? adminDock : supportDock;
   // Tickets por responder sobre «Soporte»
   return items.map((i) => (i.name === "platformSupport" ? { ...i, badge: platformStore.waiting || 0 } : i));
 });
-const moreItems = computed(() => allMore.filter((i) => canAccessRoute(i.name)));
+const moreItems = computed(() => allMore.filter((i) => (!i.cafe || isCafe.value) && canAccessRoute(i.name)));
 // "Más" vive con las demás pestañas cuando caben (celular y tablet)
 const moreInDock = computed(() => (moreItems.value.length > 0 || ownerMode.value) && dock.value.length <= 4);
 const dockCount = computed(() => dock.value.length + (moreInDock.value ? 1 : 0));
