@@ -2,7 +2,7 @@ const db = require('../database/mongodb');
 const mp = require('../services/mercadopago.service');
 const limits = require('../services/plan-limits.service');
 const { PUBLIC_PLANS, isSubscriptionActive, trialEndsFrom } = require('../models/tenant.model');
-const { hasAiFeatures, isPerpetual, formatAiQuota, planAiQuota } = require('../services/plans.catalog');
+const { hasAiFeatures, isPerpetual, formatAiQuota, planAiQuota, PROMO, promoPrice } = require('../services/plans.catalog');
 const {
   safeSend,
   sendPaymentConfirmedEmail,
@@ -11,6 +11,7 @@ const {
 const { resolveAppUrl } = require('../utils/app-url.utils');
 const { verifyMpSignature } = require('../utils/mp-signature');
 const referrals = require('../services/referral.service');
+const promo = require('../services/promo.service');
 
 function daysLeft(trialEndsAt) {
   if (!trialEndsAt) return 0;
@@ -66,17 +67,19 @@ async function applyPreapprovalToTenant(tenant, pre, dataId) {
     type: billingStatus === 'active' ? 'activated' : billingStatus || 'webhook',
     plan: updated?.plan || tenant.plan,
     interval: updated?.billingInterval || tenant.billingInterval,
-    amount: mp.planPrice(updated?.plan || tenant.plan, updated?.billingInterval || tenant.billingInterval),
+    amount: chargedAmount(updated || tenant, null),
     mpStatus: pre.status,
     note: billingStatus === 'active' ? 'Pago confirmado' : `Mercado Pago: ${pre.status || billingStatus}`,
   });
   if (billingStatus === 'active' && tenant.billingStatus !== 'active') {
     notifyPayment(updated || tenant).catch(() => {});
-    // Primer cobro de la suscripción: comisión del vendedor que refirió la tienda (si hay)
-    creditReferral(updated || tenant, {
-      amount: mp.planPrice(updated?.plan || tenant.plan, updated?.billingInterval || tenant.billingInterval),
+    // Primer cobro: la promoción avanza y el vendedor que refirió la tienda gana su comisión (sobre lo realmente cobrado)
+    const activationKey = `act:${patch.mpPreapprovalId}:${new Date(patch.currentPeriodEnd).toISOString().slice(0, 10)}`;
+    const afterPromo = await promo.onPayment(updated || tenant, { key: activationKey, source: 'activation' }).catch(() => null);
+    creditReferral({ ...(updated || tenant), promo: afterPromo || (updated || tenant).promo }, {
+      amount: chargedAmount(updated || tenant, afterPromo),
       source: 'activation',
-      key: `act:${patch.mpPreapprovalId}:${new Date(patch.currentPeriodEnd).toISOString().slice(0, 10)}`,
+      key: activationKey,
       note: 'Activación de la suscripción',
     });
   }
@@ -92,6 +95,16 @@ async function creditReferral(tenant, payment) {
     console.warn('[referidos] no se pudo registrar la comisión:', err.message);
     return null;
   }
+}
+
+/**
+ * Lo que se cobró en este pago: el precio de promoción mientras dure (pending/active en su primer cobro) o el normal.
+ * `after` es el estado de la promoción ya con este cobro contado.
+ */
+function chargedAmount(tenant, after) {
+  const state = after || tenant.promo;
+  if (state && state.amount && ['pending', 'active'].includes(state.state)) return Number(state.amount);
+  return mp.planPrice(tenant.plan, tenant.billingInterval || 'month');
 }
 
 async function recordEvent(data) {
@@ -140,7 +153,7 @@ async function notifyPayment(tenant) {
       businessName: settings?.businessName || tenant.name,
       planName: limits.planName(tenant.plan),
       interval: tenant.billingInterval || 'month',
-      amount: formatMoney(mp.planPrice(tenant.plan, tenant.billingInterval || 'month')),
+      amount: formatMoney(chargedAmount(tenant, null)),
       periodEnd: formatDate(tenant.currentPeriodEnd),
       appUrl: (process.env.APP_URL || 'http://localhost:5173').replace(/\/$/, ''),
     })
@@ -157,8 +170,10 @@ async function getPlans(req, res) {
 
 async function getStatus(req, res) {
   try {
-    const tenant = await db.GetTenantById(req.tenantId);
+    let tenant = await db.GetTenantById(req.tenantId);
     if (!tenant) return res.status(404).send('Tenant no encontrado');
+    // Si ya pasó la fecha del 3er cobro de la promoción, se sube al precio normal
+    if (await promo.sweepTenant(tenant)) tenant = (await db.GetTenantById(req.tenantId)) || tenant;
     const plan = tenant.plan || 'basic';
     const usage = await limits.usageFor(req.tenantId, plan);
     const aiOn = hasAiFeatures(plan);
@@ -181,6 +196,7 @@ async function getStatus(req, res) {
       aiQuota: aiOn ? planAiQuota(plan) : 0,
       aiQuotaLabel: aiOn ? formatAiQuota(planAiQuota(plan)) : 'No incluido',
       limits: usage,
+      promo: promo.describe(tenant),
     });
   } catch (err) {
     console.error(err);
@@ -239,13 +255,17 @@ async function checkout(req, res) {
       }
     }
 
+    // Promoción de lanzamiento (clientes nuevos, plan mensual): los primeros cobros a 1/3 del precio
+    const withPromo = promo.isEligible(tenant, plan, interval);
     const preapproval = await mp.createPreapproval({
       plan,
       tenantId: req.tenantId,
       payerEmail: email,
       interval,
       externalReference: `${req.tenantId}:${plan}:${interval}`,
+      amountOverride: withPromo ? promoPrice(plan) : null,
     });
+    await promo.onCheckout(tenant, plan, interval);
 
     await db.UpdateTenant(req.tenantId, {
       plan,
@@ -260,7 +280,7 @@ async function checkout(req, res) {
       plan,
       interval,
       amount: preapproval.amount || mp.planPrice(plan, interval),
-      note: preapproval.mock ? 'Checkout (modo desarrollo)' : 'Checkout Mercado Pago',
+      note: (preapproval.mock ? 'Checkout (modo desarrollo)' : 'Checkout Mercado Pago') + (withPromo ? ` · promoción ${PROMO.months} meses a 1/3` : ''),
     });
 
     return res.status(200).json({
@@ -316,14 +336,18 @@ async function devActivate(req, res) {
       type: 'activated',
       plan,
       interval,
-      amount: mp.planPrice(plan, interval),
+      amount: promo.isEligible(tenant, plan, interval) ? promoPrice(plan) : mp.planPrice(plan, interval),
       note: 'Activación en modo desarrollo',
     });
-    notifyPayment(updated).catch(() => {});
-    await creditReferral(updated, {
-      amount: mp.planPrice(plan, interval),
+    const devKey = `act:${updated.mpPreapprovalId}:${new Date(updated.currentPeriodEnd).toISOString().slice(0, 10)}`;
+    await promo.onCheckout(tenant, plan, interval);
+    const fresh = (await db.GetTenantById(req.tenantId)) || updated;
+    const afterPromo = await promo.onPayment(fresh, { key: devKey, source: 'activation' }).catch(() => null);
+    notifyPayment({ ...updated, promo: afterPromo || fresh.promo }).catch(() => {});
+    await creditReferral({ ...updated, promo: afterPromo || fresh.promo }, {
+      amount: chargedAmount(updated, afterPromo),
       source: 'activation',
-      key: `act:${updated.mpPreapprovalId}:${new Date(updated.currentPeriodEnd).toISOString().slice(0, 10)}`,
+      key: devKey,
       note: 'Activación en modo desarrollo',
     });
 
@@ -433,10 +457,12 @@ async function webhook(req, res) {
             mpStatus: payment.status,
             note: 'Cobro de la suscripción',
           });
+          const paymentKey = `ap:${payment.id || dataId}`;
+          const afterPromo = await promo.onPayment(tenant, { key: paymentKey, source: 'authorized_payment' }).catch(() => null);
           await creditReferral(tenant, {
             amount,
             source: 'authorized_payment',
-            key: `ap:${payment.id || dataId}`,
+            key: paymentKey,
             mpPaymentId: payment.id || dataId,
             note: 'Cobro de la suscripción',
           });

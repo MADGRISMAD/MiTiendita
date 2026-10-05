@@ -93,8 +93,28 @@
         </p>
 
         <p v-else-if="interval === 'year'" class="year-tip">
-          Anual: pagas una vez y te olvidas. Básico <strong>$3,490</strong> · Crecimiento
-          <strong>$5,990</strong> · Pro <strong>$8,990</strong>.
+          Anual: pagas una vez y te olvidas.
+          <template v-for="(p, i) in plans" :key="p.id">
+            <template v-if="i">· </template>{{ p.name }} <strong>${{ formatInt(p.priceYear) }}</strong>
+          </template>.
+          <em v-if="status.promo?.eligible">La promoción de lanzamiento solo aplica al plan mensual.</em>
+        </p>
+
+        <p v-if="!isPerpetual && status.promo?.eligible && interval === 'month'" class="promo-note" role="status">
+          <span class="promo-tag">Promoción</span>
+          <span>
+            <strong>Tus primeros {{ status.promo.months }} meses a 1/3 del precio</strong>; después, precio normal.
+            Va aparte de tus días de prueba y solo aplica a clientes nuevos.
+          </span>
+        </p>
+        <p v-else-if="!isPerpetual && status.promo?.active" class="promo-note" role="status">
+          <span class="promo-tag">Promoción activa</span>
+          <span>
+            Pagas <strong>${{ formatInt(status.promo.amount) }}/mes</strong>
+            <template v-if="status.promo.monthsLeft != null">· {{ status.promo.monthsLeft }}
+              {{ status.promo.monthsLeft === 1 ? "cobro" : "cobros" }} más</template>.
+            Después pagarás <strong>${{ formatInt(status.promo.fullAmount) }}/mes</strong>.
+          </span>
         </p>
 
         <label v-if="!isPerpetual && status.mpConfigured && status.mpSandbox" class="payer-box">
@@ -127,8 +147,15 @@
               </div>
               <div class="price-block">
                 <template v-if="interval === 'month'">
-                  <p class="price">${{ formatInt(p.price) }}</p>
-                  <p class="per">MXN / mes</p>
+                  <template v-if="status.promo?.eligible && p.promoPrice">
+                    <p class="price">${{ formatInt(p.promoPrice) }}</p>
+                    <p class="per">MXN / mes × {{ status.promo.months }} meses</p>
+                    <p class="per">Luego ${{ formatInt(p.price) }}/mes</p>
+                  </template>
+                  <template v-else>
+                    <p class="price">${{ formatInt(p.price) }}</p>
+                    <p class="per">MXN / mes</p>
+                  </template>
                 </template>
                 <template v-else>
                   <p class="price">${{ formatInt(p.priceYear) }}</p>
@@ -740,6 +767,12 @@ onMounted(async () => {
   color: var(--timber-muted);
   line-height: 1.35;
 }
+.promo-note {
+  display: flex; align-items: center; gap: 0.7rem; margin: 0 0 1rem; padding: 0.7rem 0.9rem; border-radius: 0.9rem; font-size: 0.92rem; line-height: 1.4;
+  background: color-mix(in srgb, var(--timber-accent) 16%, var(--timber-panel));
+  border: 1px solid color-mix(in srgb, var(--timber-accent) 45%, var(--timber-line));
+}
+.promo-tag { flex: none; padding: 0.2rem 0.55rem; border-radius: 999px; font-size: 0.7rem; font-weight: 900; letter-spacing: 0.08em; text-transform: uppercase; color: #1a1208; background: var(--timber-accent); }
 .price {
   margin: 0;
   font-size: clamp(2.1rem, 2.8vw, 2.55rem);
