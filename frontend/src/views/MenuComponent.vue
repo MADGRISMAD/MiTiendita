@@ -1127,7 +1127,7 @@
                 </template>
                 <template v-else-if="point.ok">
                   <strong>Terminal lista</strong>
-                  <span>El cobro de {{ money(pointAmount) }} llegará solo a la terminal.</span>
+                  <span>Presiona el botón de abajo para enviar el cobro de {{ money(pointAmount) }} a la terminal.</span>
                 </template>
                 <template v-else>
                   <strong>Reconecta tu terminal</strong>
