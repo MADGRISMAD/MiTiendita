@@ -180,8 +180,9 @@ async function unlink() {
 
 onMounted(async () => {
   const mp = String(route.query.mp || "");
+  const detail = String(route.query.detail || "");
   if (mp) {
-    const { mp: _drop, ...rest } = route.query;
+    const { mp: _drop, reason: _r, detail: _d, ...rest } = route.query;
     router.replace({ query: rest }).catch(() => {});
   }
   await load();
@@ -189,7 +190,7 @@ onMounted(async () => {
     flash.value = "Cuenta de Mercado Pago conectada. Ahora elige tu terminal.";
     if (st.value?.connected && !st.value.configured) loadTerminals();
   } else if (mp === "error") {
-    err.value = "No se pudo conectar tu cuenta de Mercado Pago. Intenta de nuevo.";
+    err.value = "No se pudo conectar tu cuenta de Mercado Pago. Intenta de nuevo." + (detail ? ` (${detail})` : "");
   }
 });
 </script>
