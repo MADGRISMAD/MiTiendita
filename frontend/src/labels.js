@@ -25,6 +25,8 @@ export const roleLabel = {
   cashier: "Cajero",
   platform_admin: "Admin",
   platform_support: "Soporte",
+  partner_admin: "Dueño (socio)",
+  partner_staff: "Asesor (socio)",
 };
 
 export const inviteStatusLabel = {

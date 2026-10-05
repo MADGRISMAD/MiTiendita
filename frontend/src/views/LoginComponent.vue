@@ -304,10 +304,12 @@ export default {
         token: res.token,
         role: res.role,
         tenantId: res.tenantId,
+        partnerId: res.partnerId || null,
         username: res.username,
         email: res.email,
       });
-      await fetchVenueSettings();
+      // Solo las cuentas de tienda tienen configuración de tienda
+      if (res.tenantId) await fetchVenueSettings();
       if (res.role === "admin" && !isSetupComplete()) {
         this.$router.push("/setup");
       } else {

@@ -6,6 +6,8 @@ const supportMail = require('../services/support-mail.service');
 
 async function GetSettings(req, res) {
   try {
+    // Cuentas sin tienda (plataforma, socios) no tienen configuración de tienda
+    if (!req.tenantId) return res.status(404).send({ setupCompleted: false });
     const settings = await db.GetSettings(req.tenantId);
     if (!settings) {
       return res.status(404).send({ setupCompleted: false });
@@ -51,6 +53,7 @@ async function SaveSettings(req, res) {
 
 async function GetOnboarding(req, res) {
   try {
+    if (!req.tenantId) return res.status(404).send('Sin tienda');
     const [settings, tenant, productCount, userCount, paidSales, cashSessions] = await Promise.all([
       db.GetSettings(req.tenantId),
       db.GetTenantById(req.tenantId),

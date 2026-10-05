@@ -59,6 +59,7 @@ function profileOf(user) {
   return {
     role: normalizeRole(user.role),
     tenantId: user.tenantId || null,
+    partnerId: user.partnerId || null,
     username: user.username,
     email: String(user.email || '').trim().toLowerCase(),
   };
@@ -70,6 +71,7 @@ function accessTokenFor(user) {
       userId: user.username,
       userRole: normalizeRole(user.role),
       tenantId: user.tenantId || null,
+      partnerId: user.partnerId || null,
       email: String(user.email || '').trim().toLowerCase(),
       tv: Number(user.tokenVersion) || 0,
     },
@@ -172,6 +174,7 @@ async function currentUserState(username) {
         role: normalizeRole(user.role),
         disabled: Boolean(user.disabled),
         mfaEnabled: Boolean(user.mfaEnabled),
+        partnerId: user.partnerId || null,
       }
     : { exists: false };
   cache.set(key, { at: Date.now(), state });

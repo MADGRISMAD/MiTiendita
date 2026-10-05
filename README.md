@@ -132,6 +132,21 @@ Personas que venden Mi Tiendita a tiendas (por ejemplo, en otro estado) y ganan 
 - **Pagos al vendedor:** en la pestaña *Cobros* el admin ve lo pendiente, liquida todo junto (queda el historial) o anula un cobro pendiente (por ejemplo, un reembolso).
 - **Mercado Pago:** en los Webhooks de tu aplicación activa también el evento **Pagos recurrentes (`subscription_authorized_payment`)**, además de las suscripciones; sin él solo se comisiona la activación y no las renovaciones.
 
+## Portal de socios (/socio)
+
+Tres áreas separadas, cada una con sus propios roles:
+
+| Área | Roles | Ve |
+|---|---|---|
+| **Tienda** | `admin` (dueño), `cashier` | Solo su tienda |
+| **Socio** (vendedor/proveedor de Mi Tiendita) | `partner_admin` (dueño del socio), `partner_staff` (asesor) | Solo las tiendas que llegaron con su código |
+| **Plataforma** | `platform_admin`, `platform_support` | Todo |
+
+- **Acceso:** el admin de la plataforma, en *Vendedores → Accesos*, crea la primera cuenta del socio (normalmente *Dueño*). Ese dueño agrega a sus asesores desde *Equipo*. Toda cuenta de socio activa la verificación en dos pasos la primera vez que entra.
+- **Dueño del socio:** inicio con su código y enlace para registrar tiendas, tiendas que piden atención (pago atrasado, prueba por vencer, sin entrar), todas sus tiendas, comisiones y pagos recibidos, reparte las tiendas entre su equipo y lo administra (alta, perfil, desactivar; nunca se queda sin dueño).
+- **Asesor:** ve y atiende las tiendas (datos del dueño, plan, uso, historia) y anota el seguimiento; no ve dinero ni cambia al equipo.
+- **Aislamiento:** un socio nunca ve tiendas de otro socio, y las cuentas de socio no pueden entrar a la caja ni al panel de la plataforma (se valida en el servidor, no solo en la pantalla).
+
 ## Docker
 ```bash
 docker compose up --build -d

@@ -128,7 +128,7 @@ import { venueStore } from "../venueStore";
 import BrandName from "./BrandName.vue";
 import WhatsAppHelp from "./WhatsAppHelp.vue";
 import { themeStore, toggleUiTheme } from "../themeStore";
-import { canAccessRoute, hasRole, isPlatformAdmin, isPlatformStaff } from "../authStore";
+import { authStore, canAccessRoute, hasRole, isPartner, isPartnerAdmin, isPlatformAdmin, isPlatformStaff } from "../authStore";
 import { apiService, logoutSession } from "../apiService";
 import { applyBillingStatus } from "../billingStore";
 import { offlineStore } from "../offlineFlags";
@@ -146,9 +146,11 @@ const isDesk = computed(() =>
   ["pos", "products", "orders"].includes(String(route.name || ""))
 );
 
-const ownerMode = computed(() => isPlatformStaff());
+// Cuentas fuera de una tienda (plataforma y socios): sin caja, facturación ni ventas sin conexión
+const ownerMode = computed(() => isPlatformStaff() || isPartner());
 const businessName = computed(() => {
   if (!ownerMode.value) return venueStore.businessName || "Mi negocio";
+  if (isPartner()) return authStore.partnerName || "Portal de socios";
   return isPlatformAdmin() ? "Admin" : "Soporte";
 });
 const logoSrc = computed(() => venueStore.logoUrl || "/logo.svg");
@@ -253,6 +255,19 @@ const adminDock = [
   { to: "/platform/equipo", name: "platformTeam", label: "Equipo", icon: ico.people },
 ];
 
+// Socios: el dueño ve además sus comisiones; el equipo es visible para todos, solo el dueño lo cambia
+const partnerStaffDock = [
+  { to: "/socio", name: "partner", label: "Inicio", icon: ico.home },
+  { to: "/socio/clientes", name: "partnerClients", label: "Mis tiendas", icon: ico.products },
+  { to: "/socio/equipo", name: "partnerTeam", label: "Equipo", icon: ico.people },
+];
+const partnerAdminDock = [
+  partnerStaffDock[0],
+  partnerStaffDock[1],
+  { to: "/socio/comisiones", name: "partnerCommissions", label: "Comisiones", icon: ico.cash },
+  partnerStaffDock[2],
+];
+
 const allDock = [
   { to: "/pos", name: "pos", label: "Vender", icon: ico.sell },
   { to: "/products", name: "products", label: "Productos", icon: ico.products },
@@ -271,6 +286,7 @@ const allMore = [
 
 const dock = computed(() => {
   if (!ownerMode.value) return allDock.filter((i) => canAccessRoute(i.name));
+  if (isPartner()) return isPartnerAdmin() ? partnerAdminDock : partnerStaffDock;
   const items = isPlatformAdmin() ? adminDock : supportDock;
   // Tickets por responder sobre «Soporte»
   return items.map((i) => (i.name === "platformSupport" ? { ...i, badge: platformStore.waiting || 0 } : i));

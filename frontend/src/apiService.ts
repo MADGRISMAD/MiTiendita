@@ -513,6 +513,45 @@ export const apiService = {
   platformSetPlan(id: string, plan: string) {
     return axios.patch(`/platform/tenants/${id}/plan`, { plan }).then((r) => r.data);
   },
+  partnerHome() {
+    return axios.get('/partner/home').then((r) => r.data);
+  },
+  partnerClients() {
+    return axios.get('/partner/clients').then((r) => r.data);
+  },
+  partnerClient(id: string) {
+    return axios.get(`/partner/clients/${id}`).then((r) => r.data);
+  },
+  partnerAddNote(id: string, text: string) {
+    return axios.post(`/partner/clients/${id}/notes`, { text }).then((r) => r.data);
+  },
+  partnerAssign(id: string, username: string | null) {
+    return axios.put(`/partner/clients/${id}/assignee`, { username }).then((r) => r.data);
+  },
+  partnerCommissions() {
+    return axios.get('/partner/commissions').then((r) => r.data);
+  },
+  partnerTeam() {
+    return axios.get('/partner/team').then((r) => r.data);
+  },
+  partnerCreateMember(payload: Record<string, unknown>) {
+    return axios.post('/partner/team', payload).then((r) => r.data);
+  },
+  partnerSetMemberActive(id: string, active: boolean) {
+    return axios.put(`/partner/team/${id}/${active ? 'reactivate' : 'deactivate'}`).then((r) => r.data);
+  },
+  partnerSetMemberRole(id: string, role: string) {
+    return axios.put(`/partner/team/${id}/role`, { role }).then((r) => r.data);
+  },
+  platformReferrerUsers(id: string) {
+    return axios.get(`/platform/referrers/${id}/users`).then((r) => r.data);
+  },
+  platformCreateReferrerUser(id: string, payload: Record<string, unknown>) {
+    return axios.post(`/platform/referrers/${id}/users`, payload).then((r) => r.data);
+  },
+  platformSetReferrerUserActive(id: string, userId: string, active: boolean) {
+    return axios.put(`/platform/referrers/${id}/users/${userId}/active`, { active }).then((r) => r.data);
+  },
   platformReferrers() {
     return axios.get('/platform/referrers').then((r) => r.data);
   },

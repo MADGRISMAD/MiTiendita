@@ -3,6 +3,8 @@ const {
   ROLES,
   TENANT_ROLES,
   isPlatformStaff,
+  isPartnerRole,
+  isOutsideTenant,
   isSubscriptionActive,
 } = require('../models/tenant.model');
 const db = require('../database/mongodb');
@@ -20,8 +22,9 @@ async function requireAuth(req, res, next) {
 
   let role = payload.userRole;
   const isPlatform = isPlatformStaff(role);
+  let partnerId = null;
 
-  if (!isPlatform && !payload.tenantId) {
+  if (!isOutsideTenant(role) && !payload.tenantId) {
     return res.status(401).send('No autorizado');
   }
 
@@ -32,10 +35,17 @@ async function requireAuth(req, res, next) {
     if (!state.exists || state.disabled || (Number(payload.tv) || 0) !== state.tokenVersion) {
       return res.status(401).send('Tu sesión terminó. Vuelve a entrar.');
     }
-    if (isPlatform && !state.mfaEnabled) {
+    // Un rol de socio sin socio (o un rol de tienda que perdió su tienda) no entra
+    if (isPartnerRole(role)) {
+      partnerId = state.partnerId || null;
+      if (!partnerId) return res.status(401).send('Tu sesión terminó. Vuelve a entrar.');
+    } else if (!isPlatformStaff(role) && !payload.tenantId) {
+      return res.status(401).send('No autorizado');
+    }
+    if (isOutsideTenant(role) && !state.mfaEnabled) {
       return res.status(403).json({
         code: 'MFA_SETUP_REQUIRED',
-        message: 'El equipo de Mi Tiendita debe activar la verificación en dos pasos. Vuelve a entrar.',
+        message: 'Esta cuenta debe activar la verificación en dos pasos. Vuelve a entrar.',
       });
     }
   } catch (err) {
@@ -46,10 +56,13 @@ async function requireAuth(req, res, next) {
   req.user = {
     username: payload.userId,
     role,
-    tenantId: payload.tenantId || null,
+    tenantId: isOutsideTenant(role) ? null : payload.tenantId || null,
+    partnerId,
     email: String(payload.email || '').trim().toLowerCase() || null,
   };
-  req.tenantId = payload.tenantId || null;
+  // Las cuentas de socio nunca operan dentro de una tienda
+  req.tenantId = isOutsideTenant(role) ? null : payload.tenantId || null;
+  req.partnerId = partnerId;
   return next();
 }
 

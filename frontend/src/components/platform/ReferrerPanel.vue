@@ -38,6 +38,7 @@
 
       <ReferrerSummaryTab v-if="tab === 'resumen'" :detail="detail" />
       <ReferrerClientsTab v-else-if="tab === 'clientes'" :detail="detail" />
+      <ReferrerAccessTab v-else-if="tab === 'accesos'" :detail="detail" />
       <ReferrerCommissionsTab v-else :detail="detail" @changed="refresh" />
     </section>
 
@@ -53,6 +54,7 @@ import ReferrerSummaryTab from "./ReferrerSummaryTab.vue";
 import ReferrerClientsTab from "./ReferrerClientsTab.vue";
 import ReferrerCommissionsTab from "./ReferrerCommissionsTab.vue";
 import ReferrerDialog from "./ReferrerDialog.vue";
+import ReferrerAccessTab from "./ReferrerAccessTab.vue";
 import { apiService } from "../../apiService";
 
 const props = defineProps({ id: { type: String, required: true } });
@@ -68,11 +70,12 @@ const error = ref("");
 const ok = ref("");
 const showEdit = ref(false);
 
-const tab = computed(() => (["resumen", "clientes", "cobros"].includes(route.query.v) ? route.query.v : "resumen"));
+const tab = computed(() => (["resumen", "clientes", "cobros", "accesos"].includes(route.query.v) ? route.query.v : "resumen"));
 const TABS = computed(() => [
   { id: "resumen", label: "Resumen" },
   { id: "clientes", label: "Clientes", count: detail.value?.clients ?? null },
   { id: "cobros", label: "Cobros", count: detail.value?.pendingCount ?? null },
+  { id: "accesos", label: "Accesos" },
 ]);
 function setTab(v) {
   router.replace({ query: { ...route.query, v: v === "resumen" ? undefined : v } }).catch(() => {});

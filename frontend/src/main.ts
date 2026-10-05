@@ -39,8 +39,13 @@ import PlatformClients from "./views/platform/PlatformClients.vue";
 import PlatformFinance from "./views/platform/PlatformFinance.vue";
 import PlatformTeam from "./views/platform/PlatformTeam.vue";
 import PlatformReferrers from "./views/platform/PlatformReferrers.vue";
+import PartnerHome from "./views/partner/PartnerHome.vue";
+import PartnerClients from "./views/partner/PartnerClients.vue";
+import PartnerCommissions from "./views/partner/PartnerCommissions.vue";
+import PartnerTeam from "./views/partner/PartnerTeam.vue";
 
 const PLATFORM_STAFF = ["platform_admin", "platform_support"];
+const PARTNER_ROLES = ["partner_admin", "partner_staff"];
 import NotFoundView from "./views/NotFoundView.vue";
 import LegalView from "./views/LegalView.vue";
 import HelpView from "./views/HelpView.vue";
@@ -130,6 +135,12 @@ const routes: RouteRecordRaw[] = [
     component: PlatformReferrers,
     meta: { requiresAuth: true, roles: ["platform_admin"], owner: true },
   },
+  // Portal de socios (vendedores/proveedores de Mi Tiendita)
+  { path: "/socio", name: "partner", component: PartnerHome, meta: { requiresAuth: true, roles: PARTNER_ROLES, owner: true } },
+  { path: "/socio/clientes", name: "partnerClients", component: PartnerClients, meta: { requiresAuth: true, roles: PARTNER_ROLES, owner: true } },
+  { path: "/socio/clientes/:id", name: "partnerClient", component: PartnerClients, meta: { requiresAuth: true, roles: PARTNER_ROLES, owner: true } },
+  { path: "/socio/comisiones", name: "partnerCommissions", component: PartnerCommissions, meta: { requiresAuth: true, roles: ["partner_admin"], owner: true } },
+  { path: "/socio/equipo", name: "partnerTeam", component: PartnerTeam, meta: { requiresAuth: true, roles: PARTNER_ROLES, owner: true } },
   {
     path: "/platform/equipo",
     name: "platformTeam",
