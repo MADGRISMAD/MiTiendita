@@ -258,6 +258,7 @@ export function saleToPrintOrder(sale) {
     cardAmount: payload.cardAmount ?? null,
     paymentReference: payload.paymentReference || null,
     change: Number(payload.change) || 0,
+    customerName: payload.customerName || "",
     createdAt: soldAt,
     paidAt: soldAt,
     invoiceToken: null,

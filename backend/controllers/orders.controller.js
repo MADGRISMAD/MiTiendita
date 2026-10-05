@@ -195,14 +195,13 @@ async function settlePayment(req, existing, body, { requireCash = true, paidAt }
     }
   }
 
-  // Cafetería: la venta con bebidas entra a la cola de la barra con su número y a nombre de quién
+  // Cafetería: la venta con bebidas lleva número de pedido del día y a nombre de quién; sale en el ticket
+  // para que quien prepara sepa qué hacer y a quién entregarlo
   let prep = existing.prep || null;
   if (!prep && (existing.items || []).some((item) => item.prep)) {
     prep = {
-      status: 'queued',
       number: await db.NextPrepNumber(req.tenantId),
       customerName: String(body?.customerName || '').trim().slice(0, 40),
-      queuedAt: new Date(),
     };
   }
 
@@ -348,52 +347,6 @@ async function sale(req, res) {
   }
 }
 
-// ───────── Barra (cafetería) ─────────
-const PREP_FLOW = ['queued', 'preparing', 'ready', 'delivered'];
-
-function prepCard(order) {
-  return {
-    id: order.id,
-    number: order.prep?.number || null,
-    customerName: order.prep?.customerName || '',
-    status: order.prep?.status || 'queued',
-    queuedAt: order.prep?.queuedAt || order.createdAt,
-    readyAt: order.prep?.readyAt || null,
-    notes: order.notes || '',
-    items: (order.items || [])
-      .filter((item) => item.prep)
-      .map((item) => ({ name: item.name, quantity: item.quantity, modifiers: item.modifiers || [], notes: item.notes || '' })),
-  };
-}
-
-async function prepQueue(req, res) {
-  try {
-    const rows = await db.ListPrepOrders(req.tenantId);
-    // Entregados solo los últimos 10 (para deshacer un toque equivocado)
-    const cards = rows.map(prepCard);
-    const delivered = cards.filter((c) => c.status === 'delivered').slice(-10);
-    return res.status(200).json({ items: [...cards.filter((c) => c.status !== 'delivered'), ...delivered] });
-  } catch (err) {
-    console.error(err);
-    return res.status(500).send('No pude leer la barra.');
-  }
-}
-
-async function setPrepStatus(req, res) {
-  try {
-    const status = String(req.body?.status || '');
-    if (!PREP_FLOW.includes(status)) return res.status(400).send('Estado inválido');
-    const order = await db.GetOrderById(req.params.id, req.tenantId);
-    if (!order || !order.prep) return res.status(404).send('Pedido no encontrado');
-    const prep = { ...order.prep, status, [`${status}At`]: new Date() };
-    const updated = await db.UpdateOrder(order.id, { prep, updatedAt: new Date() }, req.tenantId);
-    return res.status(200).json(prepCard(updated || { ...order, prep }));
-  } catch (err) {
-    console.error(err);
-    return res.status(500).send('No pude cambiar el pedido.');
-  }
-}
-
 async function markInvoiceIssued(req, res) {
   try {
     const order = await db.GetOrderById(req.params.id, req.tenantId);
@@ -503,8 +456,7 @@ async function voidSale(req, res) {
 }
 
 module.exports = {
-  prepQueue,
-  setPrepStatus, list, getById, create, updateStatus, pay, sale, markInvoiceIssued, voidSale, report, reportSummary };
+  list, getById, create, updateStatus, pay, sale, markInvoiceIssued, voidSale, report, reportSummary };
 
 async function report(req, res) {
   try {

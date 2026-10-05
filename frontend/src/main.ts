@@ -63,7 +63,7 @@ const routes: RouteRecordRaw[] = [
   { path: "/settings", name: "settings", component: () => import("./views/SettingsView.vue"), meta: authMeta(["admin"]) },
   { path: "/customers", name: "customers", component: () => import("./views/CustomersView.vue"), meta: authMeta(["admin", "cashier"]) },
   { path: "/recetas", name: "recipes", component: () => import("./views/RecipesView.vue"), meta: authMeta(["admin"]) },
-  { path: "/barra", name: "barra", component: () => import("./views/BarView.vue"), meta: authMeta(["admin", "cashier"]) },
+  { path: "/barra", redirect: "/pos" },
   { path: "/inventory", name: "inventory", component: () => import("./views/InventoryView.vue"), meta: authMeta(["admin", "cashier"]) },
   { path: "/reports", redirect: "/dashboard" },
   {

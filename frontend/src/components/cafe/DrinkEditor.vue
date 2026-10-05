@@ -30,7 +30,7 @@
             <h4>Receta <em>para el tamaño base</em></h4>
             <button type="button" class="adm-link" :disabled="!ingredients.length" @click="addLine">+ Insumo</button>
           </div>
-          <p v-if="!ingredients.length" class="adm-hint">Primero da de alta tus insumos (café, leche, vasos…) en la pestaña «Insumos».</p>
+          <p v-if="!ingredients.length" class="adm-hint">Primero da de alta tus insumos (café, leche, vasos…) en <router-link to="/inventory?tab=insumos">Inventario → Insumos</router-link>.</p>
           <div v-for="(r, i) in form.recipe" :key="i" class="line">
             <select v-model="r.ingredientId" class="adm-inp" aria-label="Insumo">
               <option value="" disabled>Elige insumo</option>
@@ -117,7 +117,7 @@
 
         <label class="check prep">
           <input v-model="form.prep" type="checkbox" />
-          Se prepara en barra <em>(al cobrarla aparece en la pantalla Barra con número de pedido)</em>
+          Se prepara al momento <em>(el ticket sale con número de pedido y a nombre de quién, para dárselo a quien la prepara)</em>
         </label>
 
         <!-- Costo y ganancia -->
