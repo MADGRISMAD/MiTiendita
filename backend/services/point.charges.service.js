@@ -28,7 +28,7 @@ async function status(tenantId) {
 }
 
 async function disconnect(tenantId) {
-  await db.UpdateTenant(tenantId, { point: null, updatedAt: new Date() });
+  await db.ClearTenantPoint(tenantId);
 }
 
 /** Crea el cobro en la terminal. Idempotente por clientSaleId + monto mientras siga pendiente. */

@@ -28,6 +28,9 @@ const fakeDb = {
       } else t[k] = v;
     }
   },
+  async ClearTenantPoint(id) {
+    delete store.tenants[id].point;
+  },
   async CreatePointCharge(doc) {
     const c = { ...doc, tenantId: String(doc.tenantId), id: `c${store.charges.length + 1}` };
     store.charges.push(c);
@@ -225,5 +228,5 @@ test('webhook: firma válida pasa, alterada no', () => {
 test('desvincular borra la conexión', async () => {
   await ready('t1');
   await charges.disconnect('t1');
-  assert.equal(store.tenants.t1.point, null);
+  assert.equal(store.tenants.t1.point, undefined);
 });
