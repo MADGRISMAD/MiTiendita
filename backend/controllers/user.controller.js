@@ -15,6 +15,7 @@ const { passwordProblem } = require('../utils/password-policy');
 const sessions = require('../services/session.service');
 const totp = require('../utils/totp');
 const secretBox = require('../utils/secret-box');
+const referrals = require('../services/referral.service');
 
 const MAX_FAILED_LOGINS = 5;
 const LOCK_MS = 15 * 60 * 1000;
@@ -51,6 +52,18 @@ function checkSecondFactor(user, code) {
   return null;
 }
 
+/** Para el formulario de registro: ¿ese código es de un vendedor activo? Solo da el nombre de pila. */
+const CheckReferralCode = async (req, res) => {
+  try {
+    const ref = await referrals.findActiveByCode(req.params.code);
+    if (!ref) return res.status(200).json({ valid: false });
+    return res.status(200).json({ valid: true, seller: ref.name.split(' ')[0] });
+  } catch (err) {
+    console.error(err);
+    return res.status(200).json({ valid: false });
+  }
+};
+
 const CreateUser = async (req, res) => {
   try {
     const { error, value } = schema.validate(req.body);
@@ -66,9 +79,20 @@ const CreateUser = async (req, res) => {
       return res.status(400).send('Usuario con el correo ya registrado');
     }
 
-    const tenant = await db.CreateTenant(
-      createTenantDoc(value.businessName || `${value.name} ${value.lastName}`)
-    );
+    // Código de un vendedor (opcional): se valida antes de crear nada para no dejar una tienda a medias
+    let referrer = null;
+    try {
+      referrer = await referrals.resolveForSignup(value.referralCode, { email: value.email });
+    } catch (err) {
+      if (err instanceof referrals.ReferralError) return res.status(err.status).send(err.message);
+      throw err;
+    }
+    delete value.referralCode;
+
+    const tenant = await db.CreateTenant({
+      ...createTenantDoc(value.businessName || `${value.name} ${value.lastName}`),
+      ...(referrer ? referrals.referralFields(referrer) : {}),
+    });
     const tenantId = tenant.id;
 
     value.password = await hasher.hashPassword(value.password);
@@ -78,6 +102,13 @@ const CreateUser = async (req, res) => {
 
     await service.CreateUser(value);
 
+    if (referrer) {
+      await db.CreateBillingEvent({
+        tenantId,
+        type: 'referred',
+        note: `Llegó con el código ${referrer.code} (${referrer.name})`,
+      }).catch(() => {});
+    }
     await db.CreateBillingEvent({
       tenantId,
       type: 'trial_started',
@@ -404,6 +435,7 @@ const ChangePassword = async (req, res) => {
 
 module.exports = {
   CreateUser,
+  CheckReferralCode,
   LoginUsuario,
   LoginMfa,
   RefreshSession,

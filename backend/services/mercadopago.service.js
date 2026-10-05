@@ -215,6 +215,24 @@ function mapMpStatusToBilling(mpStatus) {
   return null;
 }
 
+/** Un cobro recurrente de la suscripción (aviso «subscription_authorized_payment»). */
+async function getAuthorizedPayment(id) {
+  if (!hasMpConfig() || String(id).startsWith('mock_')) {
+    if (!mockAllowed()) throw mockDisabledError();
+    return { id, status: 'processed' };
+  }
+  const res = await fetch(`${MP_API}/authorized_payments/${id}`, {
+    headers: { Authorization: `Bearer ${process.env.MP_ACCESS_TOKEN}`, Accept: 'application/json' },
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = new Error(data.message || 'No se pudo leer el cobro');
+    err.status = res.status;
+    throw err;
+  }
+  return data;
+}
+
 async function cancelPreapproval(id) {
   if (!id) return { id: null, status: 'cancelled', mock: true };
   if (!hasMpConfig() || String(id).startsWith('mock_')) {
@@ -249,6 +267,7 @@ module.exports = {
   listPlans,
   createPreapproval,
   getPreapproval,
+  getAuthorizedPayment,
   cancelPreapproval,
   mapMpStatusToBilling,
 };

@@ -96,6 +96,8 @@ const limits = {
     rateLimit({ name: 'login', windowMs: 15 * MIN, max: 20, message: 'Demasiados intentos de entrar. Espera 15 minutos.' }),
   register: () =>
     rateLimit({ name: 'register', windowMs: HOUR, max: 5, message: 'Demasiadas cuentas creadas desde esta red. Intenta en una hora.' }),
+  referral: () =>
+    rateLimit({ name: 'referral', windowMs: 10 * 60 * 1000, max: 30, message: 'Demasiadas consultas. Espera un momento.' }),
   forgot: () =>
     rateLimit({ name: 'forgot', windowMs: HOUR, max: 5, message: 'Ya pediste varios enlaces. Revisa tu correo o intenta en una hora.' }),
   reset: () => rateLimit({ name: 'reset', windowMs: HOUR, max: 10 }),

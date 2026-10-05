@@ -10,6 +10,7 @@ const {
 } = require('../utils/mail.utils');
 const { resolveAppUrl } = require('../utils/app-url.utils');
 const { verifyMpSignature } = require('../utils/mp-signature');
+const referrals = require('../services/referral.service');
 
 function daysLeft(trialEndsAt) {
   if (!trialEndsAt) return 0;
@@ -71,8 +72,26 @@ async function applyPreapprovalToTenant(tenant, pre, dataId) {
   });
   if (billingStatus === 'active' && tenant.billingStatus !== 'active') {
     notifyPayment(updated || tenant).catch(() => {});
+    // Primer cobro de la suscripción: comisión del vendedor que refirió la tienda (si hay)
+    creditReferral(updated || tenant, {
+      amount: mp.planPrice(updated?.plan || tenant.plan, updated?.billingInterval || tenant.billingInterval),
+      source: 'activation',
+      key: `act:${patch.mpPreapprovalId}:${new Date(patch.currentPeriodEnd).toISOString().slice(0, 10)}`,
+      note: 'Activación de la suscripción',
+    });
   }
   return updated;
+}
+
+/** Comisión del vendedor por un cobro. Nunca debe romper el cobro de la tienda. */
+async function creditReferral(tenant, payment) {
+  try {
+    if (!tenant?.referrerId) return null;
+    return await referrals.recordPayment({ tenant, ...payment });
+  } catch (err) {
+    console.warn('[referidos] no se pudo registrar la comisión:', err.message);
+    return null;
+  }
 }
 
 async function recordEvent(data) {
@@ -301,6 +320,12 @@ async function devActivate(req, res) {
       note: 'Activación en modo desarrollo',
     });
     notifyPayment(updated).catch(() => {});
+    await creditReferral(updated, {
+      amount: mp.planPrice(plan, interval),
+      source: 'activation',
+      key: `act:${updated.mpPreapprovalId}:${new Date(updated.currentPeriodEnd).toISOString().slice(0, 10)}`,
+      note: 'Activación en modo desarrollo',
+    });
 
     return res.status(200).json({
       ok: true,
@@ -388,8 +413,36 @@ async function webhook(req, res) {
     console.log('[mp:webhook]', { topic, dataId });
 
     const topicStr = String(topic || '').toLowerCase();
+    // Cobro recurrente de la suscripción (no es una suscripción: es un pago de ella)
+    const isAuthorizedPayment = topicStr.includes('authorized_payment');
     const isPreapproval =
-      topicStr.includes('preapproval') || topicStr.includes('subscription');
+      !isAuthorizedPayment && (topicStr.includes('preapproval') || topicStr.includes('subscription'));
+
+    if (dataId && isAuthorizedPayment) {
+      const payment = await mp.getAuthorizedPayment(dataId);
+      if (String(payment.status || '').toLowerCase() === 'processed') {
+        const tenant = payment.preapproval_id ? await db.GetTenantByMpPreapprovalId(payment.preapproval_id) : null;
+        if (tenant) {
+          const amount = Number(payment.transaction_amount ?? payment.payment?.transaction_amount ?? 0);
+          await recordEvent({
+            tenantId: tenant.id,
+            type: 'payment',
+            plan: tenant.plan,
+            interval: tenant.billingInterval,
+            amount,
+            mpStatus: payment.status,
+            note: 'Cobro de la suscripción',
+          });
+          await creditReferral(tenant, {
+            amount,
+            source: 'authorized_payment',
+            key: `ap:${payment.id || dataId}`,
+            mpPaymentId: payment.id || dataId,
+            note: 'Cobro de la suscripción',
+          });
+        }
+      }
+    }
 
     if (dataId && isPreapproval) {
       const pre = await mp.getPreapproval(dataId);

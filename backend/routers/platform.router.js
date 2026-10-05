@@ -31,5 +31,14 @@ router.patch('/tenants/:id', ...adminOnly, writeLimit, platform.updateTenant);
 router.post('/tenants/:id/suspend', ...adminOnly, writeLimit, platform.suspend);
 router.post('/tenants/:id/reactivate', ...adminOnly, writeLimit, platform.reactivate);
 router.patch('/tenants/:id/plan', ...adminOnly, writeLimit, platform.setPlan);
+router.put('/tenants/:id/referrer', ...adminOnly, writeLimit, platform.setTenantReferrer);
+router.post('/tenants/:id/manual-payment', ...adminOnly, writeLimit, platform.manualPayment);
+
+router.get('/referrers', ...adminOnly, platform.listReferrers);
+router.post('/referrers', ...adminOnly, writeLimit, platform.createReferrer);
+router.get('/referrers/:id', ...adminOnly, platform.getReferrer);
+router.patch('/referrers/:id', ...adminOnly, writeLimit, platform.updateReferrer);
+router.post('/referrers/:id/payouts', ...adminOnly, writeLimit, platform.payReferrer);
+router.post('/commissions/:id/void', ...adminOnly, writeLimit, platform.voidCommission);
 
 module.exports = router;

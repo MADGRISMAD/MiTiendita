@@ -13,6 +13,7 @@ const userSchema = Joi.object({
     .valid(...TENANT_ROLES)
     .default('admin'),
   businessName: Joi.string().optional().allow(''),
+  referralCode: Joi.string().max(20).optional().allow(''),
 });
 
 module.exports = userSchema;
