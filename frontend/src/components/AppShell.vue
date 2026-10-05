@@ -174,6 +174,10 @@ const billingBanner = computed(() => {
   if (s.billingStatus === "suspended") {
     return { tone: "danger", text: "Cuenta suspendida — contacta a Mi Tiendita o paga tu plan." };
   }
+  if (s.billingStatus === "trialing" && s.subscribedInTrial) {
+    const days = Number(s.trialDaysLeft);
+    return { tone: "warn", text: `Tu plan ya está listo: el primer cobro es al terminar tu prueba (te quedan ${days} día(s)).` };
+  }
   if (s.billingStatus === "trialing") {
     const days = Number(s.trialDaysLeft);
     return {

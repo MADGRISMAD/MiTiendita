@@ -108,6 +108,7 @@ async function createPreapproval({
   externalReference,
   interval = 'month',
   amountOverride = null,
+  freeTrialDays = 0,
 }) {
   const appUrl = (process.env.APP_URL || 'http://localhost:5173').replace(/\/$/, '');
   const billingInterval = interval === 'year' ? 'year' : 'month';
@@ -125,6 +126,7 @@ async function createPreapproval({
       status: 'pending',
       amount,
       interval: billingInterval,
+      freeTrialDays,
     };
   }
 
@@ -136,7 +138,11 @@ async function createPreapproval({
     reason: planLabel(plan, billingInterval),
     external_reference: ref,
     payer_email: payerEmail,
-    auto_recurring: autoRecurringFor(billingInterval, amount, currency),
+    auto_recurring: {
+      ...autoRecurringFor(billingInterval, amount, currency),
+      // Si aún le quedan días de prueba, el primer cobro espera a que termine
+      ...(freeTrialDays > 0 ? { free_trial: { frequency: Math.ceil(freeTrialDays), frequency_type: 'days' } } : {}),
+    },
     back_url: backUrl,
     status: 'pending',
   };
@@ -179,6 +185,7 @@ async function createPreapproval({
   return {
     ...data,
     mock: false,
+    freeTrialDays,
     amount,
     interval: billingInterval,
     backUrl,
