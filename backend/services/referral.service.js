@@ -63,6 +63,19 @@ function validateReferrer(input, { partial = false } = {}) {
   if (!partial || input.state !== undefined) out.state = cleanText(input.state, 60);
   if (!partial || input.city !== undefined) out.city = cleanText(input.city, 60);
   if (!partial || input.notes !== undefined) out.notes = cleanText(input.notes, 300);
+  // Datos para pagarle sus comisiones desde Mercado Pago o el banco
+  if (!partial || input.payoutHolder !== undefined) out.payoutHolder = cleanText(input.payoutHolder, 80);
+  if (!partial || input.payoutBank !== undefined) out.payoutBank = cleanText(input.payoutBank, 60);
+  if (!partial || input.payoutClabe !== undefined) {
+    out.payoutClabe = String(input.payoutClabe == null ? '' : input.payoutClabe).replace(/\D/g, '');
+    if (out.payoutClabe && out.payoutClabe.length !== 18) throw new ReferralError(400, 'La CLABE lleva 18 dígitos.');
+  }
+  if (!partial || input.payoutMpEmail !== undefined) {
+    out.payoutMpEmail = cleanText(input.payoutMpEmail, 120).toLowerCase();
+    if (out.payoutMpEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(out.payoutMpEmail)) {
+      throw new ReferralError(400, 'El correo de su cuenta de Mercado Pago no es válido.');
+    }
+  }
   if (input.status !== undefined) {
     if (!['active', 'paused', 'pending'].includes(input.status)) throw new ReferralError(400, 'Estado inválido.');
     out.status = input.status;
@@ -228,6 +241,10 @@ function summarize(referrer, { tenants = [], sums = [], closed = 0 }) {
     state: referrer.state || '',
     city: referrer.city || '',
     notes: referrer.notes || '',
+    payoutHolder: referrer.payoutHolder || '',
+    payoutBank: referrer.payoutBank || '',
+    payoutClabe: referrer.payoutClabe || '',
+    payoutMpEmail: referrer.payoutMpEmail || '',
     code: referrer.code,
     status: referrer.status,
     source: referrer.source || 'admin',
