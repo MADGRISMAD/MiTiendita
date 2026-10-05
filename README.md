@@ -147,6 +147,14 @@ Tres áreas separadas, cada una con sus propios roles:
 - **Asesor:** ve y atiende las tiendas (datos del dueño, plan, uso, historia) y anota el seguimiento; no ve dinero ni cambia al equipo.
 - **Aislamiento:** un socio nunca ve tiendas de otro socio, y las cuentas de socio no pueden entrar a la caja ni al panel de la plataforma (se valida en el servidor, no solo en la pantalla).
 
+## SEO
+
+- **Fuente única:** `frontend/src/seo/site.mjs` (títulos, descripciones, precios, páginas por giro, datos estructurados).
+- **HTML pre-generado al compilar** (`frontend/seo-plugin.mjs`): cada página pública sale con su `<title>`, descripción, canónica, Open Graph/Twitter (`/og.png`), `hreflang es-MX`, JSON-LD (Organization, SoftwareApplication con precios, WebSite, FAQPage, BreadcrumbList) y su contenido en texto, así buscadores y vistas previas de WhatsApp/Facebook no dependen de JavaScript.
+- **Páginas por giro:** `/punto-de-venta-para-abarrotes`, `-para-farmacia`, `-para-ferreteria`, `-para-papeleria`, `/punto-de-venta-con-bascula`, `/punto-de-venta-sin-internet`.
+- **`sitemap.xml` y `robots.txt`** se generan en cada build; el panel, la caja y las cuentas llevan `noindex` y están bloqueados en robots.
+- Al agregar una página pública: súmala en `site.mjs` y su regla en `vercel.json` (el build falla si falta).
+
 ## Docker
 ```bash
 docker compose up --build -d

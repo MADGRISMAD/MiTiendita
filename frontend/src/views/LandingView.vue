@@ -721,6 +721,10 @@
         <router-link to="/terminos">Términos</router-link>
         <router-link to="/privacidad">Privacidad</router-link>
       </div>
+      <nav class="foot-giros" aria-label="Punto de venta por giro">
+        <strong>Punto de venta para tu giro</strong>
+        <router-link v-for="v in VERTICALS" :key="v.slug" :to="`/${v.slug}`">{{ v.h1.replace(/^Punto de venta /, "") }}</router-link>
+      </nav>
       <WhatsAppHelp class="foot-wa" label="¿Dudas? Escríbenos por WhatsApp" :message="PRESALE_MESSAGE" compact />
     </footer>
   </div>
@@ -736,6 +740,7 @@ import InventarioMagicoTerm from "../components/InventarioMagicoTerm.vue";
 import { useLandingMotion, vTilt } from "../landingMotion";
 import WhatsAppHelp from "../components/WhatsAppHelp.vue";
 import PartnersSection from "../components/landing/PartnersSection.vue";
+import { VERTICALS } from "../seo/site.mjs";
 import { PERPETUAL_MESSAGE, PRESALE_MESSAGE, whatsappLink } from "../support";
 
 const partnerWhatsapp = whatsappLink("Hola, me interesa ser proveedor oficial de Mi Tiendita en mi zona. ¿Cómo funciona?");
@@ -3330,6 +3335,8 @@ main,
   flex-wrap: wrap;
   gap: 0.75rem 1rem;
 }
+.foot-giros { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 0.9rem; width: 100%; font-size: 0.86rem; }
+.foot-giros strong { width: 100%; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--timber-muted); }
 .foot a { color: var(--timber-primary); font-weight: 700; text-decoration: none; }
 .foot a:hover { text-decoration: underline; }
 .foot-brand :deep(.word) { font-size: 1.05rem; }
