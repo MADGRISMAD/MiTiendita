@@ -35,7 +35,7 @@ stub('../database/mongodb', {
   },
 });
 const mp = require('../services/mercadopago.service');
-mp.getAuthorizedPayment = async (id) => ({ id, status: 'processed', preapproval_id: 'mock_dev_1', transaction_amount: 233 });
+mp.getAuthorizedPayment = async (id) => ({ id, status: 'processed', preapproval_id: 'mock_dev_1', transaction_amount: 250 });
 const created = [];
 const realCreate = mp.createPreapproval;
 mp.createPreapproval = async (args) => {
@@ -82,7 +82,7 @@ test('el checkout manda a Mercado Pago los días de prueba que quedan', async ()
   const r = res();
   await billing.checkout({ tenantId: 't3', body: { plan: 'growth', interval: 'month', email: 'a@b.mx' }, user: { username: 'x' } }, r);
   assert.equal(created.at(-1).freeTrialDays, 5);
-  assert.equal(created.at(-1).amountOverride, 233);
+  assert.equal(created.at(-1).amountOverride, 250);
   assert.equal(tenant.subscribedInTrial, true);
 
   tenant = { id: 't4', plan: 'basic', billingStatus: 'active', billingInterval: 'month' };
