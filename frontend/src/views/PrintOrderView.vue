@@ -49,6 +49,7 @@
                 <span class="tk-item-n tk-mono">{{ String(i + 1).padStart(2, '0') }}</span>
                 <div>
                   <p class="tk-item-name">{{ item.name }}</p>
+                  <p v-if="item.modifiers?.length" class="tk-item-note">{{ item.modifiers.join(', ') }}</p>
                   <p v-if="item.notes" class="tk-item-note">{{ item.notes }}</p>
                   <div class="tk-line">
                     <span>{{ formatQtyUnit(item.quantity, unitOf(item)) }} × {{ money(lineUnit(item)) }}{{ perUnit(unitOf(item)) }}</span>

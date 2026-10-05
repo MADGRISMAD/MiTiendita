@@ -361,7 +361,8 @@ export function receiptData(order) {
     const u = unitOf(item);
     return {
       name: item.name || "Producto",
-      notes: item.notes || "",
+      // Cafetería: los extras de la bebida van bajo su nombre
+      notes: [(item.modifiers || []).join(", "), item.notes || ""].filter(Boolean).join(" · "),
       qtyText: u === "pz" ? qtyText(item.quantity) : formatQtyUnit(item.quantity, u),
       unit: b.unitGross,
       per: perUnit(u),

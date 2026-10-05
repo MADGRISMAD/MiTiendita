@@ -79,7 +79,7 @@
                 Todo
               </button>
               <button
-                v-for="menu in menus"
+                v-for="menu in posMenus"
                 :key="menu.id"
                 type="button"
                 role="tab"
@@ -125,7 +125,7 @@
                 </span>
                 <span class="result-side">
                   <strong class="result-price">{{ money(lineUnit(p)) }}{{ perUnit(unitOf(p)) }}</strong>
-                  <small v-if="inventoryOn" class="stock" :class="stockTone(p)">{{ stockLabel(p) }}</small>
+                  <small v-if="inventoryOn && !isRecipe(p)" class="stock" :class="stockTone(p)">{{ stockLabel(p) }}</small>
                   <em v-if="qtyInCart(p.id)" class="in-ticket">{{ formatQty(qtyInCart(p.id)) }} en ticket</em>
                 </span>
               </button>
@@ -166,7 +166,7 @@
                 <span class="tile-name">{{ p.name }}</span>
                 <span class="tile-foot">
                   <strong class="tile-price">{{ money(lineUnit(p)) }}{{ perUnit(unitOf(p)) }}</strong>
-                  <small v-if="inventoryOn" class="stock" :class="stockTone(p)">{{ stockLabel(p) }}</small>
+                  <small v-if="inventoryOn && !isRecipe(p)" class="stock" :class="stockTone(p)">{{ stockLabel(p) }}</small>
                 </span>
               </button>
               <p v-if="pickTotal > pickList.length" class="tiles-more">
@@ -233,13 +233,14 @@
             <ol v-if="lines.length" ref="linesEl" class="lines">
               <li
                 v-for="(line, i) in lines"
-                :key="line.id"
+                :key="line.lineKey || line.id"
                 class="line"
                 :class="{ on: selectedIdx === i, bump: bumpId === line.id }"
                 @click="selectLine(i)"
               >
                 <div class="line-main">
                   <span class="line-name">{{ line.name }}</span>
+                  <span v-if="line.modifiers?.length" class="line-mods">{{ line.modifiers.join(' · ') }}</span>
                   <span class="line-meta">
                     {{ formatQtyUnit(line.quantity, unitOf(line)) }} × {{ money(lineUnit(line)) }}{{ perUnit(unitOf(line)) }}
                     <template v-if="line.isMisc"> · Varios</template>
@@ -584,7 +585,7 @@
                     <span class="tile-name">{{ p.name }}</span>
                     <span class="tile-foot">
                       <strong class="tile-price">{{ money(p.price) }}</strong>
-                      <small v-if="inventoryOn" class="stock" :class="stockTone(p)">{{ stockLabel(p) }}</small>
+                      <small v-if="inventoryOn && !isRecipe(p)" class="stock" :class="stockTone(p)">{{ stockLabel(p) }}</small>
                     </span>
                   </button>
                 </div>
@@ -1023,6 +1024,8 @@
       />
 
       <!-- Cobro -->
+      <DrinkOptionsDialog v-if="drinkFor" :food="drinkFor" :money="money" @add="addDrink" @close="closeDrink" />
+
       <Teleport to="body">
         <div v-if="showPayment" class="dlg-bg">
           <form
@@ -1081,6 +1084,10 @@
             </template>
 
             <template v-else>
+              <label v-if="hasPrep" class="field">
+                <span>¿A nombre de quién? <em class="opt">para llamarlo en la barra</em></span>
+                <input v-model="customerName" class="inp" type="text" maxlength="40" autocomplete="off" placeholder="Ej. Ana" />
+              </label>
               <div class="methods" role="radiogroup" aria-label="Forma de pago">
                 <label v-for="m in payMethods" :key="m.id" class="method" :class="{ on: payMethod === m.id }">
                   <input v-model="payMethod" type="radio" name="pay-method" :value="m.id" />
@@ -1403,6 +1410,8 @@
 import AppShell from "../components/AppShell.vue";
 import MagicPricesSheet from "../components/MagicPricesSheet.vue";
 import PosIcon from "../components/PosIcon.js";
+import DrinkOptionsDialog from "../components/cafe/DrinkOptionsDialog.vue";
+import { isIngredient, isRecipe, needsOptions, pricedChoice } from "../cafe.js";
 import { ref, reactive, computed, onMounted, onUnmounted, watch, nextTick } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { apiService } from "../apiService";
@@ -1478,7 +1487,7 @@ function round2(n) {
 const CATEGORY_HUES = [212, 28, 152, 274, 342, 46, 190, 118, 8, 236];
 
 export default {
-  components: { AppShell, MagicPricesSheet, PosIcon },
+  components: { AppShell, DrinkOptionsDialog, MagicPricesSheet, PosIcon },
   directives: { selectOnFocus: vSelectOnFocus },
   props: {
     initialMode: { type: String, default: "pos" },
@@ -2173,16 +2182,25 @@ export default {
     const itemCount = computed(() =>
       lines.value.reduce((s, p) => s + Number(p.quantity || 0), 0)
     );
+    // Los insumos de cafetería (leche, café en grano…) no se venden sueltos en la caja
+    const sellableFoods = computed(() => pickFoods.value.filter((p) => !isIngredient(p)));
+    // Categorías de la caja: sin las que solo tienen insumos
+    const posMenus = computed(() => {
+      const ingredientOnly = new Set();
+      const sold = new Set(sellableFoods.value.map((p) => String(p.menuId || "")));
+      for (const p of pickFoods.value) if (isIngredient(p) && !sold.has(String(p.menuId || ""))) ingredientOnly.add(String(p.menuId || ""));
+      return menus.value.filter((m) => !ingredientOnly.has(String(m.id)));
+    });
     const pickFiltered = computed(() => {
-      if (!pickMenuId.value) return pickFoods.value;
-      return pickFoods.value.filter((p) => String(p.menuId || "") === String(pickMenuId.value));
+      if (!pickMenuId.value) return sellableFoods.value;
+      return sellableFoods.value.filter((p) => String(p.menuId || "") === String(pickMenuId.value));
     });
     const pickList = computed(() => pickFiltered.value.slice(0, PICK_LIMIT));
     const pickTotal = computed(() => pickFiltered.value.length);
 
     // Búsqueda local: sin acentos, por varias palabras, en nombre, código y descripción
     const searchIndex = computed(() =>
-      pickFoods.value.map((p) => ({
+      sellableFoods.value.map((p) => ({
         p,
         name: fold(p.name),
         code: fold(p.barcode || p.sku || ""),
@@ -2287,17 +2305,17 @@ export default {
       return Number(p?.stock) || 0;
     }
     function isOut(p) {
-      return inventoryOn.value && !p?.isMisc && stockNum(p) <= 0;
+      return inventoryOn.value && !p?.isMisc && !isRecipe(p) && stockNum(p) <= 0;
     }
     function isLow(p) {
-      if (!inventoryOn.value || p?.isMisc) return false;
+      if (!inventoryOn.value || p?.isMisc || isRecipe(p)) return false;
       const min = p?.lowStockThreshold != null ? Number(p.lowStockThreshold) : 5;
       return stockNum(p) > 0 && stockNum(p) <= min;
     }
     const allowNoStock = computed(() => Boolean(venueStore.allowNegativeStock));
     /** Piezas que faltan si el renglón de `p` llega a `qty` (0 si alcanzan o no se lleva inventario). */
     function stockGap(p, qty) {
-      if (!inventoryOn.value || !p || p.isMisc) return 0;
+      if (!inventoryOn.value || !p || p.isMisc || isRecipe(p)) return 0;
       const row = pickFoods.value.find((f) => String(f.id) === String(p.id)) || p;
       return Math.max(0, Number(qty || 0) - stockNum(row));
     }
@@ -2320,8 +2338,8 @@ export default {
     }
 
     function qtyInCart(id) {
-      const line = lines.value.find((p) => p.id === id);
-      return line ? Number(line.quantity || 0) : 0;
+      // Una bebida puede ir en varios renglones (distinto tamaño o extras)
+      return lines.value.reduce((sum, p) => (p.id === id ? sum + Number(p.quantity || 0) : sum), 0);
     }
     function isCompactPos() {
       return typeof window !== "undefined" && window.matchMedia("(max-width: 767.98px)").matches;
@@ -2735,12 +2753,27 @@ export default {
         nameHits.value = [];
         return;
       }
+      if (isIngredient(producto)) {
+        scanError.value = `${producto.name} es un insumo de tus recetas; no se vende suelto.`;
+        nameHits.value = [];
+        return;
+      }
+      // Bebida con tamaños o extras: primero se eligen
+      if (needsOptions(producto) && !opts.choice) {
+        drinkFor.value = producto;
+        drinkQty = Number(qty) > 0 ? Math.max(1, Math.round(Number(qty))) : 1;
+        nameHits.value = [];
+        if (isCompactPos()) scanInput.value?.blur();
+        return;
+      }
       if (isBulk(producto) && !opts.weighed) {
         openWeigh(producto);
         return;
       }
+      const choice = opts.choice || (isRecipe(producto) ? pricedChoice(producto) : null);
+      const key = choice?.lineKey || producto.id;
       const amount = Number(qty) > 0 ? roundQty(Number(qty), unitOf(producto)) : 1;
-      const idx = store.platillosSeleccionados.findIndex((p) => p.id === producto.id);
+      const idx = store.platillosSeleccionados.findIndex((p) => (p.lineKey || p.id) === key);
       const inCart = idx >= 0 ? Number(store.platillosSeleccionados[idx].quantity) || 0 : 0;
       if (!allowNoStock.value && stockGap(producto, inCart + amount) > 0) {
         scanError.value = noStockText(producto);
@@ -2755,7 +2788,7 @@ export default {
         line.quantity = Math.round((Number(line.quantity) + amount) * 1000) / 1000;
         selectedIdx.value = idx;
       } else {
-        store.platillosSeleccionados.push({ ...producto, quantity: amount });
+        store.platillosSeleccionados.push({ ...producto, ...(choice || {}), quantity: amount });
         selectedIdx.value = store.platillosSeleccionados.length - 1;
       }
       lastAdded.value = producto;
@@ -2785,6 +2818,22 @@ export default {
       }
       focusScan();
     }
+
+    // Cafetería: diálogo de tamaño y extras
+    const drinkFor = ref(null);
+    let drinkQty = 1;
+    function addDrink({ choice, qty }) {
+      const food = drinkFor.value;
+      drinkFor.value = null;
+      if (food) addProduct(food, qty * drinkQty, { choice });
+    }
+    function closeDrink() {
+      drinkFor.value = null;
+      if (!isCompactPos()) focusScan();
+    }
+    // Nombre para llamar el pedido en la barra
+    const customerName = ref("");
+    const hasPrep = computed(() => lines.value.some((p) => isRecipe(p) && p.prep !== false));
 
     /** Agrega un producto elegido con el dedo o el ratón (respeta "3*" escrito en el buscador). */
     function pickResult(producto) {
@@ -3050,6 +3099,7 @@ export default {
       ticketDiscount.value = 0;
       discountDraft.value = 0;
       showMobileCart.value = false;
+      customerName.value = "";
     }
 
     function clearCart() {
@@ -3394,6 +3444,8 @@ export default {
         quantity: p.quantity,
         saleUnit: unitOf(p),
         priceIncludesTax: Boolean(p.priceIncludesTax),
+        // Bebidas: el servidor pone el precio con el tamaño y extras; los nombres sirven para el ticket sin internet
+        ...(isRecipe(p) ? { sizeId: p.sizeId || null, modifierIds: p.modifierIds || [], modifiers: p.modifiers || [] } : {}),
       }));
       const payload = {
         clientSaleId,
@@ -3420,6 +3472,7 @@ export default {
         tax: Number(tax.value || 0),
         total: Number(chargeTotal.value || 0),
         change: Number(payChange.value || 0),
+        customerName: hasPrep.value ? String(customerName.value || "").trim().slice(0, 40) || undefined : undefined,
       };
       try {
         // Cobro en la terminal Mercado Pago: la venta se registra SOLO si sale aprobado
@@ -3449,7 +3502,7 @@ export default {
         // Refleja la venta en las existencias que se ven en pantalla
         if (offline || inventoryOn.value) {
           for (const item of items) {
-            if (!item.foodId) continue;
+            if (!item.foodId || item.modifierIds) continue;
             const row = pickFoods.value.find((p) => String(p.id) === String(item.foodId));
             if (row) {
               row.stock = (Number(row.stock) || 0) - Number(item.quantity || 0);
@@ -3470,7 +3523,7 @@ export default {
             : `Ticket ${folio} cobrado sin internet · se sincroniza al volver`)
           : (cambio > 0
             ? `Ticket ${folio} cobrado · Cambio: ${money(cambio)}`
-            : `Ticket ${folio} cobrado`);
+            : `Ticket ${folio} cobrado`) + (order.prep?.number ? ` · Pedido #${order.prep.number} a la barra` : "");
         const cashSale = payload.paymentMethod === "cash" || payload.paymentMethod === "split";
         printReceipt(
           offline
@@ -4026,6 +4079,13 @@ export default {
     });
 
     return {
+      // Cafetería
+      drinkFor,
+      addDrink,
+      closeDrink,
+      customerName,
+      hasPrep,
+      isRecipe,
       // Catálogo
       mode,
       menus,
@@ -4111,6 +4171,7 @@ export default {
       clearSearch,
       pickFoods,
       pickMenuId,
+      posMenus,
       pickList,
       pickTotal,
       searching,
@@ -4902,6 +4963,11 @@ html[data-theme="dark"] .avatar {
   font-size: 0.93rem;
   font-weight: 700;
   line-height: 1.25;
+}
+.line-mods {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--timber-primary);
 }
 .line-meta {
   font-size: 0.78rem;

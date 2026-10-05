@@ -217,6 +217,13 @@ export const apiService = {
       .get('/foods/lookup', { params: { code } })
       .then((r) => r.data);
   },
+  // Cafetería: cola de la barra
+  getPrepQueue() {
+    return axios.get('/orders/prep').then((r) => r.data);
+  },
+  setPrepStatus(orderId: string, status: string) {
+    return axios.put(`/orders/${orderId}/prep`, { status }).then((r) => r.data);
+  },
   getLowStockFoods() {
     return axios.get('/foods/low-stock').then((r) => r.data);
   },
@@ -237,6 +244,8 @@ export const apiService = {
     lowStockThreshold?: number | null;
     tracksExpiry?: boolean;
     supplierIds?: string[];
+    // Cafetería: insumo o bebida con receta
+    [key: string]: unknown;
   }) {
     return axios.post('/foods', foodDTO).then((r) => r.data);
   },

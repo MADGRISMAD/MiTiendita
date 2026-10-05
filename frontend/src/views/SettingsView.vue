@@ -723,6 +723,7 @@ const KINDS = [
   { id: "convenience", label: "Conveniencia", hint: "Abierta hasta tarde" },
   { id: "pharmacy", label: "Farmacia", hint: "Medicinas y cuidado" },
   { id: "hardware", label: "Ferretería", hint: "Tlapalería, materiales" },
+  { id: "cafe", label: "Cafetería", hint: "Bebidas con receta y barra" },
   { id: "other", label: "Otro comercio", hint: "Papelería, regalos…" },
 ];
 const ZONES = [
