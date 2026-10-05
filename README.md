@@ -155,6 +155,10 @@ Tres áreas separadas, cada una con sus propios roles:
 - **`sitemap.xml` y `robots.txt`** se generan en cada build; el panel, la caja y las cuentas llevan `noindex` y están bloqueados en robots.
 - Al agregar una página pública: súmala en `site.mjs` y su regla en `vercel.json` (el build falla si falta).
 
+## Precios
+
+Los precios están **escritos en el código**, no en variables de entorno (las `MP_PLAN_*_PRICE` ya no se usan; si quedaron en Vercel se ignoran). Para cambiarlos edita `backend/services/plans.catalog.js` y `frontend/src/seo/site.mjs` (`PRICES`); una prueba falla si no coinciden. La landing, Facturación, el simulador de proveedores y el SEO se actualizan solos.
+
 ## Docker
 ```bash
 docker compose up --build -d

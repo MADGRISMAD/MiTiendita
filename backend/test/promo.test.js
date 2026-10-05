@@ -1,7 +1,8 @@
 process.env.SECRET_KEY = process.env.SECRET_KEY || 'clave-de-prueba-para-tests';
 delete process.env.MP_ACCESS_TOKEN;
-delete process.env.MP_PLAN_GROWTH_PRICE;
-delete process.env.MP_PLAN_PRO_PRICE;
+// Aunque alguien deje variables viejas en el servidor, los precios no cambian
+process.env.MP_PLAN_GROWTH_PRICE = '1';
+process.env.MP_PLAN_PRO_PRICE = '1';
 process.env.NODE_ENV = 'test';
 
 const test = require('node:test');
@@ -137,4 +138,12 @@ test('checkout sin promoción (tienda existente o anual) limpia cualquier promoc
   assert.equal(tenants.get('e').promo.state, 'pending');
   await promo.onCheckout({ ...tenants.get('e') }, 'growth', 'year');
   assert.equal(tenants.get('e').promo, null);
+});
+
+test('el frontend (landing, SEO) y el backend tienen exactamente los mismos precios', async () => {
+  const { PRICES } = await import('../../frontend/src/seo/site.mjs');
+  for (const p of PRICES) {
+    assert.equal(plans.planPrice(p.id, 'month'), p.month, `${p.id} mensual`);
+    assert.equal(plans.planPrice(p.id, 'year'), p.year, `${p.id} anual`);
+  }
 });

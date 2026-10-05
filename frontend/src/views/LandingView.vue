@@ -740,7 +740,7 @@ import InventarioMagicoTerm from "../components/InventarioMagicoTerm.vue";
 import { useLandingMotion, vTilt } from "../landingMotion";
 import WhatsAppHelp from "../components/WhatsAppHelp.vue";
 import PartnersSection from "../components/landing/PartnersSection.vue";
-import { VERTICALS } from "../seo/site.mjs";
+import { PRICES, VERTICALS } from "../seo/site.mjs";
 import { PERPETUAL_MESSAGE, PRESALE_MESSAGE, whatsappLink } from "../support";
 
 const partnerWhatsapp = whatsappLink("Hola, me interesa ser proveedor oficial de Mi Tiendita en mi zona. ¿Cómo funciona?");
@@ -878,12 +878,31 @@ const fallbackPlans = [
   },
 ];
 
+// Los precios de la landing salen SIEMPRE de PRICES (src/seo/site.mjs), nunca de la API ni de variables:
+// la API solo aporta textos y características. Así lo que se ve es lo que está en el código.
+const PROMO_DIVISOR = 3;
+function withFixedPrices(list) {
+  return list.map((p) => {
+    const fixed = PRICES.find((x) => x.id === p.id);
+    if (!fixed) return p;
+    return {
+      ...p,
+      price: fixed.month,
+      priceYear: fixed.year,
+      monthlyFromYear: Math.floor(fixed.year / 12),
+      promoPrice: Math.round(fixed.month / PROMO_DIVISOR),
+      promoMonths: 3,
+    };
+  });
+}
+
 async function loadPlans() {
+  plans.value = withFixedPrices(fallbackPlans);
   try {
     const res = await apiService.getBillingPlans();
-    plans.value = res.plans?.length ? res.plans : fallbackPlans;
+    if (res.plans?.length) plans.value = withFixedPrices(res.plans);
   } catch {
-    plans.value = fallbackPlans;
+    /* se quedan los de respaldo */
   }
 }
 

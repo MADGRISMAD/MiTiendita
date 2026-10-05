@@ -2,6 +2,8 @@
  * Catálogo comercial Mi Tiendita (MXN) — SaaS 100% nube.
  * Inventario Mágico + Precio Mágico = IA para catálogo y precios (cuota compartida).
  */
+// PRECIOS (MXN, IVA incluido): se cambian AQUÍ y en frontend/src/seo/site.mjs (PRICES);
+// una prueba verifica que ambos coincidan. No dependen de variables de entorno.
 const PLANS = ['basic', 'growth', 'pro'];
 const ALL_PLANS = [...PLANS, 'perpetual'];
 
@@ -42,8 +44,8 @@ const PLAN_CATALOG = {
     name: 'Básico',
     tagline: 'Entra desde cualquier pantalla y cobra',
     pitch: '¿Se daña la PC del cajero? Abres Mi Tiendita en una tablet o el celular y sigues vendiendo al instante.',
-    priceMonth: Number(process.env.MP_PLAN_BASIC_PRICE || 349),
-    priceYear: Number(process.env.MP_PLAN_BASIC_YEAR_PRICE || 3490),
+    priceMonth: 349,
+    priceYear: 3490,
     aiQuota: AI_QUOTAS.basic,
     limits: PLAN_LIMITS.basic,
     highlight: false,
@@ -63,8 +65,8 @@ const PLAN_CATALOG = {
     name: 'Crecimiento',
     tagline: 'Más manos en caja, más catálogo',
     pitch: 'Varios cajeros a la vez y un catálogo grande — cobras desde el celular en el pasillo.',
-    priceMonth: Number(process.env.MP_PLAN_GROWTH_PRICE || 750),
-    priceYear: Number(process.env.MP_PLAN_GROWTH_YEAR_PRICE || 7500),
+    priceMonth: 750,
+    priceYear: 7500,
     aiQuota: AI_QUOTAS.growth,
     limits: PLAN_LIMITS.growth,
     highlight: true,
@@ -84,8 +86,8 @@ const PLAN_CATALOG = {
     name: 'Pro',
     tagline: 'Catálogo grande, Inventario Mágico y Precio Mágico',
     pitch: 'Foto a la factura del camión: Precio Mágico actualiza costos y te sugiere el precio al público. Inventario Mágico mete las piezas al anaquel.',
-    priceMonth: Number(process.env.MP_PLAN_PRO_PRICE || 1350),
-    priceYear: Number(process.env.MP_PLAN_PRO_YEAR_PRICE || 13500),
+    priceMonth: 1350,
+    priceYear: 13500,
     aiQuota: AI_QUOTAS.pro,
     limits: PLAN_LIMITS.pro,
     highlight: false,
