@@ -1779,9 +1779,16 @@ export default {
     const BLOCK_MSG = "Caja abierta más de 12 horas. Realiza el corte de caja para continuar.";
 
     // Enfoca el campo correcto del modal de pago
+    // En celular/tablet no se enfoca ningún campo solo: abriría el teclado encima de lo que se está cobrando
+    const isTouchDevice = () => typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches;
+
     function focusPayField() {
       nextTick(() => {
         if (!showPayment.value) return;
+        if (isTouchDevice()) {
+          document.activeElement?.blur?.();
+          return;
+        }
         if (!cashOpen.value) openingInput.value?.focus();
         else if (takesCash.value) cashReceivedInput.value?.focus();
         else payConfirmBtn.value?.focus();
@@ -3343,7 +3350,7 @@ export default {
     function setReceived(value) {
       payCashReceived.value = value;
       payError.value = "";
-      nextTick(() => cashReceivedInput.value?.focus());
+      if (!isTouchDevice()) nextTick(() => cashReceivedInput.value?.focus());
     }
 
     async function confirmPayment() {
