@@ -58,7 +58,10 @@ async function startCharge({ tenantId, clientSaleId, amount }) {
         external_reference: String(clientSaleId),
         description: `Venta ${String(clientSaleId).slice(-6).toUpperCase()}`,
         transactions: { payments: [{ amount: value }] },
-        config: { point: { terminal_id: tenant.point.terminalId } },
+        config: {
+          point: { terminal_id: tenant.point.terminalId },
+          payment_method: { default_type: 'debit_card' },
+        },
       },
     });
   } catch (err) {
