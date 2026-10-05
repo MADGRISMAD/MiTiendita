@@ -234,6 +234,7 @@ const ico = {
   spark: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.6 5.2L19 10l-5.4 1.8L12 17l-1.6-5.2L5 10l5.4-1.8L12 3z"/></svg>`,
   receipt: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-2.2-1.4L12 21l-3.8-1.4L6 21V3z"/><path d="M9 8h6M9 12h6"/></svg>`,
   more: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/></svg>`,
+  tag: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20.6 13.4l-7.2 7.2a2 2 0 01-2.8 0L3 13V3h10l7.6 7.6a2 2 0 010 2.8z"/><circle cx="7.5" cy="7.5" r="1.4"/></svg>`,
   people: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="3.2"/><path d="M22 21v-2a3.6 3.6 0 00-3-3.5"/><path d="M16 3.2a3.2 3.2 0 010 6.2"/></svg>`,
   home: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/></svg>`,
   inbox: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13l2.5-8h13L21 13"/><path d="M3 13v6h18v-6h-5l-1.5 2h-5L8 13H3z"/></svg>`,
@@ -248,6 +249,7 @@ const supportDock = [
 const adminDock = [
   ...supportDock,
   { to: "/platform/finanzas", name: "platformFinance", label: "Finanzas", icon: ico.cash },
+  { to: "/platform/vendedores", name: "platformReferrers", label: "Vendedores", icon: ico.tag },
   { to: "/platform/equipo", name: "platformTeam", label: "Equipo", icon: ico.people },
 ];
 
@@ -566,6 +568,10 @@ onUnmounted(() => clearInterval(timer));
   text-decoration: none;
   cursor: pointer;
 }
+.pos-dock[style*="--tabs: 6"] .dock-item,
+.pos-dock[style*="--tabs: 7"] .dock-item { font-size: 0.64rem; }
+.pos-dock[style*="--tabs: 6"] .dock-ico,
+.pos-dock[style*="--tabs: 7"] .dock-ico { width: 2.5rem; }
 .dock-ico {
   display: grid;
   place-items: center;

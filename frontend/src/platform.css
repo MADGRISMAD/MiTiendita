@@ -250,3 +250,31 @@ a.adm-kpi:hover { border-color: color-mix(in srgb, var(--timber-primary) 40%, va
 .pf .adm-tabs button { flex: 1 1 0; justify-content: center; white-space: nowrap; }
 .pf .adm-tabs.main button { flex: 1 1 0; }
 .pf-tools .adm-search { max-width: none; }
+
+/* Vendedores (referidos) */
+.pf-code-card { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.75rem 1rem; padding: 1rem; border: 1px dashed var(--timber-line); border-radius: 1rem; background: color-mix(in srgb, var(--timber-primary) 5%, var(--timber-panel)); }
+.pf-code { margin: 0.2rem 0 0.35rem; font-size: 1.9rem; font-weight: 900; letter-spacing: 0.08em; font-variant-numeric: tabular-nums; color: var(--timber-primary); }
+.pf-ladder { display: grid; gap: 0.6rem; }
+.pf-ladder .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(5.2rem, 1fr)); gap: 0.4rem; margin: 0; padding: 0; list-style: none; }
+.pf-ladder .steps li { display: grid; gap: 0.1rem; padding: 0.55rem 0.5rem; border: 1px solid var(--timber-line); border-radius: 0.8rem; text-align: center; background: var(--timber-panel); }
+.pf-ladder .steps strong { font-size: 1.1rem; font-weight: 900; }
+.pf-ladder .steps small { font-size: 0.72rem; font-weight: 600; color: var(--timber-muted); }
+.pf-ladder .steps li.done { background: var(--timber-surface); color: var(--timber-muted); }
+.pf-ladder .steps li.now { border: 2px solid var(--timber-primary); background: color-mix(in srgb, var(--timber-primary) 10%, var(--timber-panel)); color: var(--timber-primary); }
+.pf-ladder .hint { margin: 0; font-size: 0.86rem; font-weight: 600; color: var(--timber-muted); }
+.pf-ladder-note { margin-top: 0.75rem; padding: 0.7rem 0.85rem; border: 1px solid var(--timber-line); border-radius: 0.9rem; }
+.pf-ladder-note summary { cursor: pointer; font-weight: 800; font-size: 0.9rem; }
+.pf-ladder-note > *:not(summary) { margin-top: 0.7rem; }
+.pf-table tr.void td { opacity: 0.55; text-decoration: line-through; }
+.pf-table td.num, .pf-table th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.pf-muted.block { display: block; }
+.pf-row.static { cursor: default; }
+.pf-num.good { color: var(--timber-success); }
+
+.pf-inline { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.6rem; }
+.pf-inline .adm-field { flex: 0 1 12rem; margin: 0; }
+.pf-inline .adm-field.grow { flex: 1 1 14rem; }
+.pf-inline > .adm-btn { min-height: 2.6rem; }
+@media (max-width: 30rem) {
+  .pf .adm-tabs button { padding: 0 0.6rem; font-size: 0.82rem; }
+}

@@ -513,6 +513,33 @@ export const apiService = {
   platformSetPlan(id: string, plan: string) {
     return axios.patch(`/platform/tenants/${id}/plan`, { plan }).then((r) => r.data);
   },
+  platformReferrers() {
+    return axios.get('/platform/referrers').then((r) => r.data);
+  },
+  platformReferrer(id: string) {
+    return axios.get(`/platform/referrers/${id}`).then((r) => r.data);
+  },
+  platformCreateReferrer(payload: Record<string, unknown>) {
+    return axios.post('/platform/referrers', payload).then((r) => r.data);
+  },
+  platformUpdateReferrer(id: string, payload: Record<string, unknown>) {
+    return axios.patch(`/platform/referrers/${id}`, payload).then((r) => r.data);
+  },
+  platformPayReferrer(id: string, note = '') {
+    return axios.post(`/platform/referrers/${id}/payouts`, { note }).then((r) => r.data);
+  },
+  platformVoidCommission(id: string, reason = '') {
+    return axios.post(`/platform/commissions/${id}/void`, { reason }).then((r) => r.data);
+  },
+  platformSetTenantReferrer(tenantId: string, code: string | null) {
+    return axios.put(`/platform/tenants/${tenantId}/referrer`, { code }).then((r) => r.data);
+  },
+  platformManualPayment(tenantId: string, payload: { amount: number; note?: string }) {
+    return axios.post(`/platform/tenants/${tenantId}/manual-payment`, payload).then((r) => r.data);
+  },
+  checkReferralCode(code: string) {
+    return axios.get(`/usuarios/referral/${encodeURIComponent(code)}`).then((r) => r.data);
+  },
   platformListStaff() {
     return axios.get('/platform/staff').then((r) => r.data);
   },

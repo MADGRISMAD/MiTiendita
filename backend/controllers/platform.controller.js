@@ -139,11 +139,12 @@ async function getTenant(req, res) {
   try {
     const tenant = await db.GetTenantById(req.params.id);
     if (!tenant) return res.status(404).send('No encontré ese cliente.');
-    const [card, usage] = await Promise.all([
+    const [card, usage, referrer] = await Promise.all([
       clientCard(tenant, { withUsers: true }),
       limits.usageFor(tenant.id, tenant.plan || 'basic').catch(() => null),
+      referrals.brief(tenant.referrerId).catch(() => null),
     ]);
-    return res.status(200).json({ ...card, usage });
+    return res.status(200).json({ ...card, usage, referrer });
   } catch (err) {
     console.error(err);
     return res.status(500).send(err.message || 'No pude abrir ese cliente.');

@@ -30,6 +30,8 @@
       </div>
     </dl>
 
+    <ClientReferralCard v-if="canEdit" :detail="detail" @changed="$emit('changed')" />
+
     <section v-if="detail.usage" class="pf-card-stack" aria-labelledby="usage-title">
       <h3 id="usage-title" class="pf-section-title">Uso del plan</h3>
       <div class="pf-two even">
@@ -73,9 +75,14 @@
 
 <script setup>
 import { computed } from "vue";
+import ClientReferralCard from "./ClientReferralCard.vue";
 import { ago, daysUntil, lastSeen, shortDate } from "../../platform/format";
 
-const props = defineProps({ detail: { type: Object, required: true } });
+const props = defineProps({
+  detail: { type: Object, required: true },
+  canEdit: { type: Boolean, default: false },
+});
+defineEmits(["changed"]);
 
 const phone = computed(() => String(props.detail.ownerPhone || props.detail.phone || "").replace(/\D/g, ""));
 const whatsapp = computed(() => `https://wa.me/${phone.value.length === 10 ? `52${phone.value}` : phone.value}`);

@@ -105,6 +105,8 @@ export const routeRoles = {
   platformClient: ["platform_admin", "platform_support"],
   platformFinance: ["platform_admin"],
   platformTeam: ["platform_admin"],
+  platformReferrers: ["platform_admin"],
+  platformReferrer: ["platform_admin"],
   printOrder: ["admin", "cashier"],
   printOffline: ["admin", "cashier"],
   printCash: ["admin", "cashier"],
