@@ -74,6 +74,24 @@
             <p v-if="shown.phone" id="reg-phone-err" class="auth-err">{{ shown.phone }}</p>
           </div>
         </div>
+        <div class="auth-field">
+          <label for="reg-ref">Código de vendedor <em>(opcional)</em></label>
+          <input
+            id="reg-ref"
+            v-model="referralCode"
+            class="auth-input"
+            type="text"
+            maxlength="12"
+            placeholder="MT-XXXXXX"
+            autocomplete="off"
+            autocapitalize="characters"
+            spellcheck="false"
+            @input="onReferral"
+          />
+          <p v-if="referralState === 'ok'" class="auth-note" role="status">✓ Te atiende {{ referralSeller }}.</p>
+          <p v-else-if="referralState === 'bad'" class="auth-err" role="alert">Ese código no existe o ya no está activo. Revísalo o déjalo vacío.</p>
+          <p v-else class="auth-note">Si te recomendó un vendedor de Mi Tiendita, escribe su código.</p>
+        </div>
       </fieldset>
 
       <fieldset class="auth-group">
@@ -216,6 +234,9 @@ export default {
   data() {
     return {
       businessName: "",
+      referralCode: "",
+      referralState: "",
+      referralSeller: "",
       firstName: "",
       lastName: "",
       phone: "",
@@ -232,6 +253,23 @@ export default {
       serverError: "",
       loading: false,
     };
+  },
+  mounted() {
+    // El enlace de un vendedor (?ref=MT-XXXXXX) se recuerda por si el cliente antes recorre la página
+    let code = String(this.$route?.query?.ref || "");
+    try {
+      if (code) localStorage.setItem("mt_ref", code);
+      else code = localStorage.getItem("mt_ref") || "";
+    } catch {
+      /* sin almacenamiento: solo vale lo de la dirección */
+    }
+    if (code) {
+      this.referralCode = code.toUpperCase().slice(0, 12);
+      this.onReferral();
+    }
+  },
+  beforeUnmount() {
+    clearTimeout(this.referralTimer);
   },
   computed: {
     phoneDisplay() {
@@ -302,6 +340,21 @@ export default {
       this.username = this.cleanUsername(e.target.value);
       e.target.value = this.username;
     },
+    onReferral() {
+      this.referralCode = String(this.referralCode || "").toUpperCase();
+      clearTimeout(this.referralTimer);
+      this.referralState = "";
+      if (this.referralCode.replace(/[^A-Z0-9]/g, "").length < 4) return;
+      this.referralTimer = setTimeout(async () => {
+        try {
+          const res = await apiService.checkReferralCode(this.referralCode);
+          this.referralState = res.valid ? "ok" : "bad";
+          this.referralSeller = res.seller || "";
+        } catch {
+          this.referralState = "";
+        }
+      }, 400);
+    },
     onPhone(e) {
       // Se guardan solo los 10 dígitos; acepta pegar "+52 1 55 1234 5678"
       this.phone = phoneDigits(e.target.value);
@@ -317,6 +370,7 @@ export default {
       if (/nombre de usuario/i.test(msg)) return { field: "username", text: "Ese usuario ya existe. Prueba con otro." };
       if (/correo ya registrado/i.test(msg)) return { field: "email", text: "Ya hay una cuenta con ese correo. Inicia sesión o recupera tu contraseña." };
       if (/"email"/.test(msg)) return { field: "email", text: "Ese correo no parece válido." };
+      if (/código de referido|propio código/i.test(msg)) return { field: "", text: msg };
       if (/"cellphone"/.test(msg)) return { field: "phone", text: "El celular debe tener 10 dígitos." };
       return { field: "", text: msg || "No se pudo crear la cuenta. Inténtalo de nuevo." };
     },
@@ -338,7 +392,13 @@ export default {
           cellphone: this.phone,
         };
         if (this.businessName.trim()) payload.businessName = this.businessName.trim();
+        if (this.referralCode.trim()) payload.referralCode = this.referralCode.trim();
         const res = await apiService.register(payload);
+        try {
+          localStorage.removeItem("mt_ref");
+        } catch {
+          /* nada */
+        }
         setSession({
           token: res.token,
           role: res.role,

@@ -40,7 +40,7 @@
         <p v-if="error" class="pf-err" role="alert">{{ error }}</p>
         <p v-if="ok" class="pf-ok" role="status">{{ ok }}</p>
 
-        <ClientSummaryTab v-if="tab === 'resumen'" :detail="detail" />
+        <ClientSummaryTab v-if="tab === 'resumen'" :detail="detail" :can-edit="canEdit" @changed="reloadQuiet()" />
         <ClientLicenseTab v-else-if="tab === 'licencia'" :detail="detail" :can-edit="canEdit" @saved="onSaved" />
         <ClientPeopleTab v-else-if="tab === 'personas'" :detail="detail" />
         <ClientMailTab v-else-if="tab === 'correo'" :detail="detail" :initial-ticket="initialTicket" @waiting="onWaiting" />

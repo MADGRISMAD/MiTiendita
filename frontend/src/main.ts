@@ -38,6 +38,7 @@ import PlatformSupport from "./views/platform/PlatformSupport.vue";
 import PlatformClients from "./views/platform/PlatformClients.vue";
 import PlatformFinance from "./views/platform/PlatformFinance.vue";
 import PlatformTeam from "./views/platform/PlatformTeam.vue";
+import PlatformReferrers from "./views/platform/PlatformReferrers.vue";
 
 const PLATFORM_STAFF = ["platform_admin", "platform_support"];
 import NotFoundView from "./views/NotFoundView.vue";
@@ -118,6 +119,18 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: true, roles: ["platform_admin"], owner: true },
   },
   {
+    path: "/platform/vendedores",
+    name: "platformReferrers",
+    component: PlatformReferrers,
+    meta: { requiresAuth: true, roles: ["platform_admin"], owner: true },
+  },
+  {
+    path: "/platform/vendedores/:id",
+    name: "platformReferrer",
+    component: PlatformReferrers,
+    meta: { requiresAuth: true, roles: ["platform_admin"], owner: true },
+  },
+  {
     path: "/platform/equipo",
     name: "platformTeam",
     component: PlatformTeam,
@@ -173,6 +186,19 @@ const publicNames = new Set([
   "privacy",
   "notFound",
 ]);
+
+// Un enlace con ?ref= (de un vendedor) se guarda aunque la persona navegue antes de registrarse
+router.beforeEach((to) => {
+  const ref = typeof to.query.ref === "string" ? to.query.ref.trim() : "";
+  if (ref && /^[A-Za-z0-9-]{4,12}$/.test(ref)) {
+    try {
+      localStorage.setItem("mt_ref", ref);
+    } catch {
+      /* sin almacenamiento */
+    }
+  }
+  return true;
+});
 
 router.beforeEach(async (to) => {
   if (publicNames.has(String(to.name))) {

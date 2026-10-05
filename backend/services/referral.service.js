@@ -197,6 +197,13 @@ async function payOut(referrerId, { by = '', note = '' } = {}) {
   });
 }
 
+/** Datos mínimos del vendedor de una tienda (para la ficha del cliente). */
+async function brief(id) {
+  if (!id) return null;
+  const r = await refDb.GetReferrerById(id);
+  return r ? { id: r.id, name: r.name, code: r.code, status: r.status } : null;
+}
+
 // ───────── Resúmenes ─────────
 function emptyMoney() {
   return { pending: 0, paid: 0, pendingCount: 0, paidCount: 0 };
@@ -284,6 +291,7 @@ module.exports = {
   resolveForSignup,
   referralFields,
   recordPayment,
+  brief,
   voidCommission,
   payOut,
   listSummaries,
