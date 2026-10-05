@@ -367,6 +367,16 @@ async function voidSale(req, res) {
       return res.status(400).send('Abre la caja para devolver el dinero.');
     }
 
+    // Cobro con terminal: primero se devuelve el dinero en Mercado Pago; si MP lo rechaza no se toca nada
+    if (existing.pointChargeId) {
+      try {
+        await pointCharges.refundCharge(req.tenantId, String(existing.pointChargeId));
+      } catch (e) {
+        console.error('[refund mp]', e.code || '', e.message);
+        return res.status(e.status || 502).send(e.message || 'No se pudo devolver el dinero en Mercado Pago.');
+      }
+    }
+
     if (existing.inventoryApplied) {
       for (const item of existing.items || []) {
         const foodId = item.foodId || item.food;
