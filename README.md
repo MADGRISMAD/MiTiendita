@@ -68,17 +68,17 @@ Modelos probados (ir llenando al probar en tienda; formato: modelo · conexión 
 | _pendiente_ | USB ESC/POS genérica 80 mm | Windows · Chrome | _por probar_ |
 | _pendiente_ | Bluetooth 80 mm | Android · Chrome | _por probar_ |
 
-## Cafetería (recetas, insumos y barra)
+## Cafetería (recetas e insumos)
 
-Elige el giro **Cafetería** en Configuración (o en el asistente inicial) y aparecen **Barra** junto a Vender y **Recetas e insumos** en «Más».
+Pensado para locales chicos con una sola caja: no hay pantalla de barra, **el ticket es la comanda**. Sale con «Pedido #7», el nombre del cliente en grande y los extras de cada bebida, para dárselo a quien prepara.
 
-- **Insumos** (`/recetas?tab=ingredients`): la materia prima (café en grano, leches, jarabes, vasos). Se miden en g, ml o pz; el costo se captura como «paquete de 1000 ml a $25» y se guarda por unidad. No salen en la caja. «Surtir» suma lo que llegó y queda en la bitácora de inventario.
-- **Bebidas** (`/recetas`): receta para el tamaño base, tamaños con su precio y un factor que multiplica la receta (Grande ×1.5) y grupos de extras. Cada opción puede cobrar extra y **agregar** un insumo (shot +9 g de café) o **cambiar** uno por otro (leche de almendra en lugar de entera). Se ve el costo y la ganancia por tamaño, y para cuántas tazas alcanza. «Cargar menú de ejemplo» crea 8 insumos y 6 bebidas.
-- **En la caja**, al tocar una bebida se elige tamaño y extras; cada combinación es un renglón distinto del ticket. Al cobrar se pregunta «¿A nombre de quién?».
-- **Al cobrar**, el servidor pone el precio (no lo que mande la caja) y descuenta de cada insumo receta × tamaño × cantidad, con cambios y extras. Si el inventario general está apagado, se descuentan solo los insumos y una existencia en cero no frena la venta (queda marcada para revisión). Con el inventario encendido se respeta «vender sin existencias». Al cancelar la venta se regresa exactamente lo que salió.
-- **Barra** (`/barra`): pedidos con número del día (#1, #2…), nombre y extras, en tres columnas: En cola → Preparando → Para entregar. Se actualiza cada 5 s, suena al llegar un pedido y marca en rojo los que llevan más de 8 minutos. Los entregados recientes se pueden regresar.
+- **Categorías de venta o de insumos**: al crear una categoría se pregunta si es para *productos para vender* (salen en la caja) o *insumos* (materia prima: no salen en la caja). Todo producto en una categoría de insumos es materia prima (`isIngredient`, lo decide el servidor por la categoría); en el formulario se elige si se mide en g, ml o pz y el costo por unidad.
+- **Inventario → Insumos** (`/inventory?tab=insumos`): lista de materia prima con existencias, alertas, «Surtir» y alta rápida (el costo se captura como «paquete de 1000 ml a $25»). Aparece en el giro Cafetería o cuando ya hay insumos.
+- **Recetas** (`/recetas`): en el giro Cafetería está en la barra de navegación junto a Vender; en otros giros, en «Más». Cada bebida tiene receta para el tamaño base, tamaños con precio y factor (Grande ×1.5) y grupos de extras que cobran y **agregan** un insumo (shot +9 g de café) o lo **cambian** (leche de almendra en lugar de entera). Muestra costo, ganancia y para cuántas tazas alcanza. «Cargar menú de ejemplo» crea la categoría Insumos con 8 insumos y 6 bebidas. Desde Productos, una bebida con receta tiene «Editar receta» (`/recetas?edit=<id>`).
+- **En la caja**: al tocar una bebida se elige tamaño y extras; cada combinación es un renglón. Al cobrar se pregunta «¿A nombre de quién?».
+- **Al cobrar**, el servidor pone el precio y descuenta de cada insumo receta × tamaño × cantidad, con cambios y extras. Con el inventario general apagado se descuentan solo los insumos y una existencia en cero no frena la venta (queda para revisión); encendido, se respeta «vender sin existencias». Al cancelar la venta se regresa exactamente lo que salió. El número de pedido reinicia cada día.
 
-API: `GET /orders/prep` (cola de la barra) y `PUT /orders/:id/prep` con `{ status: queued | preparing | ready | delivered }`. Los productos guardan `isIngredient`, `stockUnit`, `recipe`, `sizes`, `modifierGroups` y `prep`; los renglones de venta mandan `sizeId` y `modifierIds` (`"grupo:opción"`).
+Modelo: las categorías guardan `kind: sale | supplies`; los productos `isIngredient`, `stockUnit`, `recipe`, `sizes`, `modifierGroups` y `prep`; los renglones de venta mandan `sizeId` y `modifierIds` (`"grupo:opción"`); la venta guarda `prep: { number, customerName }`.
 
 ## Configuración inicial
 Tras registrarte, el wizard pide nombre de tienda, tipo (abarrotes / conveniencia / farmacia / ferretería / cafetería) y logo. Puedes cargar 8 productos de ejemplo para cobrar el mismo día. Términos: `/terminos` · Privacidad: `/privacidad`.

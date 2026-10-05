@@ -279,13 +279,13 @@ const allDock = [
   { to: "/orders", name: "orders", label: "Caja", icon: ico.cash },
 ];
 
-// Cafetería: la barra junto a Vender y las recetas en «Más»
-const cafeDock = { to: "/barra", name: "barra", label: "Barra", icon: ico.cup };
+// Cafetería: las recetas a la mano junto a Vender; en otros giros, en «Más»
+const recipesDock = { to: "/recetas", name: "recipes", label: "Recetas", icon: ico.cup };
 const isCafe = computed(() => venueStore.businessType === "cafe");
 
 const allMore = [
   { to: "/dashboard", name: "dashboard", label: "Resumen / Reportes" },
-  { to: "/recetas", name: "recipes", label: "Recetas e insumos", cafe: true },
+  { to: "/recetas", name: "recipes", label: "Recetas (bebidas y preparados)", notCafe: true },
   { to: "/inventory", name: "inventory", label: "Inventario / Proveedores" },
   { to: "/customers", name: "customers", label: "Clientes" },
   { to: "/staff", name: "staff", label: "Empleados" },
@@ -296,7 +296,7 @@ const allMore = [
 
 const dock = computed(() => {
   if (!ownerMode.value) {
-    const items = isCafe.value ? [allDock[0], cafeDock, ...allDock.slice(1)] : allDock;
+    const items = isCafe.value ? [allDock[0], recipesDock, ...allDock.slice(1)] : allDock;
     return items.filter((i) => canAccessRoute(i.name));
   }
   if (isPartner()) return isPartnerAdmin() ? partnerAdminDock : partnerStaffDock;
@@ -304,7 +304,7 @@ const dock = computed(() => {
   // Tickets por responder sobre «Soporte»
   return items.map((i) => (i.name === "platformSupport" ? { ...i, badge: platformStore.waiting || 0 } : i));
 });
-const moreItems = computed(() => allMore.filter((i) => (!i.cafe || isCafe.value) && canAccessRoute(i.name)));
+const moreItems = computed(() => allMore.filter((i) => (!i.notCafe || !isCafe.value) && canAccessRoute(i.name)));
 // "Más" vive con las demás pestañas cuando caben (celular y tablet)
 const moreInDock = computed(() => (moreItems.value.length > 0 || ownerMode.value) && dock.value.length <= 4);
 const dockCount = computed(() => dock.value.length + (moreInDock.value ? 1 : 0));

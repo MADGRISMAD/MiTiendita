@@ -1,7 +1,7 @@
 process.env.SECRET_KEY = process.env.SECRET_KEY || 'clave-de-prueba-para-tests';
 
 // Venta de cafetería de punta a punta en el controlador: precio del servidor, insumos descontados,
-// número de pedido para la barra y devolución de insumos al cancelar.
+// número de pedido para el ticket y devolución de insumos al cancelar.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
@@ -125,8 +125,7 @@ test('cafetería sin inventario general: cobra con el precio del servidor y desc
   );
   assert.equal(opts.allowNegative, true, 'sin inventario general, un insumo en cero no frena la venta');
 
-  // A la barra con número y nombre
-  assert.equal(r.body.prep.status, 'queued');
+  // Número de pedido y nombre para el ticket
   assert.equal(r.body.prep.number, 1);
   assert.equal(r.body.prep.customerName, 'Ana');
   assert.equal(r.body.inventoryApplied, true);
@@ -149,7 +148,7 @@ test('con inventario general: también salen los productos normales y respeta el
   assert.equal(r.body.prep.number, 2);
 });
 
-test('una venta sin bebidas no entra a la barra', async () => {
+test('una venta sin bebidas no lleva número de pedido', async () => {
   settings = { inventoryEnabled: false };
   reserves.length = 0;
   const r = await post({
@@ -178,7 +177,7 @@ test('tamaño que no existe: 400 y no queda pedido', async () => {
   assert.equal(orders.length, before);
 });
 
-test('cancelar la venta regresa exactamente los insumos que salieron y la saca de la barra', async () => {
+test('cancelar la venta regresa exactamente los insumos que salieron', async () => {
   const paid = orders.find((o) => o.clientSaleId === 'venta-cafe-1');
   restores.length = 0;
   const res = { code: 200, body: null, status(c) { this.code = c; return this; }, json(b) { this.body = b; return this; }, send(b) { this.body = b; return this; } };

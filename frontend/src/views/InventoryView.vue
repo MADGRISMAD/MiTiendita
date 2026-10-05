@@ -17,7 +17,7 @@
       <p v-if="settingsLoaded && !venueStore.inventoryEnabled" class="adm-banner warn">
         <PosIcon name="alert" :size="18" />
         <span>
-          El control de inventario está apagado: las ventas no descuentan existencias.
+          El control de inventario está apagado: las ventas no descuentan existencias<template v-if="showSupplies"> (los insumos de las recetas sí)</template>.
           <router-link v-if="isAdmin" to="/settings">Actívalo en Ajustes</router-link>
         </span>
       </p>
@@ -261,6 +261,17 @@
           <button v-if="!purchases.length && isAdmin" type="button" class="adm-btn primary" @click="openPurchase()">Registrar compra</button>
         </div>
       </section>
+
+      <!-- ============ Insumos (cafetería) ============ -->
+      <IngredientsPanel
+        v-else-if="tab === 'insumos'"
+        :foods="foods"
+        :loading="loading.foods"
+        @saved="onSupplySaved"
+        @removed="onSupplyRemoved"
+        @error="(m) => (error = m)"
+        @flash="say"
+      />
 
       <!-- ============ Proveedores ============ -->
       <section v-else-if="tab === 'proveedores'" class="sec" :class="{ 'adm-loading': loading.suppliers }">
@@ -615,6 +626,8 @@ import { useRoute, useRouter } from "vue-router";
 import "../admin.css";
 import AppShell from "../components/AppShell.vue";
 import PosIcon from "../components/PosIcon.js";
+import IngredientsPanel from "../components/cafe/IngredientsPanel.vue";
+import { isIngredient } from "../cafe.js";
 import { apiService } from "../apiService";
 import { venueStore, fetchVenueSettings } from "../venueStore";
 import { hasRole } from "../authStore";
@@ -641,7 +654,7 @@ const ADJUST_REASONS = [
   { id: "internal", label: "Consumo o regalo" },
   { id: "other", label: "Otro" },
 ];
-const TAB_IDS = ["existencias", "sugerido", "caducidad", "compras", "proveedores", "bitacora"];
+const TAB_IDS = ["existencias", "insumos", "sugerido", "caducidad", "compras", "proveedores", "bitacora"];
 
 const route = useRoute();
 const router = useRouter();
@@ -1202,8 +1215,23 @@ function iconOf(type) {
 }
 
 // ---------- Carga ----------
+const supplyFoods = computed(() => foods.value.filter(isIngredient));
+const showSupplies = computed(() => venueStore.businessType === "cafe" || supplyFoods.value.length > 0);
+const lowSupplies = computed(
+  () => supplyFoods.value.filter((f) => (Number(f.stock) || 0) <= (Number(f.lowStockThreshold) || 0)).length
+);
+function onSupplySaved(food) {
+  const i = foods.value.findIndex((f) => String(f.id) === String(food.id));
+  if (i >= 0) foods.value.splice(i, 1, { ...foods.value[i], ...food });
+  else foods.value.push(food);
+}
+function onSupplyRemoved(id) {
+  foods.value = foods.value.filter((f) => String(f.id) !== String(id));
+}
 const tabs = computed(() => [
   { id: "existencias", label: "Existencias", count: stockCounts.value.out + stockCounts.value.low, alert: stockCounts.value.out > 0 },
+  // Insumos (materia prima de recetas): en cafetería o si ya hay alguno
+  ...(showSupplies.value ? [{ id: "insumos", label: "Insumos", count: lowSupplies.value, alert: lowSupplies.value > 0 }] : []),
   { id: "sugerido", label: "Pedido sugerido", short: "Sugerido", count: suggestionCount.value },
   { id: "caducidad", label: "Caducidad", count: expiryAlert.value, alert: Number(expiry.value?.summary?.expired || 0) > 0 },
   { id: "compras", label: "Compras" },

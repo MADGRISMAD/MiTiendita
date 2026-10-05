@@ -92,9 +92,11 @@ export function cupsLeft(food, ingredientsById) {
   return Number.isFinite(min) ? Math.max(0, min) : null;
 }
 
-export const PREP_STATUS = [
-  { id: "queued", label: "En cola", next: "preparing", action: "Preparar" },
-  { id: "preparing", label: "Preparando", next: "ready", action: "Lista" },
-  { id: "ready", label: "Lista", next: "delivered", action: "Entregada" },
-  { id: "delivered", label: "Entregada", next: null, action: "" },
-];
+/** ¿La bebida usa el insumo, en su receta o en algún extra? */
+export function usesIngredient(drink, id) {
+  const key = String(id);
+  if ((drink.recipe || []).some((r) => String(r.ingredientId) === key)) return true;
+  return (drink.modifierGroups || []).some((g) =>
+    (g.options || []).some((o) => String(o.replaceTo) === key || (o.add || []).some((a) => String(a.ingredientId) === key))
+  );
+}

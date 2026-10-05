@@ -217,13 +217,6 @@ export const apiService = {
       .get('/foods/lookup', { params: { code } })
       .then((r) => r.data);
   },
-  // Cafetería: cola de la barra
-  getPrepQueue() {
-    return axios.get('/orders/prep').then((r) => r.data);
-  },
-  setPrepStatus(orderId: string, status: string) {
-    return axios.put(`/orders/${orderId}/prep`, { status }).then((r) => r.data);
-  },
   getLowStockFoods() {
     return axios.get('/foods/low-stock').then((r) => r.data);
   },
@@ -262,7 +255,7 @@ export const apiService = {
   getMenuById(menuId: string) {
     return axios.get(`/menus/${menuId}`).then((r) => r.data);
   },
-  createMenu(menuDTO: { name: string; description?: string }) {
+  createMenu(menuDTO: { name: string; description?: string; kind?: 'sale' | 'supplies' }) {
     return axios.post('/menus', menuDTO).then((r) => r.data);
   },
   editMenu(menuId: string, menuDTO: Record<string, unknown>) {
