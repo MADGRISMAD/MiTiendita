@@ -17,8 +17,10 @@ services:
       context: .
       dockerfile: Dockerfile.backend
     restart: unless-stopped
+    # Opcional: en CI no existe; en el servidor trae las claves.
     env_file:
-      - ./backend/.env
+      - path: ./backend/.env
+        required: false
     environment:
       PORT: 8081
       DATABASE_URI: mongodb://mongo:27017
