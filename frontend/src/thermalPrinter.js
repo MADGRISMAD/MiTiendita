@@ -361,8 +361,7 @@ export function receiptData(order) {
     const u = unitOf(item);
     return {
       name: item.name || "Producto",
-      // Cafetería: los extras de la bebida van bajo su nombre
-      notes: [(item.modifiers || []).join(", "), item.notes || ""].filter(Boolean).join(" · "),
+      notes: item.notes || "",
       qtyText: u === "pz" ? qtyText(item.quantity) : formatQtyUnit(item.quantity, u),
       unit: b.unitGross,
       per: perUnit(u),
@@ -401,9 +400,6 @@ export function receiptData(order) {
     dateText: p ? `${DAYS[p.weekday]} ${pad(p.day)} ${MONTHS[p.month - 1]} ${p.year} ${pad(p.hour)}:${pad(p.minute)}` : "",
     cashier: authStore.username || "",
     countText: `${units} ${units === 1 ? "artículo" : "artículos"}`,
-    // Cafetería: número de pedido y a nombre de quién, grandes para quien prepara
-    prepNumber: o.prep?.number || null,
-    customerName: o.prep?.customerName || o.customerName || "",
     items,
     subtotal: o.subtotal,
     discountPercentText: o.discountAmount ? pctText(o.discountPercent) : "",

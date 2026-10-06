@@ -15,17 +15,6 @@ function normalizeOrder(body = {}) {
         saleUnit: saleUnitOf(item.saleUnit),
         priceIncludesTax: Boolean(item.priceIncludesTax),
         notes: item.notes || '',
-        // Cafetería: tamaño y extras (los valida y pone el servidor)
-        ...(item.recipe
-          ? {
-              recipe: true,
-              prep: Boolean(item.prep),
-              sizeId: item.sizeId || null,
-              sizeName: item.sizeName || '',
-              modifierIds: Array.isArray(item.modifierIds) ? item.modifierIds.slice(0, 20) : [],
-              modifiers: Array.isArray(item.modifiers) ? item.modifiers.slice(0, 20) : [],
-            }
-          : {}),
       }))
     : [];
 

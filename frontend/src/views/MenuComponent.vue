@@ -79,7 +79,7 @@
                 Todo
               </button>
               <button
-                v-for="menu in posMenus"
+                v-for="menu in menus"
                 :key="menu.id"
                 type="button"
                 role="tab"
@@ -125,7 +125,7 @@
                 </span>
                 <span class="result-side">
                   <strong class="result-price">{{ money(lineUnit(p)) }}{{ perUnit(unitOf(p)) }}</strong>
-                  <small v-if="inventoryOn && !isRecipe(p)" class="stock" :class="stockTone(p)">{{ stockLabel(p) }}</small>
+                  <small v-if="inventoryOn" class="stock" :class="stockTone(p)">{{ stockLabel(p) }}</small>
                   <em v-if="qtyInCart(p.id)" class="in-ticket">{{ formatQty(qtyInCart(p.id)) }} en ticket</em>
                 </span>
               </button>
@@ -166,7 +166,7 @@
                 <span class="tile-name">{{ p.name }}</span>
                 <span class="tile-foot">
                   <strong class="tile-price">{{ money(lineUnit(p)) }}{{ perUnit(unitOf(p)) }}</strong>
-                  <small v-if="inventoryOn && !isRecipe(p)" class="stock" :class="stockTone(p)">{{ stockLabel(p) }}</small>
+                  <small v-if="inventoryOn" class="stock" :class="stockTone(p)">{{ stockLabel(p) }}</small>
                 </span>
               </button>
               <p v-if="pickTotal > pickList.length" class="tiles-more">
@@ -233,14 +233,13 @@
             <ol v-if="lines.length" ref="linesEl" class="lines">
               <li
                 v-for="(line, i) in lines"
-                :key="line.lineKey || line.id"
+                :key="line.id"
                 class="line"
                 :class="{ on: selectedIdx === i, bump: bumpId === line.id }"
                 @click="selectLine(i)"
               >
                 <div class="line-main">
                   <span class="line-name">{{ line.name }}</span>
-                  <span v-if="line.modifiers?.length" class="line-mods">{{ line.modifiers.join(' · ') }}</span>
                   <span class="line-meta">
                     {{ formatQtyUnit(line.quantity, unitOf(line)) }} × {{ money(lineUnit(line)) }}{{ perUnit(unitOf(line)) }}
                     <template v-if="line.isMisc"> · Varios</template>
@@ -520,7 +519,7 @@
                       </small>
                     </span>
                     <span class="m-row-side">
-                      <strong>{{ isIngredient(p) ? 'Insumo' : money(p.price) }}</strong>
+                      <strong>{{ money(p.price) }}</strong>
                       <span v-if="inventoryOn" class="pill" :class="stockTone(p)">{{ stockLabel(p) }}</span>
                       <small v-else-if="marginPct(p) != null" :class="marginTone(p)">{{ marginPct(p) }}% ganancia</small>
                     </span>
@@ -560,10 +559,10 @@
                           <span class="chip-dot"></span>{{ menuName(p.menuId) }}
                         </span>
                       </td>
-                      <td class="num strong">{{ isIngredient(p) ? 'Insumo' : money(p.price) }}</td>
+                      <td class="num strong">{{ money(p.price) }}</td>
                       <td class="num hide-mobile" :class="{ muted: !Number(p.cost) }">{{ Number(p.cost) ? money(p.cost) : '—' }}</td>
                       <td class="num hide-mobile">
-                        <template v-if="Number(p.cost) && marginPct(p) != null">
+                        <template v-if="Number(p.cost)">
                           <span :class="marginTone(p)">{{ marginPct(p) }}%</span>
                           <small class="muted cell-sub">{{ money(p.price - p.cost) }}</small>
                         </template>
@@ -584,8 +583,8 @@
                     </span>
                     <span class="tile-name">{{ p.name }}</span>
                     <span class="tile-foot">
-                      <strong class="tile-price">{{ isIngredient(p) ? 'Insumo' : money(p.price) }}</strong>
-                      <small v-if="inventoryOn && !isRecipe(p)" class="stock" :class="stockTone(p)">{{ stockLabel(p) }}</small>
+                      <strong class="tile-price">{{ money(p.price) }}</strong>
+                      <small v-if="inventoryOn" class="stock" :class="stockTone(p)">{{ stockLabel(p) }}</small>
                     </span>
                   </button>
                 </div>
@@ -641,7 +640,6 @@
               <ul class="held-list">
                 <li v-for="menu in menus" :key="menu.id">
                   <input v-model="catDrafts[menu.id]" class="inp" maxlength="40" @keydown.enter.prevent="renameMenu(menu)" @blur="renameMenu(menu)" />
-                  <span v-if="menu.kind === 'supplies'" class="cat-kind">Insumos</span>
                   <span class="cat-count">{{ catCount(menu.id) }}</span>
                   <button type="button" class="btn icon ghost" title="Eliminar" aria-label="Eliminar categoría" :disabled="catBusy" @click="askDeleteMenu(menu)">
                     <PosIcon name="trash" :size="18" />
@@ -1002,7 +1000,17 @@
         </div>
       </Teleport>
 
-      <CategoryDialog v-if="showMenuForm" @close="cancelMenuForm" @created="onMenuCreated" />
+      <Teleport to="body">
+        <div v-if="showMenuForm" class="sheet-bg">
+          <form class="sheet" @submit.prevent="createMenu">
+            <h3>Nueva categoría</h3>
+            <input v-model="menuForm.name" class="inp" placeholder="Nombre" required />
+            <input v-model="menuForm.description" class="inp" placeholder="Descripción" />
+            <button type="submit" class="act primary">Crear</button>
+            <button type="button" class="act" @click="cancelMenuForm">Cancelar</button>
+          </form>
+        </div>
+      </Teleport>
 
       <MagicPricesSheet
         v-if="aiEnabled && showMagic"
@@ -1015,8 +1023,6 @@
       />
 
       <!-- Cobro -->
-      <DrinkOptionsDialog v-if="drinkFor" :food="drinkFor" :money="money" @add="addDrink" @close="closeDrink" />
-
       <Teleport to="body">
         <div v-if="showPayment" class="dlg-bg">
           <form
@@ -1075,10 +1081,6 @@
             </template>
 
             <template v-else>
-              <label v-if="hasPrep" class="field">
-                <span>¿A nombre de quién? <em class="opt">sale en el ticket para entregar la bebida</em></span>
-                <input v-model="customerName" class="inp" type="text" maxlength="40" autocomplete="off" placeholder="Ej. Ana" />
-              </label>
               <div class="methods" role="radiogroup" aria-label="Forma de pago">
                 <label v-for="m in payMethods" :key="m.id" class="method" :class="{ on: payMethod === m.id }">
                   <input v-model="payMethod" type="radio" name="pay-method" :value="m.id" />
@@ -1281,27 +1283,6 @@
                 <input v-model="foodForm.description" class="inp" :placeholder="descriptionPlaceholder" />
               </label>
 
-              <div v-if="editingFood && isRecipe(editingFood)" class="recipe-note wide">
-                <PosIcon name="cup" :size="20" />
-                <span>Esta bebida tiene receta, tamaños y extras.</span>
-                <router-link :to="{ path: '/recetas', query: { edit: editingFood.id } }">Editar receta</router-link>
-              </div>
-
-              <div v-if="formIsSupply" class="supply-box wide">
-                <p class="supply-head"><strong>Insumo</strong> · materia prima: no sale en la caja y se descuenta con las recetas.</p>
-                <div class="unit-picks" role="radiogroup" aria-label="Se mide en">
-                  <label v-for="u in STOCK_UNITS" :key="u.id" class="unit-pick" :class="{ on: foodForm.stockUnit === u.id }">
-                    <input v-model="foodForm.stockUnit" type="radio" name="stock-unit" :value="u.id" />
-                    <strong>{{ u.label }}</strong>
-                  </label>
-                </div>
-                <label class="field">
-                  <span>Costo por {{ unitShort(foodForm.stockUnit) }}</span>
-                  <input v-model.number="foodForm.cost" class="inp num" type="number" min="0" step="any" placeholder="0.00" />
-                </label>
-              </div>
-
-              <template v-if="!formIsSupply">
               <div class="price-trio wide">
                 <label class="field">
                   <span>Costo</span>
@@ -1361,11 +1342,10 @@
                   <template v-if="Number(foodForm.cost) > 0"> · ganas {{ money(foodForm.price - foodForm.cost) }} por unidad</template>
                 </p>
               </div>
-              </template>
 
-              <template v-if="inventoryOn || formIsSupply">
+              <template v-if="inventoryOn">
                 <label class="field">
-                  <span>Existencias<template v-if="formIsSupply"> ({{ unitShort(foodForm.stockUnit) }})</template>{{ cashBlocked ? ' (bloqueado: haz el corte)' : '' }}</span>
+                  <span>Existencias{{ cashBlocked ? ' (bloqueado: haz el corte)' : '' }}</span>
                   <input v-model.number="foodForm.stock" class="inp" type="number" min="0" step="any" :disabled="cashBlocked" />
                 </label>
                 <label class="field">
@@ -1397,7 +1377,7 @@
             <footer class="product-foot" :class="{ editing: editingFood }">
               <div class="sheet-actions">
                 <button type="button" class="act" @click="closeFoodForm">Cancelar</button>
-                <button type="submit" class="act primary">Guardar<span class="hide-mobile">&nbsp;producto</span></button>
+                <button type="submit" class="act primary">Guardar<span class="hide-mobile"> producto</span></button>
               </div>
               <button v-if="editingFood" type="button" class="delete-link dup-link" @click="duplicateFood">
                 Duplicar<span class="hide-mobile"> producto</span>
@@ -1423,9 +1403,6 @@
 import AppShell from "../components/AppShell.vue";
 import MagicPricesSheet from "../components/MagicPricesSheet.vue";
 import PosIcon from "../components/PosIcon.js";
-import CategoryDialog from "../components/CategoryDialog.vue";
-import DrinkOptionsDialog from "../components/cafe/DrinkOptionsDialog.vue";
-import { STOCK_UNITS, isIngredient, isRecipe, needsOptions, pricedChoice, unitShort } from "../cafe.js";
 import { ref, reactive, computed, onMounted, onUnmounted, watch, nextTick } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { apiService } from "../apiService";
@@ -1501,7 +1478,7 @@ function round2(n) {
 const CATEGORY_HUES = [212, 28, 152, 274, 342, 46, 190, 118, 8, 236];
 
 export default {
-  components: { AppShell, CategoryDialog, DrinkOptionsDialog, MagicPricesSheet, PosIcon },
+  components: { AppShell, MagicPricesSheet, PosIcon },
   directives: { selectOnFocus: vSelectOnFocus },
   props: {
     initialMode: { type: String, default: "pos" },
@@ -1605,6 +1582,7 @@ export default {
         ) || null
       );
     });
+    const menuForm = reactive({ name: "", description: "" });
     const foodForm = reactive({
       name: "",
       price: 0,
@@ -1619,10 +1597,7 @@ export default {
       supplierIds: [],
       menuId: "",
       saleUnit: "pz",
-      stockUnit: "pz", // insumos: g, ml o pz
     });
-    // La categoría elegida es de insumos: el producto es materia prima (sin precio de venta)
-    const formIsSupply = computed(() => menus.value.find((m) => String(m.id) === String(foodForm.menuId))?.kind === "supplies");
 
     // Búsqueda y vista de lista en modo catálogo
     const catalogSearch = ref("");
@@ -1929,7 +1904,6 @@ export default {
       return String(p?.barcode || p?.sku || "").trim();
     }
     function marginPct(p) {
-      if (isIngredient(p)) return null; // materia prima: no se vende
       const cost = Number(p?.cost) || 0;
       if (!(cost > 0)) return null;
       return Math.round(((Number(p.price) - cost) / cost) * 100);
@@ -2085,20 +2059,21 @@ export default {
       },
     });
 
-    // «+ Nueva categoría…» desde la hoja de producto: pregunta nombre y si es de venta o de insumos
-    let catForFood = false;
-    let menuBeforeNew = "";
-    watch(
-      () => foodForm.menuId,
-      (id, prev) => {
-        if (id !== "__new") menuBeforeNew = id;
-        else if (prev && prev !== "__new") menuBeforeNew = prev;
-      }
-    );
-    function onFormMenuChange() {
+    async function onFormMenuChange() {
       if (foodForm.menuId !== "__new") return;
-      catForFood = true;
-      showMenuForm.value = true;
+      const name = String(window.prompt("Nombre de la nueva categoría") || "").trim();
+      if (!name) {
+        foodForm.menuId = selectedMenuId.value || menus.value[0]?.id || "";
+        return;
+      }
+      try {
+        const created = await apiService.createMenu({ name, description: "" });
+        menus.value.push(created);
+        foodForm.menuId = created.id;
+      } catch (e) {
+        foodError.value = (typeof e.response?.data === "string" && e.response.data) || "No se pudo crear la categoría.";
+        foodForm.menuId = selectedMenuId.value || menus.value[0]?.id || "";
+      }
     }
 
     function openCats() {
@@ -2198,25 +2173,16 @@ export default {
     const itemCount = computed(() =>
       lines.value.reduce((s, p) => s + Number(p.quantity || 0), 0)
     );
-    // Los insumos de cafetería (leche, café en grano…) no se venden sueltos en la caja
-    const sellableFoods = computed(() => pickFoods.value.filter((p) => !isIngredient(p)));
-    // Categorías de la caja: sin las que solo tienen insumos
-    const posMenus = computed(() => {
-      const ingredientOnly = new Set();
-      const sold = new Set(sellableFoods.value.map((p) => String(p.menuId || "")));
-      for (const p of pickFoods.value) if (isIngredient(p) && !sold.has(String(p.menuId || ""))) ingredientOnly.add(String(p.menuId || ""));
-      return menus.value.filter((m) => m.kind !== "supplies" && !ingredientOnly.has(String(m.id)));
-    });
     const pickFiltered = computed(() => {
-      if (!pickMenuId.value) return sellableFoods.value;
-      return sellableFoods.value.filter((p) => String(p.menuId || "") === String(pickMenuId.value));
+      if (!pickMenuId.value) return pickFoods.value;
+      return pickFoods.value.filter((p) => String(p.menuId || "") === String(pickMenuId.value));
     });
     const pickList = computed(() => pickFiltered.value.slice(0, PICK_LIMIT));
     const pickTotal = computed(() => pickFiltered.value.length);
 
     // Búsqueda local: sin acentos, por varias palabras, en nombre, código y descripción
     const searchIndex = computed(() =>
-      sellableFoods.value.map((p) => ({
+      pickFoods.value.map((p) => ({
         p,
         name: fold(p.name),
         code: fold(p.barcode || p.sku || ""),
@@ -2321,17 +2287,17 @@ export default {
       return Number(p?.stock) || 0;
     }
     function isOut(p) {
-      return inventoryOn.value && !p?.isMisc && !isRecipe(p) && stockNum(p) <= 0;
+      return inventoryOn.value && !p?.isMisc && stockNum(p) <= 0;
     }
     function isLow(p) {
-      if (!inventoryOn.value || p?.isMisc || isRecipe(p)) return false;
+      if (!inventoryOn.value || p?.isMisc) return false;
       const min = p?.lowStockThreshold != null ? Number(p.lowStockThreshold) : 5;
       return stockNum(p) > 0 && stockNum(p) <= min;
     }
     const allowNoStock = computed(() => Boolean(venueStore.allowNegativeStock));
     /** Piezas que faltan si el renglón de `p` llega a `qty` (0 si alcanzan o no se lleva inventario). */
     function stockGap(p, qty) {
-      if (!inventoryOn.value || !p || p.isMisc || isRecipe(p)) return 0;
+      if (!inventoryOn.value || !p || p.isMisc) return 0;
       const row = pickFoods.value.find((f) => String(f.id) === String(p.id)) || p;
       return Math.max(0, Number(qty || 0) - stockNum(row));
     }
@@ -2354,8 +2320,8 @@ export default {
     }
 
     function qtyInCart(id) {
-      // Una bebida puede ir en varios renglones (distinto tamaño o extras)
-      return lines.value.reduce((sum, p) => (p.id === id ? sum + Number(p.quantity || 0) : sum), 0);
+      const line = lines.value.find((p) => p.id === id);
+      return line ? Number(line.quantity || 0) : 0;
     }
     function isCompactPos() {
       return typeof window !== "undefined" && window.matchMedia("(max-width: 767.98px)").matches;
@@ -2581,11 +2547,6 @@ export default {
 
     function cancelMenuForm() {
       showMenuForm.value = false;
-      if (catForFood) {
-        catForFood = false;
-        foodForm.menuId = menuBeforeNew || selectedMenuId.value || menus.value[0]?.id || "";
-        return;
-      }
       if (!showFoodForm.value) {
         pendingBarcode.value = "";
         addAfterSave.value = false;
@@ -2774,27 +2735,12 @@ export default {
         nameHits.value = [];
         return;
       }
-      if (isIngredient(producto)) {
-        scanError.value = `${producto.name} es un insumo de tus recetas; no se vende suelto.`;
-        nameHits.value = [];
-        return;
-      }
-      // Bebida con tamaños o extras: primero se eligen
-      if (needsOptions(producto) && !opts.choice) {
-        drinkFor.value = producto;
-        drinkQty = Number(qty) > 0 ? Math.max(1, Math.round(Number(qty))) : 1;
-        nameHits.value = [];
-        if (isCompactPos()) scanInput.value?.blur();
-        return;
-      }
       if (isBulk(producto) && !opts.weighed) {
         openWeigh(producto);
         return;
       }
-      const choice = opts.choice || (isRecipe(producto) ? pricedChoice(producto) : null);
-      const key = choice?.lineKey || producto.id;
       const amount = Number(qty) > 0 ? roundQty(Number(qty), unitOf(producto)) : 1;
-      const idx = store.platillosSeleccionados.findIndex((p) => (p.lineKey || p.id) === key);
+      const idx = store.platillosSeleccionados.findIndex((p) => p.id === producto.id);
       const inCart = idx >= 0 ? Number(store.platillosSeleccionados[idx].quantity) || 0 : 0;
       if (!allowNoStock.value && stockGap(producto, inCart + amount) > 0) {
         scanError.value = noStockText(producto);
@@ -2809,7 +2755,7 @@ export default {
         line.quantity = Math.round((Number(line.quantity) + amount) * 1000) / 1000;
         selectedIdx.value = idx;
       } else {
-        store.platillosSeleccionados.push({ ...producto, ...(choice || {}), quantity: amount });
+        store.platillosSeleccionados.push({ ...producto, quantity: amount });
         selectedIdx.value = store.platillosSeleccionados.length - 1;
       }
       lastAdded.value = producto;
@@ -2839,22 +2785,6 @@ export default {
       }
       focusScan();
     }
-
-    // Cafetería: diálogo de tamaño y extras
-    const drinkFor = ref(null);
-    let drinkQty = 1;
-    function addDrink({ choice, qty }) {
-      const food = drinkFor.value;
-      drinkFor.value = null;
-      if (food) addProduct(food, qty * drinkQty, { choice });
-    }
-    function closeDrink() {
-      drinkFor.value = null;
-      if (!isCompactPos()) focusScan();
-    }
-    // Nombre para llamar el pedido en la barra
-    const customerName = ref("");
-    const hasPrep = computed(() => lines.value.some((p) => isRecipe(p) && p.prep !== false));
 
     /** Agrega un producto elegido con el dedo o el ratón (respeta "3*" escrito en el buscador). */
     function pickResult(producto) {
@@ -3120,7 +3050,6 @@ export default {
       ticketDiscount.value = 0;
       discountDraft.value = 0;
       showMobileCart.value = false;
-      customerName.value = "";
     }
 
     function clearCart() {
@@ -3465,8 +3394,6 @@ export default {
         quantity: p.quantity,
         saleUnit: unitOf(p),
         priceIncludesTax: Boolean(p.priceIncludesTax),
-        // Bebidas: el servidor pone el precio con el tamaño y extras; los nombres sirven para el ticket sin internet
-        ...(isRecipe(p) ? { sizeId: p.sizeId || null, modifierIds: p.modifierIds || [], modifiers: p.modifiers || [] } : {}),
       }));
       const payload = {
         clientSaleId,
@@ -3493,7 +3420,6 @@ export default {
         tax: Number(tax.value || 0),
         total: Number(chargeTotal.value || 0),
         change: Number(payChange.value || 0),
-        customerName: hasPrep.value ? String(customerName.value || "").trim().slice(0, 40) || undefined : undefined,
       };
       try {
         // Cobro en la terminal Mercado Pago: la venta se registra SOLO si sale aprobado
@@ -3523,7 +3449,7 @@ export default {
         // Refleja la venta en las existencias que se ven en pantalla
         if (offline || inventoryOn.value) {
           for (const item of items) {
-            if (!item.foodId || item.modifierIds) continue;
+            if (!item.foodId) continue;
             const row = pickFoods.value.find((p) => String(p.id) === String(item.foodId));
             if (row) {
               row.stock = (Number(row.stock) || 0) - Number(item.quantity || 0);
@@ -3544,7 +3470,7 @@ export default {
             : `Ticket ${folio} cobrado sin internet · se sincroniza al volver`)
           : (cambio > 0
             ? `Ticket ${folio} cobrado · Cambio: ${money(cambio)}`
-            : `Ticket ${folio} cobrado`) + (order.prep?.number ? ` · Pedido #${order.prep.number}` : "");
+            : `Ticket ${folio} cobrado`);
         const cashSale = payload.paymentMethod === "cash" || payload.paymentMethod === "split";
         printReceipt(
           offline
@@ -3840,15 +3766,12 @@ export default {
       }
     }
 
-    function onMenuCreated(created) {
+    async function createMenu() {
+      const created = await apiService.createMenu({ ...menuForm });
       menus.value.push(created);
+      menuForm.name = "";
+      menuForm.description = "";
       showMenuForm.value = false;
-      // Abierta desde la hoja de producto: el producto queda en la nueva categoría
-      if (catForFood) {
-        catForFood = false;
-        foodForm.menuId = created.id;
-        return;
-      }
       selectedMenuId.value = created.id;
       if (pendingBarcode.value) {
         showFoodForm.value = true;
@@ -3883,7 +3806,6 @@ export default {
       foodForm.lowStockThreshold = producto.lowStockThreshold != null ? Number(producto.lowStockThreshold) : 5;
       foodForm.tracksExpiry = Boolean(producto.tracksExpiry);
       foodForm.saleUnit = unitOf(producto);
-      foodForm.stockUnit = producto.stockUnit || "pz";
       foodForm.supplierIds = Array.isArray(producto.supplierIds) ? [...producto.supplierIds] : [];
       foodForm.menuId = producto.menuId || selectedMenuId.value || menus.value[0]?.id || "";
       showFoodForm.value = true;
@@ -3986,9 +3908,6 @@ export default {
         saleUnit: foodForm.saleUnit,
         supplierIds: [...foodForm.supplierIds],
       };
-      if (formIsSupply.value) {
-        Object.assign(payload, { price: 0, priceIncludesTax: true, saleUnit: "pz", stockUnit: foodForm.stockUnit });
-      }
       try {
         let saved;
         if (editingFood.value) {
@@ -4107,18 +4026,6 @@ export default {
     });
 
     return {
-      // Cafetería
-      formIsSupply,
-      isIngredient,
-      onMenuCreated,
-      STOCK_UNITS,
-      unitShort,
-      drinkFor,
-      addDrink,
-      closeDrink,
-      customerName,
-      hasPrep,
-      isRecipe,
       // Catálogo
       mode,
       menus,
@@ -4136,6 +4043,7 @@ export default {
       onMagicApplied,
       onMagicManual,
       openNewFood,
+      menuForm,
       foodForm,
       foodPricePreview,
       foodError,
@@ -4185,6 +4093,7 @@ export default {
       exportCatalog,
       goMode,
       loadMenuProducts,
+      createMenu,
       cancelMenuForm,
       createFood,
       editFood,
@@ -4202,7 +4111,6 @@ export default {
       clearSearch,
       pickFoods,
       pickMenuId,
-      posMenus,
       pickList,
       pickTotal,
       searching,
@@ -4994,41 +4902,6 @@ html[data-theme="dark"] .avatar {
   font-size: 0.93rem;
   font-weight: 700;
   line-height: 1.25;
-}
-.recipe-note {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.65rem 0.8rem;
-  border-radius: 0.8rem;
-  background: var(--timber-primary-soft);
-  color: var(--timber-primary);
-  font-size: 0.88rem;
-  font-weight: 700;
-}
-.recipe-note span { flex: 1; color: var(--timber-ink); font-weight: 600; }
-.recipe-note a { color: var(--timber-primary); white-space: nowrap; }
-.supply-box {
-  display: grid;
-  gap: 0.6rem;
-  padding: 0.75rem;
-  border: 1px dashed color-mix(in srgb, var(--timber-warning) 60%, var(--timber-line));
-  border-radius: 0.9rem;
-  background: var(--timber-warning-soft);
-}
-.supply-head { margin: 0; font-size: 0.86rem; line-height: 1.4; }
-.cat-kind {
-  padding: 0.1rem 0.5rem;
-  border-radius: 999px;
-  background: var(--timber-warning-soft);
-  font-size: 0.74rem;
-  font-weight: 800;
-  white-space: nowrap;
-}
-.line-mods {
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: var(--timber-primary);
 }
 .line-meta {
   font-size: 0.78rem;
