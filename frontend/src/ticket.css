@@ -228,19 +228,6 @@ html.tk-printing-view body { background: var(--timber-surface); }
   line-height: 1.25;
   white-space: nowrap;
 }
-/* Cafetería: número de pedido y nombre, grandes para quien prepara */
-.tk-prep {
-  display: grid;
-  justify-items: center;
-  gap: 0.6mm;
-  margin: 2mm 0;
-  padding: 2mm;
-  border: 0.5mm solid currentColor;
-  border-radius: 1.5mm;
-  text-align: center;
-}
-.tk-prep strong { font-size: 7mm; font-weight: 900; line-height: 1; letter-spacing: -0.02em; }
-.tk-prep span { font-size: 4.5mm; font-weight: 800; text-transform: uppercase; }
 .tk-meta {
   display: flex;
   flex-wrap: wrap;

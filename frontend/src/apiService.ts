@@ -237,8 +237,6 @@ export const apiService = {
     lowStockThreshold?: number | null;
     tracksExpiry?: boolean;
     supplierIds?: string[];
-    // Cafetería: insumo o bebida con receta
-    [key: string]: unknown;
   }) {
     return axios.post('/foods', foodDTO).then((r) => r.data);
   },
@@ -255,7 +253,7 @@ export const apiService = {
   getMenuById(menuId: string) {
     return axios.get(`/menus/${menuId}`).then((r) => r.data);
   },
-  createMenu(menuDTO: { name: string; description?: string; kind?: 'sale' | 'supplies' }) {
+  createMenu(menuDTO: { name: string; description?: string }) {
     return axios.post('/menus', menuDTO).then((r) => r.data);
   },
   editMenu(menuId: string, menuDTO: Record<string, unknown>) {

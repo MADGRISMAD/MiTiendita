@@ -149,7 +149,7 @@ export function money(n) {
 
 /**
  * Arma el ticket de venta. `t` ya trae todo calculado (ver thermalPrinter.js → receiptData):
- * { shop, kind, address, phone, folio, dateText, cashier, countText, prepNumber, customerName, items: [{ name, notes, qtyText, unit, amount }],
+ * { shop, kind, address, phone, folio, dateText, cashier, countText, items: [{ name, notes, qtyText, unit, amount }],
  *   subtotal, discountPercentText, discountAmount, cardExtraTax, deliveryFee, total, taxNote,
  *   paid, methodText, methodDetail: [], change, saved, stamp, offlinePending, thanks, note, invoiceUrl }
  */
@@ -168,12 +168,6 @@ export function buildReceipt(t, { cols = 48, openDrawer = false } = {}) {
   p.lr(`Ticket No. ${t.folio || ""}`, t.dateText || "");
   p.lr(`Atendió: ${t.cashier || "-"}`, t.countText || "");
   p.rule();
-  if (t.prepNumber || t.customerName) {
-    p.align("center").bold().size(2);
-    if (t.prepNumber) p.line(`PEDIDO #${t.prepNumber}`);
-    if (t.customerName) p.wrapped(String(t.customerName).toUpperCase(), { cols: half });
-    p.size(1).bold(false).align("left").rule();
-  }
 
   for (const item of t.items || []) {
     p.bold().wrapped(item.name).bold(false);

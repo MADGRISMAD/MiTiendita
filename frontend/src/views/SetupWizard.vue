@@ -47,7 +47,6 @@
             <option value="convenience">Conveniencia</option>
             <option value="pharmacy">Farmacia / botica</option>
             <option value="hardware">Ferretería / tlapalería</option>
-            <option value="cafe">Cafetería</option>
             <option value="other">Otro comercio</option>
           </select>
         </label>
@@ -194,7 +193,7 @@ const typeLabels = {
   hardware: "Ferretería / tlapalería",
   other: "Otro comercio",
   restaurant: "Restaurante",
-  cafe: "Cafetería",
+  cafe: "Café",
   bar: "Bar",
   hotel: "Hotel",
 };

@@ -38,10 +38,6 @@
                 <p class="tk-stub-date">{{ shortDate(stamp) }}<br />{{ clock(stamp) }}</p>
               </div>
             </div>
-            <div v-if="prepNumber || customerName" class="tk-prep">
-              <strong v-if="prepNumber">Pedido #{{ prepNumber }}</strong>
-              <span v-if="customerName">{{ customerName }}</span>
-            </div>
             <div class="tk-meta">
               <span>Atendió <b>{{ cashier || '—' }}</b></span>
               <span>{{ countText }}</span>
@@ -53,7 +49,6 @@
                 <span class="tk-item-n tk-mono">{{ String(i + 1).padStart(2, '0') }}</span>
                 <div>
                   <p class="tk-item-name">{{ item.name }}</p>
-                  <p v-if="item.modifiers?.length" class="tk-item-note">{{ item.modifiers.join(', ') }}</p>
                   <p v-if="item.notes" class="tk-item-note">{{ item.notes }}</p>
                   <div class="tk-line">
                     <span>{{ formatQtyUnit(item.quantity, unitOf(item)) }} × {{ money(lineUnit(item)) }}{{ perUnit(unitOf(item)) }}</span>
@@ -181,9 +176,6 @@ const qrDataUrl = ref("");
 
 const items = computed(() => (Array.isArray(order.value?.items) ? order.value.items : []));
 const folio = computed(() => folioOf(order.value?.id));
-// Cafetería: número de pedido y nombre para quien prepara la bebida
-const prepNumber = computed(() => order.value?.prep?.number || null);
-const customerName = computed(() => order.value?.prep?.customerName || order.value?.customerName || "");
 const cashier = computed(() => authStore.username || "");
 const stamp = computed(() => order.value?.paidAt || order.value?.createdAt);
 const thanks = computed(() => closingLine(venueStore.businessType));

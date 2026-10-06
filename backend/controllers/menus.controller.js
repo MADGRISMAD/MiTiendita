@@ -1,5 +1,4 @@
 const db = require('../database/mongodb');
-const recipes = require('../services/recipe.service');
 const { roundQty, saleUnitOf } = require('../utils/units');
 const limits = require('../services/plan-limits.service');
 const { seedStarterCatalog, starterProductCount } = require('../services/starter-catalog.service');
@@ -30,26 +29,13 @@ async function getMenu(req, res) {
   }
 }
 
-// Una categoría es para vender al público o de insumos (materia prima para preparar, no sale en la caja)
-const MENU_KINDS = ['sale', 'supplies'];
-const menuKindOf = (v) => (MENU_KINDS.includes(v) ? v : 'sale');
-
-/** Lo que cambia en un producto según su categoría: en una de insumos es materia prima. */
-async function supplyFieldsFor(menuId, tenantId) {
-  if (!menuId) return {};
-  const menu = await db.GetMenuLite(String(menuId), tenantId).catch(() => null);
-  if (!menu) return {};
-  return { isIngredient: menu.kind === 'supplies' };
-}
-
 async function createMenu(req, res) {
   try {
-    const { name, description, kind } = req.body || {};
+    const { name, description } = req.body || {};
     if (!name) return res.status(400).send('name es requerido');
     const created = await db.CreateMenu({
       name,
       description: description || '',
-      kind: menuKindOf(kind),
       tenantId: req.tenantId,
     });
     return res.status(201).json(created);
@@ -61,11 +47,7 @@ async function createMenu(req, res) {
 
 async function updateMenu(req, res) {
   try {
-    const body = { ...(req.body || {}) };
-    delete body.tenantId;
-    delete body._id;
-    if (body.kind !== undefined) body.kind = menuKindOf(body.kind);
-    const updated = await db.UpdateMenu(req.params.id, body, req.tenantId);
+    const updated = await db.UpdateMenu(req.params.id, req.body || {}, req.tenantId);
     if (!updated) return res.status(404).send('Menú no encontrado');
     return res.status(200).json(updated);
   } catch (err) {
@@ -157,10 +139,6 @@ async function createFood(req, res) {
       tracksExpiry: Boolean(tracksExpiry),
       supplierIds: sanitizeSupplierIds(supplierIds),
       saleUnit: saleUnitOf(saleUnit),
-      // Cafetería: insumo (materia prima) o bebida con receta, tamaños y extras
-      ...recipes.sanitizeRecipeFields(req.body || {}),
-      // En una categoría de insumos todo es materia prima
-      ...(await supplyFieldsFor(menuId, req.tenantId)),
     });
     return res.status(201).json(created);
   } catch (err) {
@@ -204,8 +182,6 @@ async function updateFood(req, res) {
     if (body.tracksExpiry != null) body.tracksExpiry = Boolean(body.tracksExpiry);
     if (body.saleUnit != null) body.saleUnit = saleUnitOf(body.saleUnit);
     if (body.supplierIds != null) body.supplierIds = sanitizeSupplierIds(body.supplierIds);
-    Object.assign(body, recipes.sanitizeRecipeFields(body));
-    if (body.menuId != null) Object.assign(body, await supplyFieldsFor(body.menuId, req.tenantId));
     const updated = await db.UpdateFood(req.params.id, body, req.tenantId);
     if (!updated) return res.status(404).send('Producto no encontrado');
     return res.status(200).json(updated);

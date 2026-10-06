@@ -2,7 +2,6 @@ const db = require('../database/mongodb');
 const { normalizeOrder, orderStatuses, paymentMethods, newToken } = require('../models/order.model');
 const { storeDayRange } = require('../utils/store-time');
 const pointCharges = require('../services/point.charges.service');
-const recipes = require('../services/recipe.service');
 
 /**
  * Rango de un reporte. Un día «AAAA-MM-DD» se toma en la zona de la tienda
@@ -107,10 +106,6 @@ async function withUnitCosts(items, tenantId) {
   return Promise.all(
     items.map(async (item) => {
       if (item.unitCost != null) return item;
-      if (item.recipe) {
-        const cost = await recipes.unitCostFor(item, tenantId).catch(() => null);
-        return { ...item, unitCost: cost == null ? 0 : cost };
-      }
       const foodId = item.foodId || item.food;
       const food = foodId ? await db.GetFoodById(foodId, tenantId) : null;
       return { ...item, unitCost: Math.max(0, Number(food?.cost) || 0) };
@@ -166,43 +161,29 @@ async function settlePayment(req, existing, body, { requireCash = true, paidAt }
   }
 
   let stockShortages = [];
-  let consumption = null;
-  // Las bebidas con receta siempre descuentan sus insumos (cafetería), aunque el inventario general esté apagado
-  const hasRecipe = (existing.items || []).some((item) => item.recipe);
-  const appliesInventory = (Boolean(settings?.inventoryEnabled) || hasRecipe) && !existing.inventoryApplied;
-  if (appliesInventory) {
-    const inventoryOn = Boolean(settings?.inventoryEnabled);
-    // Una venta hecha sin internet ya se entregó: se registra aunque falte stock y queda para revisión.
-    // Con el inventario general apagado, los insumos se descuentan pero nunca frenan la venta.
-    const allowNegative = Boolean(settings?.allowNegativeStock) || Boolean(body?.offline) || !inventoryOn;
-    // Productos normales salen tal cual; las bebidas, como sus insumos (receta × tamaño, con extras).
-    // Sin inventario general, solo se descuentan los insumos.
-    const lines = (await recipes.consumptionFor(existing.items || [], req.tenantId)).filter(
-      (line) => inventoryOn || line.fromRecipe
-    );
-    const reserved = await db.ReserveSaleStock(lines, req.tenantId, { allowNegative });
+  if (settings?.inventoryEnabled && !existing.inventoryApplied) {
+    // Una venta hecha sin internet ya se entregó: se registra aunque falte stock y queda para revisión
+    const allowNegative = Boolean(settings.allowNegativeStock) || Boolean(body?.offline);
+    const reserved = await db.ReserveSaleStock(existing.items || [], req.tenantId, { allowNegative });
     stockShortages = reserved.shortages;
 
-    consumption = [];
-    for (const line of lines) {
+    const nextItems = [];
+    for (const item of existing.items || []) {
+      const foodId = item.foodId || item.food;
+      const qty = Number(item.quantity) || 0;
+      if (!foodId || !qty) {
+        nextItems.push(item);
+        continue;
+      }
       try {
-        const allocations = await db.ConsumeSaleLots(line.foodId, line.quantity, req.tenantId);
-        consumption.push({ foodId: line.foodId, name: line.name, quantity: line.quantity, lotAllocations: allocations });
+        const allocations = await db.ConsumeSaleLots(foodId, qty, req.tenantId);
+        nextItems.push({ ...item, lotAllocations: allocations });
       } catch (e) {
-        console.warn('No se pudieron descontar lotes:', line.foodId, e.message);
-        consumption.push({ foodId: line.foodId, name: line.name, quantity: line.quantity, lotAllocations: [] });
+        console.warn('No se pudieron descontar lotes:', foodId, e.message);
+        nextItems.push(item);
       }
     }
-  }
-
-  // Cafetería: la venta con bebidas lleva número de pedido del día y a nombre de quién; sale en el ticket
-  // para que quien prepara sepa qué hacer y a quién entregarlo
-  let prep = existing.prep || null;
-  if (!prep && (existing.items || []).some((item) => item.prep)) {
-    prep = {
-      number: await db.NextPrepNumber(req.tenantId),
-      customerName: String(body?.customerName || '').trim().slice(0, 40),
-    };
+    existing = { ...existing, items: nextItems };
   }
 
   const takesCash = method === 'cash' || method === 'split';
@@ -233,9 +214,7 @@ async function settlePayment(req, existing, body, { requireCash = true, paidAt }
       change: change > 0 ? change : 0,
       paymentReference: paymentReference || null,
       pointChargeId,
-      inventoryApplied: appliesInventory || Boolean(existing.inventoryApplied),
-      ...(consumption ? { consumption } : {}),
-      ...(prep ? { prep } : {}),
+      inventoryApplied: Boolean(settings?.inventoryEnabled),
       stockReview: stockShortages.length > 0,
       stockShortages,
       items: await withUnitCosts(existing.items || [], req.tenantId),
@@ -293,13 +272,6 @@ async function sale(req, res) {
           price: Number(f.price || 0),
           quantity: Number(f.quantity || 1),
         }));
-      }
-      // Bebidas con receta: precio, tamaño y extras los pone el servidor
-      try {
-        body.items = await recipes.priceItems(body.items, req.tenantId);
-      } catch (err) {
-        if (err instanceof recipes.RecipeError) return res.status(err.status).send(err.message);
-        throw err;
       }
       const payload = normalizeOrder(body);
       payload.tenantId = req.tenantId;
@@ -405,16 +377,7 @@ async function voidSale(req, res) {
       }
     }
 
-    if (existing.inventoryApplied && Array.isArray(existing.consumption)) {
-      // Se regresa exactamente lo que salió (insumos de las bebidas incluidos)
-      for (const line of existing.consumption) {
-        try {
-          await db.RestoreSaleStock(line.foodId, line.quantity, line.lotAllocations || [], req.tenantId);
-        } catch (e) {
-          console.warn('No se pudo regresar stock:', line.foodId, e.message);
-        }
-      }
-    } else if (existing.inventoryApplied) {
+    if (existing.inventoryApplied) {
       for (const item of existing.items || []) {
         const foodId = item.foodId || item.food;
         if (!foodId) continue;
@@ -455,8 +418,7 @@ async function voidSale(req, res) {
   }
 }
 
-module.exports = {
-  list, getById, create, updateStatus, pay, sale, markInvoiceIssued, voidSale, report, reportSummary };
+module.exports = { list, getById, create, updateStatus, pay, sale, markInvoiceIssued, voidSale, report, reportSummary };
 
 async function report(req, res) {
   try {

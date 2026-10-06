@@ -232,23 +232,6 @@ async function GetSettingsMany(tenantIds) {
   return new Map(rows.map((row) => [String(row.tenantId), row]));
 }
 
-/** Número de pedido de cafetería que sale en el ticket: reinicia cada día, atómico entre cajas. */
-async function NextPrepNumber(tenantId, timeZone = 'America/Mexico_City') {
-  let day;
-  try {
-    day = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
-  } catch {
-    day = new Date().toISOString().slice(0, 10);
-  }
-  const r = await dbConnection.collection('counters').findOneAndUpdate(
-    { _id: `prep:${tenantId}:${day}` },
-    { $inc: { seq: 1 }, $setOnInsert: { createdAt: new Date() } },
-    { upsert: true, returnDocument: 'after' }
-  );
-  const doc = r && Object.prototype.hasOwnProperty.call(r, 'value') ? r.value : r;
-  return Number(doc?.seq) || 1;
-}
-
 /** Estado compartido entre instancias (p. ej. cuándo se leyó la bandeja por última vez). */
 function appState() {
   return dbConnection.collection('app_state');
@@ -417,14 +400,6 @@ async function GetMenus(tenantId) {
   const filter = tenantId ? { tenantId } : {};
   return (await dbConnection.collection('menus').find(filter).toArray()).map(withId);
 }
-/** La categoría sin sus productos (para saber si es de insumos). */
-async function GetMenuLite(id, tenantId) {
-  const filter = oidFilter(id, tenantId);
-  if (!filter) return null;
-  const menu = await dbConnection.collection('menus').findOne(filter);
-  return menu ? withId(menu) : null;
-}
-
 async function GetMenuById(id, tenantId) {
   const filter = oidFilter(id, tenantId);
   if (!filter) return null;
@@ -1322,7 +1297,7 @@ module.exports = {
   GetSettings, CreateSettings, UpdateSettings,
   GetMenus, GetMenuById, CreateMenu, UpdateMenu, DeleteMenu,
   GetFoods, CountFoods, CountPaidOrders, CountCashSessions, GetFoodById, GetFoodByBarcode, CreateFood, UpdateFood, ReserveSaleStock, ConsumeSaleLots, RestoreSaleStock, IncrementFoodStock, DeleteFood, GetLowStockFoods, SearchFoods,
-  CreateBillingEvent, ListBillingEvents, getCollection, ListUsersByTenants, GetSettingsMany, appState, NextPrepNumber, GetMenuLite,
+  CreateBillingEvent, ListBillingEvents, getCollection, ListUsersByTenants, GetSettingsMany, appState,
   RecordLoginFailure, ClearLoginFailures, FindUserById, BumpUserTokenVersion, CountActiveAdmins, FindUserInTenant,
   CreateSession, FindSessionByHash, RevokeSession, RevokeUserSessions,
   GetOrders, GetOrderById, GetOrderByInvoiceToken, GetOrderByClientSaleId, CreateOrder, UpdateOrder, DeleteOrder, GetOrdersByCashSession,

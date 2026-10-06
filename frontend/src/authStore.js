@@ -139,7 +139,6 @@ export const routeRoles = {
   printOffline: ["admin", "cashier"],
   printCash: ["admin", "cashier"],
   customers: ["admin", "cashier"],
-  recipes: ["admin"],
   inventory: ["admin", "cashier"],
 };
 

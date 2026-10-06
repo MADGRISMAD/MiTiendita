@@ -84,7 +84,6 @@ export function folioOf(id) {
 export function closingLine(businessType) {
   if (businessType === "pharmacy") return "¡Que se mejore pronto!";
   if (businessType === "hardware") return "¡Gracias por su preferencia!";
-  if (businessType === "cafe") return "¡Gracias! Disfruta tu bebida.";
   if (businessType === "abarrotes" || businessType === "convenience") return "¡Gracias, vecino! Vuelva pronto.";
   return "¡Gracias por su compra!";
 }
@@ -102,7 +101,7 @@ export const BUSINESS_TYPE_LABEL = {
   hardware: "Ferretería",
   other: "Comercio",
   restaurant: "Restaurante",
-  cafe: "Cafetería",
+  cafe: "Café",
   bar: "Bar",
   hotel: "Hotel",
 };
