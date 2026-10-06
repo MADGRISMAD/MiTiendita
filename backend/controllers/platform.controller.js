@@ -13,6 +13,7 @@ const referrals = require('../services/referral.service');
 const partners = require('../services/partner.service');
 const promoSvc = require('../services/promo.service');
 const refTiers = require('../services/referral.tiers');
+const { isPermanentAdmin } = require('../configurations/platform-owners');
 
 const SHORT_MONTHS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 
@@ -656,6 +657,7 @@ function publicStaff(user) {
     createdAt: user.createdAt || null,
     lastLoginAt: user.lastLoginAt || null,
     mfaEnabled: Boolean(user.mfaEnabled),
+    permanent: isPermanentAdmin(user),
   };
 }
 
@@ -732,6 +734,9 @@ async function deleteStaff(req, res) {
     if (!target) return res.status(404).send('No encontré a esa persona.');
     if (target.username === req.user.username) {
       return res.status(400).send('No puedes quitarte a ti mismo.');
+    }
+    if (isPermanentAdmin(target)) {
+      return res.status(403).send('Es un admin permanente: no se puede quitar.');
     }
     if (target.role === 'platform_admin') {
       const admins = await db.CountPlatformAdmins();

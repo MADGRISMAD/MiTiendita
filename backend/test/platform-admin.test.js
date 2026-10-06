@@ -342,3 +342,22 @@ test('quitar a alguien del equipo y anotar gastos también se audita', async () 
     close();
   }
 });
+
+test('equipo: los admins permanentes no se pueden quitar; los demás admins sí', async () => {
+  const { call, db, close } = await start();
+  try {
+    db.users.push(
+      { _id: 'p1', username: 'mad', email: 'MadGrisMad@gmail.com', role: 'platform_admin', name: 'Mad', lastName: 'Admin', tokenVersion: 0 },
+      { _id: 'a2', username: 'nuevo', email: 'nuevo@mitiendita.mx', role: 'platform_admin', name: 'Nuevo', lastName: 'Admin', tokenVersion: 0 }
+    );
+    const staff = (await call('GET', '/platform/staff', 'admin')).json;
+    assert.equal(staff.find((p) => p.username === 'mad').permanent, true);
+    assert.equal(staff.find((p) => p.username === 'nuevo').permanent, false);
+
+    assert.equal((await call('DELETE', '/platform/staff/p1', 'admin')).status, 403);
+    assert.ok(db.users.find((u) => u._id === 'p1'), 'sigue en el equipo');
+    assert.equal((await call('DELETE', '/platform/staff/a2', 'admin')).status, 200);
+  } finally {
+    close();
+  }
+});

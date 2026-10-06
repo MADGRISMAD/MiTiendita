@@ -36,7 +36,10 @@
                   </span>
                 </div>
               </td>
-              <td><span class="adm-pill" :class="p.role === 'platform_admin' ? 'info' : ''">{{ p.roleName }}</span></td>
+              <td>
+                <span class="adm-pill" :class="p.role === 'platform_admin' ? 'info' : ''">{{ p.roleName }}</span>
+                <span v-if="p.permanent" class="adm-pill good" style="margin-left: 0.4rem" title="No se puede quitar del equipo">Permanente</span>
+              </td>
               <td>
                 <span v-if="p.mfaEnabled" class="adm-pill good">Activa</span>
                 <span v-else class="adm-pill warn" title="Tiene que activarla la próxima vez que entre">Pendiente</span>
@@ -47,7 +50,7 @@
                   <button type="button" class="adm-btn sm" :disabled="busy === p.id || !p.mfaEnabled" @click="resetMfa(p)">
                     {{ confirm === `mfa${p.id}` ? "¿Restablecer?" : "Restablecer 2FA" }}
                   </button>
-                  <button type="button" class="adm-btn sm danger-ghost" :disabled="busy === p.id" @click="remove(p)">
+                  <button v-if="!p.permanent" type="button" class="adm-btn sm danger-ghost" :disabled="busy === p.id" @click="remove(p)">
                     {{ confirm === `del${p.id}` ? "¿Quitar?" : "Quitar" }}
                   </button>
                 </div>

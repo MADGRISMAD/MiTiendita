@@ -1,7 +1,8 @@
 /**
- * Crea o actualiza el usuario platform_admin de Mi Tiendita.
+ * Crea un platform_admin de Mi Tiendita, o actualiza al que tenga ese correo o usuario.
  * Uso:
- *   PLATFORM_ADMIN_EMAIL=ops@timber.com PLATFORM_ADMIN_PASSWORD='una frase larga y tuya' node scripts/create-platform-admin.js
+ *   PLATFORM_ADMIN_EMAIL=ops@timber.com PLATFORM_ADMIN_USERNAME=ops PLATFORM_ADMIN_PASSWORD='una frase larga y tuya' \
+ *   PLATFORM_ADMIN_NAME=Ana PLATFORM_ADMIN_LASTNAME=López node scripts/create-platform-admin.js
  * La contraseña es obligatoria y sigue la misma regla que la app (10+ caracteres, no de las más usadas).
  * Al entrar por primera vez la app pide activar la verificación en dos pasos.
  */
@@ -30,12 +31,12 @@ async function main() {
 
   const hashed = await bcrypt.hash(password, 10);
   const existing = await users.findOne({
-    $or: [{ email }, { username }, { role: 'platform_admin' }],
+    $or: [{ email }, { username }],
   });
 
   const doc = {
-    name: 'Mi Tiendita',
-    lastName: 'Platform',
+    name: process.env.PLATFORM_ADMIN_NAME || 'Mi Tiendita',
+    lastName: process.env.PLATFORM_ADMIN_LASTNAME || 'Platform',
     email,
     username,
     password: hashed,
