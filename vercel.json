@@ -52,21 +52,12 @@
           "destination": "/index.html"
         }
       ]
-    },
-    "backend": {
-      "root": "backend/",
-      "framework": "express",
-      "entrypoint": "app.js",
-      "installCommand": "npm install",
-      "buildCommand": "echo skip"
     }
   },
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": {
-        "service": "backend"
-      }
+      "destination": "https://api.mitiendita.software/api/$1"
     },
     {
       "source": "/(.*)",

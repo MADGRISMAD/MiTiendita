@@ -1,0 +1,71 @@
+name: Deploy backend al VPS
+
+# El frontend lo publica Vercel (deploy.yml); el backend y MongoDB viven en el VPS.
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "backend/**"
+      - "Dockerfile.backend"
+      - "docker-compose.yml"
+      - ".github/workflows/deploy-backend.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-backend
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      HOST: ubuntu@15.235.62.27
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20.x"
+          cache: npm
+
+      # Si las pruebas fallan no se publica nada.
+      - name: Pruebas del backend
+        run: |
+          npm install
+          npm test --workspace backend
+
+      - name: Llave SSH
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+      # Los .env viven solo en el servidor: no se tocan.
+      - name: Subir código
+        run: rsync -az --delete --exclude .env --exclude .git --exclude node_modules ./ "$HOST:~/mitiendita/"
+
+      # Solo mongo y api: el frontend está en Vercel y Caddy atiende el HTTPS.
+      - name: Reconstruir y arrancar
+        run: ssh "$HOST" 'cd ~/mitiendita && docker compose up -d --build mongo api && docker image prune -f'
+
+      # Sin sesión, /settings responde 401 si la API está viva (502 si Caddy no la alcanza).
+      - name: Comprobar que responde
+        run: |
+          for i in $(seq 10); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' https://api.mitiendita.software/settings)
+            [ "$code" = 401 ] && exit 0
+            sleep 3
+          done
+          echo "La API respondió $code"; exit 1
