@@ -5,6 +5,8 @@ ENV VITE_API_URL=$VITE_API_URL
 COPY frontend/package.json ./
 RUN npm install
 COPY frontend/ ./
+# El build comprueba que vercel.json tenga cada página pública (lo lee como ../vercel.json).
+COPY vercel.json /vercel.json
 RUN npm run build
 
 FROM nginx:1.27-alpine
