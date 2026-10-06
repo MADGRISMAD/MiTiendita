@@ -1,0 +1,123 @@
+name: Backend en el VPS
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - "Dockerfile.backend"
+      - "deploy/**"
+      - "package-lock.json"
+      - ".github/workflows/backend-vps.yml"
+  pull_request:
+    paths:
+      - "backend/**"
+      - "Dockerfile.backend"
+      - "deploy/**"
+  workflow_dispatch:
+
+concurrency:
+  group: backend-vps-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Pruebas contra un PostgreSQL de verdad, y la API completa con la prueba de humo
+  test:
+    name: Pruebas (Node + PostgreSQL)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.x"
+          cache: npm
+      - run: npm ci
+      - name: Pruebas del backend
+        run: npm test --workspace backend
+      - name: Prueba de humo (API real sobre PostgreSQL)
+        working-directory: backend
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+          DATABASE_SCHEMA: smoke
+          PORT: 8081
+          SECRET_KEY: clave-solo-para-la-prueba-de-humo-0123456789
+          PLATFORM_ADMIN_EMAIL: ops@example.com
+          PLATFORM_ADMIN_PASSWORD: Plataforma-Prueba-Segura-2026
+        run: |
+          node scripts/create-platform-admin.js
+          node app.js > api.log 2>&1 &
+          for i in $(seq 1 40); do curl -fsS localhost:8081/health && break; sleep 0.5; done
+          API_URL=http://localhost:8081 node scripts/smoke-pg.js || (cat api.log; exit 1)
+
+  docker:
+    name: Imagen Docker
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: docker build --file Dockerfile.backend --tag timberpos-api:ci .
+
+  # Igual que MiColmena: sube el código por rsync y reconstruye con docker compose
+  deploy:
+    name: Publicar en el VPS
+    needs: [test, docker]
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      HOST: ${{ vars.VPS_HOST || 'ubuntu@15.235.62.27' }}
+      HEALTH_URL: ${{ vars.API_HEALTH_URL || 'https://vps-c435342e.vps.ovh.ca/tpos/health' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Llave SSH
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          if [ -z "$VPS_SSH_KEY" ] || [ -z "$VPS_KNOWN_HOSTS" ]; then
+            echo "::error::Faltan los secretos VPS_SSH_KEY y VPS_KNOWN_HOSTS (los mismos que en MiColmena)."
+            exit 1
+          fi
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+      # El .env (secretos) vive solo en el servidor: no se toca
+      - name: Subir código
+        run: |
+          ssh "$HOST" 'mkdir -p ~/timberpos'
+          rsync -az --delete --exclude .env --exclude node_modules --exclude 'backend/.env' \
+            backend Dockerfile.backend "$HOST:~/timberpos/"
+          rsync -az deploy/docker-compose.vps.yml deploy/setup-db.sh deploy/backup-postgres.sh deploy/vps.env.example "$HOST:~/timberpos/"
+
+      - name: Reconstruir y arrancar
+        run: ssh "$HOST" 'cd ~/timberpos && test -f .env && docker compose -f docker-compose.vps.yml up -d --build && docker image prune -f'
+
+      - name: Comprobar que responde
+        run: curl -fsS --retry 10 --retry-delay 3 --retry-all-errors "$HEALTH_URL"

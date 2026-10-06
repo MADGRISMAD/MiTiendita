@@ -1,6 +1,6 @@
 /**
  * Límite de peticiones por ventana fija.
- * El conteo vive en MongoDB (colección rate_limits con TTL) para que valga entre varias
+ * El conteo vive en la base (tabla rate_limits con vencimiento) para que valga entre varias
  * instancias o funciones serverless; si la base falla, usa memoria y no bloquea a nadie por error.
  */
 
@@ -18,7 +18,7 @@ function memoryStore() {
   };
 }
 
-function mongoStore(getCollection) {
+function sharedStore(getCollection) {
   let indexed = false;
   return {
     async hit(id, expiresAt) {
@@ -80,8 +80,8 @@ let shared = null;
 function defaultStore() {
   if (!shared) {
     // Se carga tarde para no abrir la base al importar (pruebas)
-    const db = require('../database/mongodb');
-    shared = mongoStore(() => db.getCollection?.('rate_limits'));
+    const db = require('../database/db');
+    shared = sharedStore(() => db.getCollection?.('rate_limits'));
   }
   return shared;
 }
@@ -107,4 +107,4 @@ const limits = {
   publicWrite: () => rateLimit({ name: 'public-write', windowMs: HOUR, max: 15 }),
 };
 
-module.exports = { rateLimit, memoryStore, mongoStore, limits };
+module.exports = { rateLimit, memoryStore, sharedStore, limits };

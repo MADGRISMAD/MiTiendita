@@ -7,7 +7,7 @@ const {
   isOutsideTenant,
   isSubscriptionActive,
 } = require('../models/tenant.model');
-const db = require('../database/mongodb');
+const db = require('../database/db');
 const sessions = require('../services/session.service');
 
 /**

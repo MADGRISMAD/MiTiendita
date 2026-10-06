@@ -34,7 +34,7 @@ const stub = (rel, exports) => {
   const p = require.resolve(rel);
   require.cache[p] = { id: p, filename: p, loaded: true, exports };
 };
-stub('../database/mongodb', {
+stub('../database/db', {
   async FindUserByUsername(u) {
     return users.find((x) => x.username === u) || null;
   },

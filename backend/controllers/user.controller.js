@@ -2,7 +2,7 @@ const schema = require('../models/usuario.model');
 const service = require('../services/usuario.service');
 const hasher = require('../utils/bcrypt.utils');
 const jwtCreator = require('../utils/jwt.utils');
-const db = require('../database/mongodb');
+const db = require('../database/db');
 const { createTenantDoc, newResetToken, ROLES, TRIAL_DAYS, isPartnerRole, isOutsideTenant } = require('../models/tenant.model');
 const {
   sendPasswordResetEmail,

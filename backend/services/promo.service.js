@@ -9,7 +9,7 @@
  * El precio normal se pone al terminar el 3er cobro (aviso de Mercado Pago) o, si ese aviso no llega,
  * por tiempo: unos días después de la fecha del 3er cobro, antes del 4º.
  */
-const db = require('../database/mongodb');
+const db = require('../database/db');
 const mp = require('./mercadopago.service');
 const { PROMO, promoPrice, PLANS, planPrice, isPerpetual } = require('./plans.catalog');
 

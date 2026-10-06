@@ -14,7 +14,7 @@ const stub = (rel, exports) => {
   const p = require.resolve(rel);
   require.cache[p] = { id: p, filename: p, loaded: true, exports };
 };
-stub('../database/mongodb', {
+stub('../database/db', {
   async UpdateTenant(id, patch) {
     Object.assign(tenants.get(id), patch);
     return { ...tenants.get(id) };

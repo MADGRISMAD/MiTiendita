@@ -1,4 +1,4 @@
-const db = require('../database/mongodb');
+const db = require('../database/db');
 const { normalizeCashSession } = require('../models/cashSession.model');
 
 function summarizeOrders(orders) {

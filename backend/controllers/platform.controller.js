@@ -1,4 +1,4 @@
-const db = require('../database/mongodb');
+const db = require('../database/db');
 const { passwordProblem } = require('../utils/password-policy');
 const { PLANS, BILLING_STATUSES, trialEndsFrom } = require('../models/tenant.model');
 const { planAiQuota, planPrice, PLAN_CATALOG, isPerpetual, hasAiFeatures } = require('../services/plans.catalog');

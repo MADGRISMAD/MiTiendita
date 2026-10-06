@@ -6,7 +6,7 @@
  * - Un mismo cobro nunca paga dos veces (clave única) y los registros pagados no se tocan.
  */
 const crypto = require('crypto');
-const { ObjectId } = require('mongodb');
+const { ObjectId } = require('../utils/objectid');
 const refDb = require('../database/referral.db');
 const tiers = require('./referral.tiers');
 

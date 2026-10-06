@@ -1,4 +1,4 @@
-const { ObjectId } = require('mongodb');
+const { ObjectId } = require('../utils/objectid');
 const crypto = require('crypto');
 
 const { ALL_PLANS } = require('../services/plans.catalog');

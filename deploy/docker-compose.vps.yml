@@ -1,0 +1,33 @@
+# API de Mi Tiendita en el VPS, junto a MiColmena.
+# Usa la MISMA base PostgreSQL de MiColmena (servicio `db`), con su propio usuario y esquema `timberpos`:
+# sus tablas no se mezclan con las de MiColmena.
+#
+#   cd ~/timberpos && docker compose -f docker-compose.vps.yml up -d --build
+#
+# El .env (secretos) vive solo en el servidor, en ~/timberpos/.env. Ver deploy/vps.env.example.
+name: timberpos
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      PORT: 8081
+      DATABASE_SCHEMA: ${DATABASE_SCHEMA:-timberpos}
+      # Las peticiones llegan por Vercel → Caddy: la IP real del cliente viene en estas cabeceras
+      CLIENT_IP_HEADERS: x-vercel-forwarded-for,x-real-ip
+    networks:
+      - micolmena
+    ports:
+      # Solo local: desde internet se entra por Caddy (HTTPS)
+      - "127.0.0.1:8081:8081"
+
+networks:
+  # Red de docker compose de MiColmena (~/micolmena): ahí vive la base `db`
+  micolmena:
+    external: true
+    name: ${MICOLMENA_NETWORK:-micolmena_default}

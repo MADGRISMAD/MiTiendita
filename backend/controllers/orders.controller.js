@@ -1,4 +1,4 @@
-const db = require('../database/mongodb');
+const db = require('../database/db');
 const { normalizeOrder, orderStatuses, paymentMethods, newToken } = require('../models/order.model');
 const { storeDayRange } = require('../utils/store-time');
 const pointCharges = require('../services/point.charges.service');

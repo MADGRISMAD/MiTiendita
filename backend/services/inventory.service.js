@@ -1,6 +1,6 @@
-const { ObjectId } = require('mongodb');
+const { ObjectId } = require('../utils/objectid');
 const { roundQty } = require('../utils/units');
-const db = require('../database/mongodb');
+const db = require('../database/db');
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const SUGGEST_SALES_DAYS = 14;

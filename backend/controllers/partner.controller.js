@@ -1,5 +1,5 @@
 const partners = require('../services/partner.service');
-const db = require('../database/mongodb');
+const db = require('../database/db');
 
 function fail(res, err) {
   if (err instanceof partners.PartnerError) return res.status(err.status).send(err.message);

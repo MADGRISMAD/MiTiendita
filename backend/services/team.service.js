@@ -8,7 +8,7 @@
  * - Nadie toca cuentas de otra tienda ni su propia cuenta.
  * - Cada cambio queda en la bitácora (activity_log).
  */
-const db = require('../database/mongodb');
+const db = require('../database/db');
 const sessions = require('./session.service');
 const limits = require('./plan-limits.service');
 const { TENANT_ROLES, normalizeRole, isPlatformStaff } = require('../models/tenant.model');

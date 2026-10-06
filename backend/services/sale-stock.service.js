@@ -42,7 +42,7 @@ function shortageMessage(shortages) {
 }
 
 /**
- * @param foods colección de productos (MongoDB)
+ * @param foods colección de productos
  * @param filterFor (id) => filtro del producto en su tienda, o null si el id no es válido
  * @returns {{ applied: Array<{foodId, quantity}>, shortages: Array<{foodId, name, requested, available}> }}
  */

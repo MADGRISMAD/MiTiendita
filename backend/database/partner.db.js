@@ -2,15 +2,15 @@
  * Datos del portal de socios: sus cuentas (users con partnerId), notas de seguimiento por tienda
  * y a quién del equipo del socio le toca cada tienda.
  */
-const { ObjectId } = require('mongodb');
-const mongo = require('./mongodb');
+const { ObjectId } = require('../utils/objectid');
+const db = require('./db');
 const { PARTNER_ROLES } = require('../models/tenant.model');
 
 const oid = (id) => (ObjectId.isValid(String(id)) && String(new ObjectId(String(id))) === String(id) ? new ObjectId(String(id)) : null);
 
 async function col(name) {
-  await mongo.ensureConnection();
-  return mongo.getCollection(name);
+  await db.ensureConnection();
+  return db.getCollection(name);
 }
 
 function publicUser(u) {

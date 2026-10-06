@@ -6,11 +6,9 @@
  * Al entrar por primera vez la app pide activar la verificación en dos pasos.
  */
 require('dotenv').config();
-const { MongoClient } = require('mongodb');
 const bcrypt = require('bcryptjs');
+const { openStore } = require('./_store');
 
-const uri = process.env.DATABASE_URI || 'mongodb://127.0.0.1:27017';
-const dbName = process.env.DATABASE_NAME || 'timber';
 const email = (process.env.PLATFORM_ADMIN_EMAIL || 'platform@timber.com').toLowerCase();
 const { passwordProblem } = require('../utils/password-policy');
 
@@ -23,9 +21,7 @@ async function main() {
     console.error(`PLATFORM_ADMIN_PASSWORD: ${weak}`);
     process.exit(1);
   }
-  const client = new MongoClient(uri);
-  await client.connect();
-  const db = client.db(dbName);
+  const db = await openStore();
   const users = db.collection('users');
 
   const hashed = await bcrypt.hash(password, 10);
@@ -57,7 +53,7 @@ async function main() {
   }
 
   console.log(`Password: ${password}`);
-  await client.close();
+  await db.close();
 }
 
 main().catch((err) => {

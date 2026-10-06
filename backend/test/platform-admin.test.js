@@ -157,7 +157,7 @@ function platformDb() {
 
 async function start() {
   const db = platformDb();
-  const file = require.resolve(path.join(root, 'database/mongodb.js'));
+  const file = require.resolve(path.join(root, 'database/db.js'));
   require.cache[file] = { id: file, filename: file, loaded: true, exports: db };
   for (const key of Object.keys(require.cache)) {
     if (/\/(services\/(session|support-mail|platform-audit|plan-limits|rate-limit)|controllers\/platform|middleware\/auth|routers\/platform)/.test(key)) {

@@ -2,7 +2,7 @@
 
 POS para **tiendas de abarrotes** y comercios de barrio. Multi-tenant, caja, catálogo e impresión de tickets.
 
-Stack: Vue.js (frontend), Express.js (backend) y MongoDB.
+Stack: Vue.js (frontend, en Vercel), Express.js (backend, en el VPS) y PostgreSQL 16 (en el VPS, la misma base de MiColmena con su propio esquema).
 
 ## Correr en local
 ```bash
@@ -13,7 +13,7 @@ npm run dev
 - Frontend: http://localhost:5173  
 - API: http://localhost:8081  
 
-Copia `backend/.env.example` → `backend/.env`.
+Copia `backend/.env.example` → `backend/.env`. Necesitas un PostgreSQL: `docker compose up -d db` levanta uno con los datos de `.env.example`.
 
 ## Flujo de la tienda
 1. **Vender** (`/pos`) — buscador/escáner + categorías → ticket → *Cobrar* (ver abajo)
@@ -93,7 +93,7 @@ cd backend && npm run seed:platform-admin
 - Se retiraron de la API las rutas de restaurante (`/mesas`, `/tables`, lista de espera) y `GET /usuarios/find`, que devolvía la cuenta completa (con hash de contraseña) de cualquier correo, también de otras tiendas. «Personal y turnos» (`/waiters`) sigue.
 - **Bloqueo**: 5 intentos fallidos (contraseña o código) bloquean la cuenta 15 min.
 - **Verificación en dos pasos (TOTP)**: opcional en *Configuración → Mi cuenta*; obligatoria para `platform_admin` y `platform_support` (al entrar se les pide activarla con un QR). Da 8 códigos de respaldo de un solo uso. El secreto se guarda cifrado (`MFA_ENCRYPTION_KEY` o `SECRET_KEY`).
-- **Límites de peticiones** por IP, guardados en MongoDB (`rate_limits`, con TTL) para que valgan entre instancias/serverless: global, login, registro, recuperar contraseña, 2FA, refresh y rutas públicas (factura, invitaciones).
+- **Límites de peticiones** por IP, guardados en la base (`rate_limits`, con vencimiento) para que valgan entre instancias/serverless: global, login, registro, recuperar contraseña, 2FA, refresh y rutas públicas (factura, invitaciones).
 - **Cabeceras de seguridad** (equivalentes a helmet) en todas las respuestas de la API.
 
 ## Terminal de cobro Mercado Pago (Point)
@@ -159,10 +159,49 @@ Tres áreas separadas, cada una con sus propios roles:
 
 Los precios están **escritos en el código**, no en variables de entorno (las `MP_PLAN_*_PRICE` ya no se usan; si quedaron en Vercel se ignoran). Para cambiarlos edita `backend/services/plans.catalog.js` y `frontend/src/seo/site.mjs` (`PRICES`); una prueba falla si no coinciden. La landing, Facturación, el simulador de proveedores y el SEO se actualizan solos.
 
-## Docker
+## Docker (local)
 ```bash
 docker compose up --build -d
 ```
+Levanta PostgreSQL, la API y la web.
+
+## Base de datos (PostgreSQL)
+
+- Cada colección es una tabla `(_id text, doc jsonb)` en el esquema `timberpos` (`DATABASE_SCHEMA`). Así comparte la base de MiColmena sin mezclar tablas, y el usuario `timberpos` no puede ver las de MiColmena.
+- `backend/database/pg-store.js` traduce las consultas del backend (filtros, `$set`, `$inc`, upserts, `findOneAndUpdate`, índices, vencimientos) a SQL. Las escrituras corren en transacción con `FOR UPDATE`: el descuento de existencias es atómico.
+- Fechas como `{"$date": "ISO"}` e ids de 24 caracteres hex (los mismos que había en Mongo).
+- Pruebas contra un PostgreSQL real: `TEST_DATABASE_URL=postgres://… npm test --workspace backend`. Prueba de humo de la API completa: `API_URL=http://localhost:8081 node backend/scripts/smoke-pg.js`.
+- Copiar los datos desde Mongo Atlas: `backend/scripts/migrate-from-mongo.js` (ver pasos abajo).
+
+## Servidor propio (VPS) — igual que MiColmena
+
+Vercel solo sirve el **frontend**. `vercel.json` manda `/api/*` a `https://vps-c435342e.vps.ovh.ca/tpos/*`. Ahí Caddy lo pasa a la API (`127.0.0.1:8081`), que corre en docker y usa la base `db` de MiColmena (red `micolmena_default`). Al pasar por Vercel la sesión (cookie) sigue siendo del mismo dominio. La IP real del cliente para los límites llega en `x-vercel-forwarded-for`.
+
+Archivos: `Dockerfile.backend`, `deploy/docker-compose.vps.yml`, `deploy/setup-db.sh`, `deploy/backup-postgres.sh`, `deploy/Caddyfile.snippet`, `deploy/vps.env.example` y `.github/workflows/backend-vps.yml`. Cada push a `main` corre las pruebas con PostgreSQL y publica en el VPS por rsync + `docker compose up -d --build`, como MiColmena.
+
+**Puesta en marcha (una sola vez):**
+
+1. **GitHub → timberPOS → Settings → Secrets → Actions**: agrega `VPS_SSH_KEY` y `VPS_KNOWN_HOSTS` (los mismos de MiColmena).
+2. **En el VPS**, crea el usuario y el esquema en la base de MiColmena:
+   ```bash
+   mkdir -p ~/timberpos && cd ~/timberpos
+   # copia aquí deploy/setup-db.sh (o espera al primer deploy, que lo sube)
+   TIMBERPOS_DB_PASSWORD="$(openssl rand -hex 24)" && echo "$TIMBERPOS_DB_PASSWORD"
+   TIMBERPOS_DB_PASSWORD="$TIMBERPOS_DB_PASSWORD" bash setup-db.sh
+   ```
+3. **`~/timberpos/.env`** a partir de `deploy/vps.env.example`. Usa los mismos valores que hoy tiene el backend en Vercel, y `DATABASE_URL=postgres://timberpos:<contraseña>@db:5432/micolmena`. `SECRET_KEY`, `MFA_ENCRYPTION_KEY`, `TOKEN_ENC_KEY` y `OAUTH_STATE_SECRET` deben ser **idénticos** a los de Vercel.
+4. **Caddy**: agrega el bloque de `deploy/Caddyfile.snippet` y `sudo systemctl reload caddy`.
+5. **Primer arranque**: corre el workflow «Backend en el VPS» o haz push a `main`. Comprueba con `curl https://vps-c435342e.vps.ovh.ca/tpos/health` → `{"ok":true,"db":"ok"}`.
+6. **Copiar los datos de Atlas** (con la app en mantenimiento unos minutos para no perder ventas):
+   ```bash
+   cd ~/timberpos
+   docker compose -f docker-compose.vps.yml run --rm -e MONGO_URI='mongodb+srv://…' -e MONGO_DB=timber api node scripts/migrate-from-mongo.js --dry-run
+   docker compose -f docker-compose.vps.yml run --rm -e MONGO_URI='mongodb+srv://…' -e MONGO_DB=timber api node scripts/migrate-from-mongo.js
+   ```
+   Se puede correr varias veces; al final compara los conteos de cada colección.
+7. **Respaldos diarios**: `crontab -e` → `15 3 * * * bash ~/timberpos/backup-postgres.sh >> ~/backups/timberpos.log 2>&1`.
+8. **Mercado Pago**: los webhooks y el OAuth siguen en `https://www.mitiendita.software/api/...`, así que no hay que cambiar nada en el panel de MP.
+9. Cuando todo funcione, borra en Vercel las variables del backend (`DATABASE_URI`, `MP_*`, etc.) y apaga el cluster de Atlas.
 
 ## Notificación del deploy a producción
 

@@ -1,16 +1,16 @@
 /**
  * backend/database/Point.db.js
- * Acceso a datos de la integración Point. Es independiente de tus demás funciones de mongodb.js.
+ * Acceso a datos de la integración Point. Es independiente de tus demás funciones de db.js.
  */
-const { ObjectId } = require('mongodb');
-const mongo = require('./mongodb');
+const { ObjectId } = require('../utils/objectid');
+const db = require('./db');
 
 const TENANTS = 'tenants';
 const CHARGES = 'point_charges';
 
 async function database() {
-  await mongo.ensureConnection();
-  return { collection: (name) => mongo.getCollection(name) };
+  await db.ensureConnection();
+  return { collection: (name) => db.getCollection(name) };
 }
 
 const oid = (id) => (ObjectId.isValid(String(id)) ? new ObjectId(String(id)) : null);
@@ -39,7 +39,7 @@ async function GetTenantById(id) {
 }
 async function UpdateTenant(id, patch) {
   const col = (await database()).collection(TENANTS);
-  // Tenants desvinculados antes quedaron con `point: null`; Mongo no puede escribir 'point.x' dentro de null
+  // Tenants desvinculados antes quedaron con `point: null`: no se puede escribir 'point.x' dentro de null
   if (Object.keys(patch).some((k) => k.startsWith('point.'))) {
     await col.updateOne({ ...idFilter(id), point: null }, { $set: { point: {} } });
   }

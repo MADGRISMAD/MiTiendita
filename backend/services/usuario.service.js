@@ -1,4 +1,4 @@
-const db = require('../database/mongodb');
+const db = require('../database/db');
 
 async function CreateUser(data){
    return await db.CreateUser(data);

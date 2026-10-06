@@ -2,8 +2,8 @@
  * Acceso a datos de vendedores (referidos), sus comisiones y liquidaciones.
  * Colecciones: referrers, referral_commissions, referral_payouts. La tienda guarda referrerId/referralCode.
  */
-const { ObjectId } = require('mongodb');
-const mongo = require('./mongodb');
+const { ObjectId } = require('../utils/objectid');
+const db = require('./db');
 
 const oid = (id) => (ObjectId.isValid(String(id)) ? new ObjectId(String(id)) : null);
 const out = (doc) => (doc ? { ...doc, id: String(doc._id) } : null);
@@ -11,15 +11,15 @@ const unwrap = (r) => (r && Object.prototype.hasOwnProperty.call(r, 'value') ? r
 
 let indexed = false;
 async function col(name) {
-  await mongo.ensureConnection();
+  await db.ensureConnection();
   if (!indexed) {
     indexed = true;
-    mongo.getCollection('referrers').createIndex({ code: 1 }, { unique: true }).catch(() => {});
-    mongo.getCollection('referral_commissions').createIndex({ key: 1 }, { unique: true }).catch(() => {});
-    mongo.getCollection('referral_commissions').createIndex({ referrerId: 1, status: 1, createdAt: -1 }).catch(() => {});
-    mongo.getCollection('tenants').createIndex({ referrerId: 1 }, { sparse: true }).catch(() => {});
+    db.getCollection('referrers').createIndex({ code: 1 }, { unique: true }).catch(() => {});
+    db.getCollection('referral_commissions').createIndex({ key: 1 }, { unique: true }).catch(() => {});
+    db.getCollection('referral_commissions').createIndex({ referrerId: 1, status: 1, createdAt: -1 }).catch(() => {});
+    db.getCollection('tenants').createIndex({ referrerId: 1 }, { sparse: true }).catch(() => {});
   }
-  return mongo.getCollection(name);
+  return db.getCollection(name);
 }
 
 // ───────── Vendedores ─────────

@@ -6,7 +6,7 @@
  * - partner_staff: trabajador del socio. Ve y atiende las tiendas del socio, sin dinero ni equipo.
  * Un socio solo ve las tiendas que llegaron con su código (tenant.referrerId === partnerId).
  */
-const db = require('../database/mongodb');
+const db = require('../database/db');
 const pdb = require('../database/partner.db');
 const refDb = require('../database/referral.db');
 const referrals = require('./referral.service');

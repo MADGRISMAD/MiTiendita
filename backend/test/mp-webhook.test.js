@@ -70,7 +70,7 @@ function loadController() {
     const file = require.resolve(path.join(root, rel));
     require.cache[file] = { id: file, filename: file, loaded: true, exports };
   };
-  stub('database/mongodb.js', dbStub);
+  stub('database/db.js', dbStub);
   stub('services/mercadopago.service.js', mpStub);
   stub('services/plan-limits.service.js', {});
   stub('utils/mail.utils.js', { safeSend: async () => {}, sendPaymentConfirmedEmail: async () => {}, sendSubscriptionCancelledEmail: async () => {} });

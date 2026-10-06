@@ -3,7 +3,7 @@
  * Vive en su propia colección (platform_audit): el dueño de una tienda nunca la ve.
  * Registrar nunca debe romper la acción que se está haciendo.
  */
-const db = require('../database/mongodb');
+const db = require('../database/db');
 
 /**
  * @param req    petición (de ahí sale quién lo hizo)

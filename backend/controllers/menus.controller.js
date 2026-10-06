@@ -1,8 +1,8 @@
-const db = require('../database/mongodb');
+const db = require('../database/db');
 const { roundQty, saleUnitOf } = require('../utils/units');
 const limits = require('../services/plan-limits.service');
 const { seedStarterCatalog, starterProductCount } = require('../services/starter-catalog.service');
-const { ObjectId } = require('mongodb');
+const { ObjectId } = require('../utils/objectid');
 
 function sanitizeSupplierIds(raw) {
   if (!Array.isArray(raw)) return [];

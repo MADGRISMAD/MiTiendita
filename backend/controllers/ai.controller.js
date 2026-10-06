@@ -1,4 +1,4 @@
-const db = require('../database/mongodb');
+const db = require('../database/db');
 const { planAiQuota, hasAiFeatures } = require('../services/plans.catalog');
 const gemini = require('../services/gemini.service');
 const magic = require('../services/magic-inventory.service');

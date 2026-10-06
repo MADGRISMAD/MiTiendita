@@ -1,4 +1,4 @@
-const db = require('../database/mongodb');
+const db = require('../database/db');
 const mp = require('../services/mercadopago.service');
 const limits = require('../services/plan-limits.service');
 const { PUBLIC_PLANS, isSubscriptionActive, trialEndsFrom } = require('../models/tenant.model');

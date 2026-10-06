@@ -30,7 +30,7 @@ const dbStub = {
     return Object.assign(orders.find((o) => o.id === id), patch);
   },
 };
-const mongoPath = require.resolve('../database/mongodb');
+const mongoPath = require.resolve('../database/db');
 require.cache[mongoPath] = { id: mongoPath, filename: mongoPath, loaded: true, exports: dbStub };
 
 const chargesPath = require.resolve('../services/point.charges.service');

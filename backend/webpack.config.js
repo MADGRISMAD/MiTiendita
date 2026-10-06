@@ -10,12 +10,14 @@ module.exports = {
   },
   target: 'node',
   plugins: [
+    // pg intenta cargar su versión nativa opcional; no se usa
+    new webpack.IgnorePlugin({ resourceRegExp: /^pg-native$/ }),
     new webpack.DefinePlugin({
       'process.env': {
         PORT: JSON.stringify(process.env.PORT),
         SECRET_KEY: JSON.stringify(process.env.SECRET_KEY),
-        DATABASE_NAME: JSON.stringify(process.env.DATABASE_NAME),
-        DATABASE_URI: JSON.stringify(process.env.DATABASE_URI),
+        DATABASE_URL: JSON.stringify(process.env.DATABASE_URL),
+        DATABASE_SCHEMA: JSON.stringify(process.env.DATABASE_SCHEMA),
       },
     }),
   ],

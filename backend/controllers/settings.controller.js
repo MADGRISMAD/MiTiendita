@@ -1,5 +1,5 @@
 const settingsSchema = require('../models/settings.model');
-const db = require('../database/mongodb');
+const db = require('../database/db');
 const limits = require('../services/plan-limits.service');
 const { isSubscriptionActive } = require('../models/tenant.model');
 const supportMail = require('../services/support-mail.service');

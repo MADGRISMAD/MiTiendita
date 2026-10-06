@@ -77,7 +77,7 @@ function load(db) {
     const file = require.resolve(path.join(root, rel));
     require.cache[file] = { id: file, filename: file, loaded: true, exports };
   };
-  stub('database/mongodb.js', db);
+  stub('database/db.js', db);
   stub('utils/mail.utils.js', { safeSend: async () => {}, sendPasswordResetEmail: async () => {}, sendWelcomeEmail: async () => {}, hasSmtpConfig: () => false });
   for (const rel of ['services/session.service.js', 'services/usuario.service.js', 'controllers/user.controller.js', 'middleware/auth.middleware.js']) {
     delete require.cache[require.resolve(path.join(root, rel))];

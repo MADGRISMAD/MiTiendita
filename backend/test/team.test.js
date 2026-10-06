@@ -84,7 +84,7 @@ function memoryDb() {
 }
 
 function load(db) {
-  const file = require.resolve(path.join(root, 'database/mongodb.js'));
+  const file = require.resolve(path.join(root, 'database/db.js'));
   require.cache[file] = { id: file, filename: file, loaded: true, exports: db };
   for (const rel of [
     'services/session.service.js',

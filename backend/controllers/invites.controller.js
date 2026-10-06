@@ -1,4 +1,4 @@
-const db = require('../database/mongodb');
+const db = require('../database/db');
 const { passwordProblem } = require('../utils/password-policy');
 const sessions = require('../services/session.service');
 const { newToken } = require('../models/order.model');

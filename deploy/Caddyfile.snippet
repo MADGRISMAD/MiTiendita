@@ -1,0 +1,17 @@
+# Agrega esto DENTRO del bloque de tu dominio en /etc/caddy/Caddyfile (el mismo de MiColmena):
+#
+#   vps-c435342e.vps.ovh.ca {
+#       ... lo que ya tienes de MiColmena ...
+#
+#       handle_path /tpos/* {
+#           reverse_proxy 127.0.0.1:8081
+#       }
+#   }
+#
+# Luego:  sudo systemctl reload caddy
+# Prueba: curl https://vps-c435342e.vps.ovh.ca/tpos/health   →  {"ok":true,"db":"ok"}
+#
+# Vercel manda /api/* de la app a https://vps-c435342e.vps.ovh.ca/tpos/* (ver vercel.json).
+handle_path /tpos/* {
+	reverse_proxy 127.0.0.1:8081
+}

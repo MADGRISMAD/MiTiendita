@@ -1,5 +1,5 @@
 const { planLimits, getPlan } = require('./plans.catalog');
-const db = require('../database/mongodb');
+const db = require('../database/db');
 
 const PLAN_NAMES = { basic: 'Básico', growth: 'Crecimiento', pro: 'Pro', perpetual: 'Perpetua' };
 

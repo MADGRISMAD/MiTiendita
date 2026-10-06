@@ -5,7 +5,7 @@
  * - Cambiar o restablecer la contraseña sube `tokenVersion`: los access tokens viejos dejan de servir.
  */
 const crypto = require('crypto');
-const db = require('../database/mongodb');
+const db = require('../database/db');
 const { generateJWT } = require('../utils/jwt.utils');
 const { normalizeRole } = require('../models/tenant.model');
 

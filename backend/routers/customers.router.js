@@ -1,5 +1,5 @@
 const router = require('express').Router();
-const db = require('../database/mongodb');
+const db = require('../database/db');
 const { requireAuth, requireActiveSubscription, requireRoles } = require('../middleware/auth.middleware');
 
 // Listar clientes (con búsqueda opcional por query ?q=)

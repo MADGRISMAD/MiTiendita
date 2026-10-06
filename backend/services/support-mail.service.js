@@ -1,6 +1,6 @@
 const { ImapFlow } = require('imapflow');
 const { simpleParser } = require('mailparser');
-const db = require('../database/mongodb');
+const db = require('../database/db');
 const { sendMail, safeSend, sendSupportReceivedEmail, hasSmtpConfig } = require('../utils/mail.utils');
 const templates = require('../utils/mail-templates');
 

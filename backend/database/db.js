@@ -1,20 +1,16 @@
 require('dotenv').config();
-const { MongoClient, ObjectId } = require('mongodb');
+const { PgStore } = require('./pg-store');
+const { ObjectId } = require('../utils/objectid');
 const { createTenantDoc } = require('../models/tenant.model');
 const { reserveSaleStock } = require('../services/sale-stock.service');
 
-const _url = process.env.DATABASE_URI || 'mongodb://127.0.0.1:27017';
-const _dbName = process.env.DATABASE_NAME || 'timber';
+// PostgreSQL: cada colección es una tabla dentro del esquema de la app (comparte la base con otros proyectos)
+const _url = process.env.DATABASE_URL || 'postgres://timberpos:timberpos@127.0.0.1:5432/micolmena';
+const _schema = process.env.DATABASE_SCHEMA || 'timberpos';
 
-const connection = new MongoClient(_url, {
-  maxPoolSize: 10,
-  minPoolSize: 0,
-  maxIdleTimeMS: 30000,
-  serverSelectionTimeoutMS: 5000,
-  connectTimeoutMS: 10000,
-});
-let dbConnection = connection.db(_dbName);
-let connected = false;
+const store = new PgStore({ connectionString: _url, schema: _schema, max: Number(process.env.DATABASE_POOL_MAX) || 10 });
+const dbConnection = store;
+let started = null;
 
 function withId(doc) {
   if (!doc) return doc;
@@ -24,7 +20,7 @@ function withId(doc) {
 
 /** Colección cruda (para servicios como el límite de peticiones). */
 function getCollection(name) {
-  return dbConnection ? dbConnection.collection(name) : null;
+  return dbConnection.collection(name);
 }
 
 function oidFilter(id, tenantId) {
@@ -34,25 +30,26 @@ function oidFilter(id, tenantId) {
   return filter;
 }
 
-async function ensureConnection() {
-  if (connected) {
-    try {
-      await connection.db('admin').command({ ping: 1 });
-      return;
-    } catch {
-      connected = false;
-    }
+/** Conecta y, la primera vez por proceso, aplica migraciones e índices. Si falla, reintenta en la siguiente llamada. */
+function ensureConnection() {
+  if (!started) {
+    started = (async () => {
+      await store.init();
+      console.log(`PostgreSQL conectado → esquema ${_schema}`);
+      await migrateLegacyTenant();
+      await ensureIndexes();
+    })().catch((err) => {
+      started = null;
+      throw err;
+    });
   }
-  await connection.connect();
-  dbConnection = connection.db(_dbName);
-  connected = true;
-  console.log(`MongoDB connected → ${_dbName} @ ${_url}`);
+  return started;
+}
 
-  connection.on('close', () => { connected = false; });
-  connection.on('error', () => { connected = false; });
-
-  await migrateLegacyTenant();
-  await ensureIndexes();
+/** Estado de la base para /health. */
+async function Ping() {
+  await store.pool.query('SELECT 1');
+  return true;
 }
 
 async function ensureIndexes() {
@@ -98,7 +95,7 @@ async function migrateLegacyTenant() {
           { $set: { tenantId } }
         );
       }
-      console.log(`MongoDB migration: legacy docs → tenant ${tenantId}`);
+      console.log(`Migración: datos antiguos → tienda ${tenantId}`);
     }
   }
 
@@ -125,12 +122,12 @@ async function migrateTenantBilling() {
     }
   );
   if (result.modifiedCount > 0) {
-    console.log(`MongoDB migration: billing fields → ${result.modifiedCount} tenants`);
+    console.log(`Migración: campos de cobro → ${result.modifiedCount} tiendas`);
   }
 }
 
 ensureConnection().catch((err) => {
-  console.error('MongoDB connection error:', err.message);
+  console.error('PostgreSQL connection error:', err.message);
 });
 
 async function CreateTenant(data) {
@@ -1288,7 +1285,7 @@ async function GetPaidItemQtySince(tenantId, since) {
 }
 
 module.exports = {
-  ensureConnection,
+  ensureConnection, Ping, store,
   CreateTenant, GetTenantById, UpdateTenant, ListTenants, CountUsersByTenant, CountPendingInvites, ListUsersByTenant, GetTenantByMpPreapprovalId,
   CreateUser, FindUserByEmail, LoginUsuario, FindUserByUsername, UpdateUserById, FindUserByResetToken,
   ListPlatformUsers, CountPlatformAdmins, DeleteUserById,

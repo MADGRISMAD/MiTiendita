@@ -1,16 +1,21 @@
+# Desarrollo local completo: PostgreSQL + API + web.  docker compose up -d
 services:
-  mongo:
-    image: mongo:7
+  db:
+    image: postgres:16-alpine
     restart: unless-stopped
+    environment:
+      POSTGRES_DB: micolmena
+      POSTGRES_USER: timberpos
+      POSTGRES_PASSWORD: timberpos
     volumes:
-      - mongo_data:/data/db
+      - pg_data:/var/lib/postgresql/data
     ports:
-      - "27017:27017"
+      - "127.0.0.1:5432:5432"
     healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.runCommand({ ping: 1 })"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      test: ["CMD-SHELL", "pg_isready -U timberpos -d micolmena"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   api:
     build:
@@ -21,13 +26,13 @@ services:
       - ./backend/.env
     environment:
       PORT: 8081
-      DATABASE_URI: mongodb://mongo:27017
-      DATABASE_NAME: timber
+      DATABASE_URL: postgres://timberpos:timberpos@db:5432/micolmena
+      DATABASE_SCHEMA: timberpos
       APP_URL: ${APP_URL:-http://localhost}
       API_PUBLIC_URL: ${API_PUBLIC_URL:-http://localhost/api}
       NODE_ENV: production
     depends_on:
-      mongo:
+      db:
         condition: service_healthy
     ports:
       - "8081:8081"
@@ -45,4 +50,4 @@ services:
       - "80:80"
 
 volumes:
-  mongo_data:
+  pg_data:

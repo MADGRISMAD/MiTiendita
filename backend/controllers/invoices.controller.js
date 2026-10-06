@@ -1,4 +1,4 @@
-const db = require('../database/mongodb');
+const db = require('../database/db');
 const { publicOrder, parseRequest, withinInvoiceMonth } = require('../services/invoice.service');
 const {
   sendInvoiceRequestCustomerEmail,

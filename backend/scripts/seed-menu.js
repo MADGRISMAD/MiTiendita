@@ -6,11 +6,9 @@
  *   WIPE_ALL=1         — borra todos los menus/foods del tenant (default: 1)
  */
 require('dotenv').config();
-const { MongoClient, ObjectId } = require('mongodb');
+const { ObjectId } = require('../utils/objectid');
 const { createTenantDoc } = require('../models/tenant.model');
-
-const uri = process.env.DATABASE_URI || 'mongodb://127.0.0.1:27017';
-const dbName = process.env.DATABASE_NAME || 'timber';
+const { openStore } = require('./_store');
 const SEED_TAG = 'demo-abarrotes-v1';
 const wipeAll = process.env.WIPE_ALL !== '0';
 
@@ -441,9 +439,7 @@ async function seedTenant(db, tenantId) {
 }
 
 async function main() {
-  const client = new MongoClient(uri);
-  await client.connect();
-  const db = client.db(dbName);
+  const db = await openStore();
   const tenantIds = await resolveTenantIds(db);
 
   let totalFoods = 0;
@@ -458,7 +454,7 @@ async function main() {
   console.log(
     `Seed OK: ${tenantIds.length} tenant(s), ${totalFoods} productos de abarrotes`
   );
-  await client.close();
+  await db.close();
 }
 
 main().catch((err) => {

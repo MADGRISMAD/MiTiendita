@@ -1,4 +1,4 @@
-const db = require('../database/mongodb');
+const db = require('../database/db');
 const { supplierSchema } = require('../models/supplier.model');
 const { purchaseSchema } = require('../models/purchase.model');
 const inventory = require('../services/inventory.service');
