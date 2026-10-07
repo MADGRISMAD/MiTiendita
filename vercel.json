@@ -65,5 +65,18 @@
         "service": "frontend"
       }
     }
+  ],
+  "redirects": [
+    {
+      "source": "/billing",
+      "has": [
+        {
+          "type": "host",
+          "value": "hosstess.vercel.app"
+        }
+      ],
+      "destination": "https://www.mitiendita.software/billing",
+      "permanent": false
+    }
   ]
 }
