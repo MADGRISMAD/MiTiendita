@@ -1,0 +1,6 @@
+# Las claves llegan por env_file (docker-compose.yml): no deben quedar copiadas dentro de la imagen.
+**/.env
+**/.env.*
+!**/.env.example
+**/node_modules
+.git
