@@ -58,6 +58,16 @@ if (!process.env.VERCEL) {
   server.listen(process.env.PORT, () => {
     console.log(`Server listening on port ${process.env.PORT}`);
   });
+
+  // Plan B de la promoción: sube al precio normal aunque se pierda el aviso del 3er cobro de Mercado Pago.
+  const promo = require('./services/promo.service');
+  const sweepPromos = () =>
+    ensureConnection()
+      .then(() => promo.sweepAll())
+      .then((ended) => ended && console.log(`[promo] revisión diaria: ${ended} promoción(es) pasadas a precio normal`))
+      .catch((err) => console.warn('[promo] revisión diaria falló:', err.message));
+  setTimeout(sweepPromos, 60 * 1000).unref();
+  setInterval(sweepPromos, 24 * 60 * 60 * 1000).unref();
 }
 
 module.exports = app;
