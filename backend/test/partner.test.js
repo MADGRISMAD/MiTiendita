@@ -72,7 +72,7 @@ stub('../database/mongodb', {
   async CountPendingInvites() {
     return 0;
   },
-  async CountFoods() {
+  async CountPlanFoods() {
     return 10;
   },
 });

@@ -1,7 +1,6 @@
 const db = require('../database/mongodb');
 const { roundQty, saleUnitOf } = require('../utils/units');
 const limits = require('../services/plan-limits.service');
-const { seedStarterCatalog, starterProductCount } = require('../services/starter-catalog.service');
 const { ObjectId } = require('mongodb');
 
 function sanitizeSupplierIds(raw) {
@@ -226,34 +225,6 @@ async function lookupFood(req, res) {
   }
 }
 
-async function seedStarter(req, res) {
-  try {
-    const existing = await db.CountFoods(req.tenantId);
-    if (existing > 0) {
-      return res.status(409).send('Ya tienes productos. El catálogo de ejemplo solo se carga en una tienda vacía.');
-    }
-    try {
-      await limits.assertProductRoom(
-        req.tenantId,
-        req.tenant?.plan || 'basic',
-        starterProductCount()
-      );
-    } catch (limitErr) {
-      if (limits.sendLimit(res, limitErr)) return;
-      throw limitErr;
-    }
-    const created = await seedStarterCatalog(db, req.tenantId);
-    const settings = await db.GetSettings(req.tenantId);
-    if (settings) {
-      await db.UpdateSettings({ starterSeeded: true, updatedAt: new Date() }, req.tenantId);
-    }
-    return res.status(201).json({ ok: true, ...created });
-  } catch (err) {
-    console.error(err);
-    return res.status(500).send(err.message || 'Error al cargar el catálogo de ejemplo');
-  }
-}
-
 /** Devuelve productos con stock bajo o igual al umbral mínimo. */
 async function lowStockFoods(req, res) {
   try {
@@ -290,7 +261,6 @@ module.exports = {
   createFood,
   updateFood,
   deleteFood,
-  seedStarter,
   lowStockFoods,
   searchFoods,
 };

@@ -438,15 +438,6 @@ export const apiService = {
   dismissOnboarding() {
     return axios.post('/settings/onboarding/dismiss').then((r) => r.data);
   },
-  seedStarterCatalog() {
-    return axios.post('/menus/seed-starter').then((r) => r.data);
-  },
-  getMasterCatalog() {
-    return axios.get('/catalog').then((r) => r.data);
-  },
-  addFromMasterCatalog(payload: { items: { id: string; price: number }[]; menuId?: string }) {
-    return axios.post('/catalog/add', payload).then((r) => r.data);
-  },
   getSupportThread() {
     return axios.get('/settings/support').then((r) => r.data);
   },

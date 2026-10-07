@@ -67,7 +67,7 @@
               </p>
             </div>
 
-            <div v-if="!searching && menus.length > 1" class="chips" role="tablist" aria-label="Categorías">
+            <div v-if="!searching && posMenus.length > 1" class="chips" role="tablist" aria-label="Categorías">
               <button
                 type="button"
                 role="tab"
@@ -79,7 +79,7 @@
                 Todo
               </button>
               <button
-                v-for="menu in menus"
+                v-for="menu in posMenus"
                 :key="menu.id"
                 type="button"
                 role="tab"
@@ -124,7 +124,10 @@
                   </small>
                 </span>
                 <span class="result-side">
-                  <strong class="result-price">{{ money(lineUnit(p)) }}{{ perUnit(unitOf(p)) }}</strong>
+                  <strong class="result-price">
+                    <template v-if="p.needsPrice">Sin precio</template>
+                    <template v-else>{{ money(lineUnit(p)) }}{{ perUnit(unitOf(p)) }}</template>
+                  </strong>
                   <small v-if="inventoryOn" class="stock" :class="stockTone(p)">{{ stockLabel(p) }}</small>
                   <em v-if="qtyInCart(p.id)" class="in-ticket">{{ formatQty(qtyInCart(p.id)) }} en ticket</em>
                 </span>
@@ -178,6 +181,13 @@
                   <p><strong>Aún no hay productos.</strong></p>
                   <p>Da de alta tu catálogo para empezar a cobrar.</p>
                   <router-link to="/products" class="soft-btn">Ir a Productos</router-link>
+                </template>
+                <template v-else-if="!pickTotal && unpricedCount">
+                  <p><strong>Escanea o busca tu primer producto.</strong></p>
+                  <p>
+                    Ya tienes {{ unpricedCount }} productos cargados, todavía sin precio. Al escanear uno o buscarlo por nombre, la caja te pide el
+                    precio y lo guarda.
+                  </p>
                 </template>
                 <p v-else>Esta categoría está vacía.</p>
               </div>
@@ -409,16 +419,6 @@
               >
                 <PosIcon name="spark" :size="18" /> Registro mágico
               </button>
-              <button
-                v-if="masterCatalogOn"
-                type="button"
-                class="btn"
-                :disabled="cashBlocked"
-                :title="cashBlocked ? 'Bloqueado hasta el corte de caja' : 'Productos de abarrotes ya capturados: elige los que vendes y ponles tu precio'"
-                @click="showMasterCatalog = true"
-              >
-                <PosIcon name="box" :size="18" /> Catálogo maestro
-              </button>
               <button type="button" class="btn primary hide-mobile" @click="openNewFood">
                 <PosIcon name="plus" :size="18" /> Nuevo producto
               </button>
@@ -438,6 +438,9 @@
             </button>
             <button v-if="inventoryOn" type="button" class="kpi danger" :class="{ on: statusFilter === 'out' }" @click="statusFilter = 'out'">
               <span>Agotados</span><strong>{{ catalogStats.out }}</strong>
+            </button>
+            <button type="button" class="kpi" :class="{ on: statusFilter === 'noprice' }" @click="statusFilter = 'noprice'">
+              <span>Sin precio</span><strong>{{ catalogStats.noprice }}</strong>
             </button>
             <button type="button" class="kpi" :class="{ on: statusFilter === 'nocode' }" @click="statusFilter = 'nocode'">
               <span>Sin código</span><strong>{{ catalogStats.nocode }}</strong>
@@ -529,8 +532,8 @@
                       </small>
                     </span>
                     <span class="m-row-side">
-                      <strong>{{ money(p.price) }}</strong>
-                      <span v-if="inventoryOn" class="pill" :class="stockTone(p)">{{ stockLabel(p) }}</span>
+                      <strong>{{ priceText(p) }}</strong>
+                      <span v-if="inventoryOn && !p.needsPrice" class="pill" :class="stockTone(p)">{{ stockLabel(p) }}</span>
                       <small v-else-if="marginPct(p) != null" :class="marginTone(p)">{{ marginPct(p) }}% ganancia</small>
                     </span>
                   </button>
@@ -569,10 +572,10 @@
                           <span class="chip-dot"></span>{{ menuName(p.menuId) }}
                         </span>
                       </td>
-                      <td class="num strong">{{ money(p.price) }}</td>
+                      <td class="num strong" :class="{ muted: p.needsPrice }">{{ priceText(p) }}</td>
                       <td class="num hide-mobile" :class="{ muted: !Number(p.cost) }">{{ Number(p.cost) ? money(p.cost) : '—' }}</td>
                       <td class="num hide-mobile">
-                        <template v-if="Number(p.cost)">
+                        <template v-if="Number(p.cost) && !p.needsPrice">
                           <span :class="marginTone(p)">{{ marginPct(p) }}%</span>
                           <small class="muted cell-sub">{{ money(p.price - p.cost) }}</small>
                         </template>
@@ -593,7 +596,7 @@
                     </span>
                     <span class="tile-name">{{ p.name }}</span>
                     <span class="tile-foot">
-                      <strong class="tile-price">{{ money(p.price) }}</strong>
+                      <strong class="tile-price">{{ priceText(p) }}</strong>
                       <small v-if="inventoryOn" class="stock" :class="stockTone(p)">{{ stockLabel(p) }}</small>
                     </span>
                   </button>
@@ -607,19 +610,10 @@
                   <PosIcon name="box" class="big-ico" :size="26" />
                   <template v-if="!pickFoods.length">
                     <p><strong>Aún no hay productos.</strong></p>
-                    <p>
-                      Agrégalos uno por uno{{ masterCatalogOn ? ', elígelos del catálogo maestro' : '' }} o carga 8 de ejemplo para probar la caja.
-                    </p>
+                    <p>Agrégalos uno por uno para empezar a cobrar.</p>
                     <div class="empty-acts">
-                      <button v-if="masterCatalogOn" type="button" class="soft-btn" :disabled="cashBlocked" @click="showMasterCatalog = true">
-                        Catálogo maestro
-                      </button>
                       <button type="button" class="soft-btn" @click="openNewFood">Nuevo producto</button>
-                      <button type="button" class="soft-btn" :disabled="seeding || cashBlocked" @click="seedStarter">
-                        {{ seeding ? 'Cargando…' : 'Cargar 8 de ejemplo' }}
-                      </button>
                     </div>
-                    <p v-if="seedErr">{{ seedErr }}</p>
                   </template>
                   <template v-else>
                     <p><strong>Nada coincide con los filtros.</strong></p>
@@ -978,6 +972,43 @@
         </div>
       </Teleport>
 
+      <!-- Producto del catálogo maestro sin precio: se pide al agregarlo -->
+      <Teleport to="body">
+        <div v-if="priceAsk" class="dlg-bg">
+          <form class="dlg" role="dialog" aria-labelledby="pa-title" @submit.prevent="savePriceAsk">
+            <header class="dlg-head">
+              <span class="dlg-ico"><PosIcon name="tag" /></span>
+              <div>
+                <h3 id="pa-title">Ponle precio</h3>
+                <p>{{ priceAsk.producto.name }} todavía no tiene precio.</p>
+              </div>
+              <button type="button" class="dlg-x" aria-label="Cerrar" @click="closePriceAsk"><PosIcon name="x" /></button>
+            </header>
+            <label class="field">
+              <span>{{ priceAskLabel }}</span>
+              <input
+                ref="priceAskInput"
+                v-model="priceAskForm.price"
+                v-select-on-focus
+                class="inp big num"
+                type="number"
+                min="0"
+                step="0.01"
+                inputmode="decimal"
+                placeholder="0.00"
+                :disabled="priceAskBusy"
+              />
+            </label>
+            <p class="dlg-note">El precio ya incluye IVA. Se guarda en tu catálogo: no te lo vuelve a pedir.</p>
+            <p v-if="priceAskErr" class="dlg-err">{{ priceAskErr }}</p>
+            <div class="dlg-acts">
+              <button type="button" class="btn" :disabled="priceAskBusy" @click="closePriceAsk">Cancelar</button>
+              <button type="submit" class="btn primary" :disabled="priceAskBusy">{{ priceAskBusy ? "Guardando…" : "Guardar y agregar" }}</button>
+            </div>
+          </form>
+        </div>
+      </Teleport>
+
       <!-- Tickets en espera (F6) -->
       <Teleport to="body">
         <div v-if="showHeld" class="dlg-bg">
@@ -1035,13 +1066,6 @@
         @close="showMagic = false"
         @applied="onMagicApplied"
         @manual="onMagicManual"
-      />
-
-      <MasterCatalogSheet
-        v-if="masterCatalogOn && showMasterCatalog"
-        :menus="menus"
-        @close="showMasterCatalog = false"
-        @applied="onCatalogApplied"
       />
 
       <!-- Cobro -->
@@ -1424,8 +1448,6 @@
 <script>
 import AppShell from "../components/AppShell.vue";
 import MagicPricesSheet from "../components/MagicPricesSheet.vue";
-import MasterCatalogSheet from "../components/MasterCatalogSheet.vue";
-import { masterCatalogAvailable } from "../masterCatalog";
 import PosIcon from "../components/PosIcon.js";
 import { ref, reactive, computed, onMounted, onUnmounted, watch, nextTick } from "vue";
 import { useRoute, useRouter } from "vue-router";
@@ -1502,7 +1524,7 @@ function round2(n) {
 const CATEGORY_HUES = [212, 28, 152, 274, 342, 46, 190, 118, 8, 236];
 
 export default {
-  components: { AppShell, MagicPricesSheet, MasterCatalogSheet, PosIcon },
+  components: { AppShell, MagicPricesSheet, PosIcon },
   directives: { selectOnFocus: vSelectOnFocus },
   props: {
     initialMode: { type: String, default: "pos" },
@@ -1519,8 +1541,6 @@ export default {
       typeof window !== "undefined" && window.matchMedia("(max-width: 767.98px)").matches
     );
     const selectedMenuId = ref("");
-    const seeding = ref(false);
-    const seedErr = ref("");
     const mode = ref(props.initialMode === "manage" || route.name === "products" ? "manage" : "pos");
 
     const scanInput = ref(null);
@@ -1561,6 +1581,17 @@ export default {
       { label: "12", value: "12" },
     ];
 
+    // Producto del catálogo maestro sin precio: se pide al agregarlo al ticket
+    const priceAsk = ref(null);
+    const priceAskForm = reactive({ price: "" });
+    const priceAskErr = ref("");
+    const priceAskBusy = ref(false);
+    const priceAskInput = ref(null);
+    const priceAskLabel = computed(() => {
+      const p = priceAsk.value?.producto;
+      return p && isBulk(p) ? `Precio por ${SALE_UNITS[unitOf(p)].label.toLowerCase()}` : "Precio por pieza";
+    });
+
     // Artículo varios (Ins)
     const showMisc = ref(false);
     const miscForm = reactive({ name: "", price: "", qty: 1 });
@@ -1591,8 +1622,6 @@ export default {
     const showMenuForm = ref(false);
     const showFoodForm = ref(false);
     const showMagic = ref(false);
-    const showMasterCatalog = ref(false);
-    const masterCatalogOn = computed(() => masterCatalogAvailable(venueStore.businessType));
     const aiEnabled = computed(
       () => billingStore.loaded && billingStore.aiEnabled === true && !billingStore.isPerpetual
     );
@@ -1923,15 +1952,23 @@ export default {
           { id: "expiry", label: "Caducan", count: st.expiry }
         );
       }
-      list.push({ id: "nocode", label: "Sin código", count: st.nocode }, { id: "nocost", label: "Sin costo", count: st.nocost });
+      list.push(
+        { id: "noprice", label: "Sin precio", count: st.noprice },
+        { id: "nocode", label: "Sin código", count: st.nocode },
+        { id: "nocost", label: "Sin costo", count: st.nocost }
+      );
       return list;
     });
     function codeOf(p) {
       return String(p?.barcode || p?.sku || "").trim();
     }
+    /** «Sin precio» para lo que llegó del catálogo maestro y todavía no se cotiza; si no, el precio. */
+    function priceText(p) {
+      return p?.needsPrice ? "Sin precio" : money(p?.price);
+    }
     function marginPct(p) {
       const cost = Number(p?.cost) || 0;
-      if (!(cost > 0)) return null;
+      if (!(cost > 0) || p?.needsPrice) return null;
       return Math.round(((Number(p.price) - cost) / cost) * 100);
     }
     function marginTone(p) {
@@ -1946,12 +1983,13 @@ export default {
       return pickFoods.value.filter((p) => String(p.menuId || "") === String(id)).length;
     }
     const catalogStats = computed(() => {
-      const out = { value: 0, low: 0, out: 0, nocode: 0, nocost: 0, expiry: 0 };
+      const out = { value: 0, low: 0, out: 0, noprice: 0, nocode: 0, nocost: 0, expiry: 0 };
       for (const p of pickFoods.value) {
         const stock = Number(p.stock) || 0;
         if (stock > 0) out.value += stock * (Number(p.cost) || 0);
         if (isOut(p)) out.out += 1;
         else if (isLow(p)) out.low += 1;
+        if (p.needsPrice) out.noprice += 1;
         if (!codeOf(p)) out.nocode += 1;
         if (!(Number(p.cost) > 0)) out.nocost += 1;
         if (p.tracksExpiry) out.expiry += 1;
@@ -1971,6 +2009,9 @@ export default {
             break;
           case "expiry":
             if (!p.tracksExpiry) return false;
+            break;
+          case "noprice":
+            if (!p.needsPrice) return false;
             break;
           case "nocode":
             if (codeOf(p)) return false;
@@ -2199,9 +2240,13 @@ export default {
     const itemCount = computed(() =>
       lines.value.reduce((s, p) => s + Number(p.quantity || 0), 0)
     );
+    // Los mosaicos solo muestran lo que ya tiene precio; lo demás se encuentra escaneando o buscando
+    const pickPriced = computed(() => pickFoods.value.filter((p) => !p.needsPrice));
+    const unpricedCount = computed(() => pickFoods.value.length - pickPriced.value.length);
+    const posMenus = computed(() => menus.value.filter((m) => pickPriced.value.some((p) => String(p.menuId || "") === String(m.id))));
     const pickFiltered = computed(() => {
-      if (!pickMenuId.value) return pickFoods.value;
-      return pickFoods.value.filter((p) => String(p.menuId || "") === String(pickMenuId.value));
+      if (!pickMenuId.value) return pickPriced.value;
+      return pickPriced.value.filter((p) => String(p.menuId || "") === String(pickMenuId.value));
     });
     const pickList = computed(() => pickFiltered.value.slice(0, PICK_LIMIT));
     const pickTotal = computed(() => pickFiltered.value.length);
@@ -2313,10 +2358,10 @@ export default {
       return Number(p?.stock) || 0;
     }
     function isOut(p) {
-      return inventoryOn.value && !p?.isMisc && stockNum(p) <= 0;
+      return inventoryOn.value && !p?.isMisc && !p?.needsPrice && stockNum(p) <= 0;
     }
     function isLow(p) {
-      if (!inventoryOn.value || p?.isMisc) return false;
+      if (!inventoryOn.value || p?.isMisc || p?.needsPrice) return false;
       const min = p?.lowStockThreshold != null ? Number(p.lowStockThreshold) : 5;
       return stockNum(p) > 0 && stockNum(p) <= min;
     }
@@ -2510,11 +2555,11 @@ export default {
           showFoodForm.value ||
           showMenuForm.value ||
           showMagic.value ||
-          showMasterCatalog.value ||
           showPayment.value ||
           showQty.value ||
           showWeigh.value ||
           showMisc.value ||
+          priceAsk.value ||
           showHeld.value ||
           missingCode.value;
         if (mode.value === "pos" && !blocked && scanInput.value) {
@@ -2762,6 +2807,11 @@ export default {
         nameHits.value = [];
         return;
       }
+      // Catálogo maestro: sin precio no se cobra; la caja lo pide y lo guarda en el catálogo
+      if (producto.needsPrice) {
+        askPrice(producto, qty, opts);
+        return;
+      }
       if (isBulk(producto) && !opts.weighed) {
         openWeigh(producto);
         return;
@@ -2900,11 +2950,11 @@ export default {
         showMenuForm.value ||
         showDiscount.value ||
         showMagic.value ||
-        showMasterCatalog.value ||
         showPayment.value ||
         showQty.value ||
         showWeigh.value ||
         showMisc.value ||
+        priceAsk.value ||
         showHeld.value
       ) {
         return;
@@ -3164,6 +3214,49 @@ export default {
     }
 
     // —— Artículo varios (Ins): venta sin código, no toca inventario ——
+    function askPrice(producto, qty, opts) {
+      clearScanField();
+      nameHits.value = [];
+      hitsFor.value = "";
+      scanError.value = "";
+      priceAskForm.price = "";
+      priceAskErr.value = "";
+      priceAsk.value = { producto, qty, opts };
+    }
+    function closePriceAsk() {
+      if (priceAskBusy.value) return;
+      priceAsk.value = null;
+      priceAskErr.value = "";
+      focusScan();
+    }
+    async function savePriceAsk() {
+      const ask = priceAsk.value;
+      if (!ask || priceAskBusy.value) return;
+      const price = round2(priceAskForm.price);
+      if (!(price > 0)) {
+        priceAskErr.value = "Escribe el precio.";
+        return;
+      }
+      priceAskBusy.value = true;
+      priceAskErr.value = "";
+      try {
+        const updated = await apiService.editFood(ask.producto.id, { price });
+        pickFoods.value = pickFoods.value.map((p) => (p.id === updated.id ? { ...p, ...updated } : p));
+        saveCatalog(authStore.tenantId, { foods: pickFoods.value, menus: menus.value }).catch(() => {});
+        priceAsk.value = null;
+        addProduct({ ...ask.producto, ...updated }, ask.qty, ask.opts);
+      } catch (error) {
+        const raw = error.response?.data;
+        priceAskErr.value = isNetworkError(error)
+          ? "Sin conexión no se puede guardar el precio. Cóbralo como «Artículo varios» o intenta de nuevo."
+          : typeof raw === "string" && raw
+            ? raw
+            : raw?.message || "No se pudo guardar el precio.";
+      } finally {
+        priceAskBusy.value = false;
+      }
+    }
+
     function openMisc(prefill = "") {
       if (cashBlocked.value) return;
       const text = String(prefill || "").trim();
@@ -3549,11 +3642,11 @@ export default {
         showMenuForm.value ||
         showDiscount.value ||
         showMagic.value ||
-        showMasterCatalog.value ||
         showPayment.value ||
         showQty.value ||
         showWeigh.value ||
         showMisc.value ||
+        priceAsk.value ||
         showHeld.value
       ) {
         return;
@@ -3637,11 +3730,11 @@ export default {
           showFoodForm.value ||
           showMenuForm.value ||
           showMagic.value ||
-          showMasterCatalog.value ||
           showPayment.value ||
           showQty.value ||
           showWeigh.value ||
           showMisc.value ||
+          priceAsk.value ||
           showHeld.value ||
           missingCode.value
       )
@@ -3649,7 +3742,8 @@ export default {
 
     /** Esc: cierra lo que esté encima; si no hay nada, limpia la búsqueda. */
     function closeTopLayer() {
-      if (missingCode.value) dismissMissing();
+      if (priceAsk.value) closePriceAsk();
+      else if (missingCode.value) dismissMissing();
       else if (showWeigh.value) closeWeigh();
       else if (showQty.value) closeQty();
       else if (showMisc.value) closeMisc();
@@ -3669,7 +3763,7 @@ export default {
       if (e.defaultPrevented) return;
       if (mode.value !== "pos") return;
       if (e.key === "Escape") {
-        if (showFoodForm.value || showMenuForm.value || showMagic.value || showMasterCatalog.value) return;
+        if (showFoodForm.value || showMenuForm.value || showMagic.value) return;
         if (closeTopLayer()) e.preventDefault();
         return;
       }
@@ -3715,24 +3809,6 @@ export default {
       } else if ((e.key === "+" || e.key === "-") && selectedIdx.value >= 0) {
         e.preventDefault();
         bumpQty(selectedIdx.value, e.key === "+" ? 1 : -1);
-      }
-    }
-
-    async function seedStarter() {
-      if (cashBlocked.value) {
-        seedErr.value = BLOCK_MSG;
-        return;
-      }
-      seeding.value = true;
-      seedErr.value = "";
-      try {
-        await apiService.seedStarterCatalog();
-        await fetchMenus();
-      } catch (error) {
-        const raw = error.response?.data;
-        seedErr.value = typeof raw === "string" ? raw : raw?.message || "No se pudo cargar el ejemplo.";
-      } finally {
-        seeding.value = false;
       }
     }
 
@@ -3884,11 +3960,6 @@ export default {
       await fetchMenus();
     }
 
-    async function onCatalogApplied() {
-      // Llegaron productos y quizá categorías nuevas
-      await fetchMenus();
-    }
-
     function closeFoodForm() {
       showFoodForm.value = false;
       editingFood.value = null;
@@ -4014,6 +4085,9 @@ export default {
     watch(showMisc, (v) => {
       if (v) nextTick(() => miscPriceInput.value?.focus());
     });
+    watch(priceAsk, (v) => {
+      if (v) nextTick(() => priceAskInput.value?.focus());
+    });
     watch(showQty, (v) => {
       // En pantallas táctiles se usa el teclado numérico de la ventana, no el del sistema
       const touch = typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches;
@@ -4066,12 +4140,6 @@ export default {
       menus,
       productos,
       selectedMenuId,
-      seeding,
-      seedErr,
-      seedStarter,
-      showMasterCatalog,
-      masterCatalogOn,
-      onCatalogApplied,
       businessName,
       showMenuForm,
       showFoodForm,
@@ -4150,6 +4218,9 @@ export default {
       pickFoods,
       pickMenuId,
       pickList,
+      posMenus,
+      unpricedCount,
+      priceText,
       pickTotal,
       searching,
       debouncedTerm,
@@ -4259,6 +4330,14 @@ export default {
       keypadPress,
       applyQty,
       showMisc,
+      priceAsk,
+      priceAskForm,
+      priceAskErr,
+      priceAskBusy,
+      priceAskInput,
+      priceAskLabel,
+      savePriceAsk,
+      closePriceAsk,
       miscForm,
       miscErr,
       miscPriceInput,

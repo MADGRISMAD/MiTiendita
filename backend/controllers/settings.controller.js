@@ -1,6 +1,7 @@
 const settingsSchema = require('../models/settings.model');
 const db = require('../database/mongodb');
 const limits = require('../services/plan-limits.service');
+const masterCatalog = require('../services/master-catalog.service');
 const { isSubscriptionActive } = require('../models/tenant.model');
 const supportMail = require('../services/support-mail.service');
 
@@ -39,11 +40,22 @@ async function SaveSettings(req, res) {
     const existing = await db.GetSettings(req.tenantId);
     if (!existing) {
       payload.createdAt = new Date();
-      const created = await db.CreateSettings(payload);
+      let created = await db.CreateSettings(payload);
+      try {
+        if (await masterCatalog.syncForGiro(db, req.tenantId, created)) created = await db.GetSettings(req.tenantId);
+      } catch (err) {
+        console.warn('[catálogo maestro]', err.message);
+      }
       return res.status(201).send(created);
     }
 
-    const updated = await db.UpdateSettings(payload, req.tenantId);
+    let updated = await db.UpdateSettings(payload, req.tenantId);
+    // El catálogo maestro se carga (o se retira) según el giro que eligió; si falla, lo ajustado igual se guardó
+    try {
+      if (await masterCatalog.syncForGiro(db, req.tenantId, updated)) updated = await db.GetSettings(req.tenantId);
+    } catch (err) {
+      console.warn('[catálogo maestro]', err.message);
+    }
     return res.status(200).send(updated);
   } catch (error) {
     console.error(error);
@@ -57,7 +69,7 @@ async function GetOnboarding(req, res) {
     const [settings, tenant, productCount, userCount, paidSales, cashSessions] = await Promise.all([
       db.GetSettings(req.tenantId),
       db.GetTenantById(req.tenantId),
-      db.CountFoods(req.tenantId),
+      db.CountPlanFoods(req.tenantId),
       db.CountUsersByTenant(req.tenantId),
       db.CountPaidOrders(req.tenantId),
       db.CountCashSessions(req.tenantId),
@@ -73,7 +85,9 @@ async function GetOnboarding(req, res) {
       },
       {
         id: 'catalog',
-        label: 'Carga productos al catálogo',
+        label: settings?.masterCatalogVersion
+          ? 'Ponle precio a lo que vendes (al escanearlo, la caja te lo pide)'
+          : 'Carga productos al catálogo',
         done: productCount > 0,
         to: '/products',
       },
@@ -99,7 +113,6 @@ async function GetOnboarding(req, res) {
     const remaining = steps.filter((s) => !s.done).length;
     return res.status(200).json({
       setupCompleted: Boolean(settings?.setupCompleted),
-      starterSeeded: Boolean(settings?.starterSeeded),
       dismissed: Boolean(settings?.gettingStartedDismissed),
       productCount,
       userCount,

@@ -37,7 +37,6 @@ app.use(limits.global());
 app.use('/usuarios', require('./routers/usuarios.router'));
 app.use('/menus', require('./routers/menus.router'));
 app.use('/foods', require('./routers/foods.router'));
-app.use('/catalog', require('./routers/catalog.router'));
 app.use('/waiters', require('./routers/meseros.router'));
 app.use('/settings', require('./routers/settings.router'));
 app.use('/orders', require('./routers/orders.router'));
@@ -59,6 +58,13 @@ if (!process.env.VERCEL) {
   server.listen(process.env.PORT, () => {
     console.log(`Server listening on port ${process.env.PORT}`);
   });
+
+  // Catálogo maestro: las tiendas que ya existían lo reciben al arrancar (una sola vez cada una).
+  const masterCatalog = require('./services/master-catalog.service');
+  ensureConnection()
+    .then(() => masterCatalog.backfill(require('./database/mongodb')))
+    .then((n) => n && console.log(`[catálogo maestro] cargado en ${n} tienda(s)`))
+    .catch((err) => console.warn('[catálogo maestro] no se pudo cargar:', err.message));
 
   // Plan B de la promoción: sube al precio normal aunque se pierda el aviso del 3er cobro de Mercado Pago.
   const promo = require('./services/promo.service');

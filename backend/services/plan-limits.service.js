@@ -28,7 +28,7 @@ async function usageFor(tenantId, planId) {
   const [users, pending, products] = await Promise.all([
     db.CountUsersByTenant(tenantId),
     db.CountPendingInvites(tenantId),
-    db.CountFoods(tenantId),
+    db.CountPlanFoods(tenantId),
   ]);
   return {
     users: { used: users, pending, max: limits.users },
@@ -50,7 +50,7 @@ async function assertUserRoom(tenantId, planId, extra = 1, { includePending = fa
 async function assertProductRoom(tenantId, planId, extra = 1) {
   const limits = planLimits(planId);
   if (limits.products == null) return;
-  const used = await db.CountFoods(tenantId);
+  const used = await db.CountPlanFoods(tenantId);
   if (used + extra > limits.products) {
     throw limitError('products', used, limits.products, planId);
   }

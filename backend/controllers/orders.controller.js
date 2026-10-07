@@ -2,6 +2,7 @@ const db = require('../database/mongodb');
 const { normalizeOrder, orderStatuses, paymentMethods, newToken } = require('../models/order.model');
 const { storeDayRange } = require('../utils/store-time');
 const pointCharges = require('../services/point.charges.service');
+const { firstUnpriced } = require('../services/unpriced-items.service');
 
 /**
  * Rango de un reporte. Un día «AAAA-MM-DD» se toma en la zona de la tienda
@@ -63,6 +64,8 @@ async function create(req, res) {
     if (!payload.items.length) {
       return res.status(400).send('El pedido necesita al menos un producto');
     }
+    const unpriced = await firstUnpriced(db, payload.items, req.tenantId);
+    if (unpriced) return res.status(409).send(`«${unpriced.name}» todavía no tiene precio. Ponle uno antes de venderlo.`);
 
     const created = await db.CreateOrder(payload);
 
@@ -283,6 +286,8 @@ async function sale(req, res) {
       if (!payload.items.length) {
         return res.status(400).send('El pedido necesita al menos un producto');
       }
+      const unpriced = await firstUnpriced(db, payload.items, req.tenantId);
+      if (unpriced) return res.status(409).send(`«${unpriced.name}» todavía no tiene precio. Ponle uno antes de venderlo.`);
       try {
         existing = await db.CreateOrder(payload);
         createdHere = true;

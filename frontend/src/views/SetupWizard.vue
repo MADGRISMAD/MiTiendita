@@ -115,13 +115,13 @@
           </dl>
         </div>
 
-        <label class="seed-check">
-          <input v-model="seedCatalog" type="checkbox" />
+        <div v-if="hasMasterCatalog" class="seed-check">
           <span>
-            <strong>Cargar 8 productos de ejemplo</strong>
-            Coca, agua, leche, huevo… para cobrar hoy. Luego los editas o borras.
+            <strong>Tu catálogo ya viene con 181 productos</strong>
+            Botanas, pan, refrescos, lácteos, frescos… capturados y sin precio. Al escanear uno o buscarlo en la caja, te pide el precio y lo
+            guarda. El costo lo cargas con tu próxima factura.
           </span>
-        </label>
+        </div>
 
         <p v-if="error" class="error-text">{{ error }}</p>
       </section>
@@ -160,12 +160,13 @@ import { useRouter } from "vue-router";
 import { saveVenueSettings, venueStore } from "../venueStore";
 import { apiService } from "../apiService";
 import BrandName from "../components/BrandName.vue";
+import { masterCatalogAvailable } from "../masterCatalog";
 
 const router = useRouter();
 const step = ref(1);
 const saving = ref(false);
 const error = ref("");
-const seedCatalog = ref(true);
+const hasMasterCatalog = computed(() => masterCatalogAvailable(form.businessType));
 
 const stepTitles = [
   "Bienvenida",
@@ -240,13 +241,6 @@ async function finish() {
   error.value = "";
   try {
     await saveVenueSettings({ ...form });
-    if (seedCatalog.value) {
-      try {
-        await apiService.seedStarterCatalog();
-      } catch {
-        /* catálogo vacío: lo resuelve el checklist */
-      }
-    }
     router.push("/pos");
   } catch (e) {
     error.value = "No se pudo guardar la configuración. Intenta de nuevo.";

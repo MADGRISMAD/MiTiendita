@@ -14,12 +14,6 @@
         <router-link v-if="!step.done && step.to" :to="step.to">Ir</router-link>
       </li>
     </ol>
-    <div v-if="showSeed" class="seed-row">
-      <button type="button" class="seed" :disabled="seeding" @click="seed">
-        {{ seeding ? "Cargando…" : "Cargar 8 productos de ejemplo" }}
-      </button>
-      <p>Coca, agua, leche, huevo… para probar la caja hoy. Luego los editas.</p>
-    </div>
     <p v-if="err" class="err">{{ err }}</p>
   </section>
 </template>
@@ -29,18 +23,12 @@ import { computed, onMounted, ref } from "vue";
 import { apiService } from "../apiService";
 import { hasRole } from "../authStore";
 
-const emit = defineEmits(["seeded"]);
-
 const data = ref(null);
-const seeding = ref(false);
 const err = ref("");
 
 const steps = computed(() => data.value?.steps || []);
 const remaining = computed(() => data.value?.remaining ?? 0);
 const canDismiss = computed(() => hasRole("admin") && remaining.value > 0);
-const showSeed = computed(
-  () => hasRole("admin") && data.value && !data.value.productCount && !data.value.starterSeeded
-);
 const visible = computed(() => {
   if (!data.value) return false;
   if (data.value.complete) return false;
@@ -53,21 +41,6 @@ async function load() {
     data.value = await apiService.getOnboarding();
   } catch {
     data.value = null;
-  }
-}
-
-async function seed() {
-  seeding.value = true;
-  err.value = "";
-  try {
-    await apiService.seedStarterCatalog();
-    await load();
-    emit("seeded");
-  } catch (e) {
-    const raw = e.response?.data;
-    err.value = typeof raw === "string" ? raw : raw?.message || "No se pudo cargar el catálogo.";
-  } finally {
-    seeding.value = false;
   }
 }
 
@@ -149,17 +122,5 @@ a { color: var(--timber-primary); font-weight: 800; font-size: 0.82rem; text-dec
   cursor: pointer;
   font-size: 0.8rem;
 }
-.seed-row { margin-top: 0.85rem; display: grid; gap: 0.35rem; }
-.seed-row p { margin: 0; font-size: 0.8rem; color: var(--timber-muted); }
-.seed {
-  border: none;
-  border-radius: 0.7rem;
-  min-height: 2.5rem;
-  background: var(--timber-primary);
-  color: var(--timber-on-primary);
-  font-weight: 800;
-  cursor: pointer;
-}
-.seed:disabled { opacity: 0.6; }
 .err { margin: 0.5rem 0 0; color: var(--timber-danger); font-size: 0.85rem; }
 </style>

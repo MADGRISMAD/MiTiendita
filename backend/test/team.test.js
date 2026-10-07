@@ -40,7 +40,7 @@ function memoryDb() {
     async CountPendingInvites() {
       return 0;
     },
-    async CountFoods() {
+    async CountPlanFoods() {
       return 0;
     },
     async GetTenantById() {

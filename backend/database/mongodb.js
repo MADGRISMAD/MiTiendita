@@ -2,6 +2,7 @@ require('dotenv').config();
 const { MongoClient, ObjectId } = require('mongodb');
 const { createTenantDoc } = require('../models/tenant.model');
 const { reserveSaleStock } = require('../services/sale-stock.service');
+const { withPriceFlag } = require('../utils/needs-price');
 
 const _url = process.env.DATABASE_URI || 'mongodb://127.0.0.1:27017';
 const _dbName = process.env.DATABASE_NAME || 'timber';
@@ -431,8 +432,42 @@ async function GetFoods(tenantId) {
   const filter = tenantId ? { tenantId } : {};
   return (await dbConnection.collection('foods').find(filter).toArray()).map(withId);
 }
-async function CountFoods(tenantId) {
-  return dbConnection.collection('foods').countDocuments({ tenantId: String(tenantId) });
+/** Productos que cuentan para el tope del plan: los del catálogo maestro sin precio todavía no. */
+async function CountPlanFoods(tenantId) {
+  return dbConnection.collection('foods').countDocuments({ tenantId: String(tenantId), needsPrice: { $ne: true } });
+}
+/** Alta de varios productos de una vez (catálogo maestro). */
+async function CreateFoods(docs) {
+  if (!docs.length) return 0;
+  const result = await dbConnection.collection('foods').insertMany(docs);
+  return result.insertedCount;
+}
+/** Quita los productos del catálogo maestro que siguen sin precio (la tienda cambió a un giro que no los usa). */
+async function DeleteUnpricedCatalogFoods(tenantId) {
+  const result = await dbConnection.collection('foods').deleteMany({ tenantId: String(tenantId), catalogId: { $exists: true }, needsPrice: true });
+  return result.deletedCount;
+}
+/** Quita las categorías que creó el catálogo maestro y quedaron vacías. */
+async function DeleteEmptyCatalogMenus(tenantId) {
+  const tid = String(tenantId);
+  const menus = await dbConnection.collection('menus').find({ tenantId: tid, fromCatalog: true }).toArray();
+  let deleted = 0;
+  for (const menu of menus) {
+    if (await dbConnection.collection('foods').countDocuments({ tenantId: tid, menuId: String(menu._id) }, { limit: 1 })) continue;
+    deleted += (await dbConnection.collection('menus').deleteOne({ _id: menu._id })).deletedCount;
+  }
+  return deleted;
+}
+/** Tiendas ya configuradas, de un giro con catálogo maestro, que todavía no lo tienen cargado. */
+async function ListSettingsNeedingCatalog(giros, version) {
+  return dbConnection
+    .collection('settings')
+    .find({
+      setupCompleted: true,
+      masterCatalogVersion: { $ne: version },
+      $or: [{ businessType: { $in: giros } }, { businessType: { $exists: false } }],
+    })
+    .toArray();
 }
 async function CountPaidOrders(tenantId) {
   return dbConnection.collection('orders').countDocuments({
@@ -464,7 +499,7 @@ async function CreateFood(data) {
 async function UpdateFood(id, data, tenantId) {
   const filter = oidFilter(id, tenantId);
   if (!filter) return null;
-  const clean = { ...data };
+  const clean = withPriceFlag({ ...data });
   delete clean.id; delete clean._id;
   await dbConnection.collection('foods').updateOne(filter, { $set: clean });
   return GetFoodById(id, tenantId);
@@ -561,6 +596,7 @@ async function DeleteFood(id, tenantId) {
 async function GetLowStockFoods(tenantId) {
   const filter = {
     ...(tenantId ? { tenantId } : {}),
+    needsPrice: { $ne: true }, // sin precio todavía no se vende: no tiene caso avisar que se acaba
     $expr: {
       $lte: [
         { $ifNull: ['$stock', 0] },
@@ -1296,7 +1332,7 @@ module.exports = {
   AddWaiter, GetWaiters, GetWaiterByCellphone, GetWaiterByDisponibility, DeleteWaiter, UpdateWaiter,
   GetSettings, CreateSettings, UpdateSettings,
   GetMenus, GetMenuById, CreateMenu, UpdateMenu, DeleteMenu,
-  GetFoods, CountFoods, CountPaidOrders, CountCashSessions, GetFoodById, GetFoodByBarcode, CreateFood, UpdateFood, ReserveSaleStock, ConsumeSaleLots, RestoreSaleStock, IncrementFoodStock, DeleteFood, GetLowStockFoods, SearchFoods,
+  GetFoods, CountPlanFoods, CreateFoods, DeleteUnpricedCatalogFoods, DeleteEmptyCatalogMenus, ListSettingsNeedingCatalog, CountPaidOrders, CountCashSessions, GetFoodById, GetFoodByBarcode, CreateFood, UpdateFood, ReserveSaleStock, ConsumeSaleLots, RestoreSaleStock, IncrementFoodStock, DeleteFood, GetLowStockFoods, SearchFoods,
   CreateBillingEvent, ListBillingEvents, getCollection, ListUsersByTenants, GetSettingsMany, appState,
   RecordLoginFailure, ClearLoginFailures, FindUserById, BumpUserTokenVersion, CountActiveAdmins, FindUserInTenant,
   CreateSession, FindSessionByHash, RevokeSession, RevokeUserSessions,

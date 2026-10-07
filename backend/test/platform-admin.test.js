@@ -113,7 +113,7 @@ function platformDb() {
     async CountPendingInvites() {
       return 0;
     },
-    async CountFoods() {
+    async CountPlanFoods() {
       return 12;
     },
     async CreateBillingEvent(e) {
