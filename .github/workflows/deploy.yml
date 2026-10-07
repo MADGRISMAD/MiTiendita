@@ -75,7 +75,7 @@ jobs:
           secure: true
           username: ${{ secrets.MAIL_USERNAME }}
           password: ${{ secrets.MAIL_PASSWORD }}
-          from: "minegocio <${{ secrets.MAIL_USERNAME }}>"
+          from: "MiTiendita <${{ secrets.MAIL_USERNAME }}>"
           to: ${{ secrets.MAIL_TO || env.DEFAULT_MAIL_TO }}
           subject: ${{ steps.mail.outputs.subject }}
           body: file://deploy-status.txt

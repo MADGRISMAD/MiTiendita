@@ -1,5 +1,5 @@
 /**
- * Arma el correo interno de deploy (minegocio) para GitHub Actions o una vista previa local.
+ * Arma el correo interno de deploy (MiTiendita) para GitHub Actions o una vista previa local.
  *
  *   node backend/scripts/render-deploy-mail.js
  *   node backend/scripts/render-deploy-mail.js --preview
@@ -67,7 +67,7 @@ function previewSamples() {
     author: 'Manuel Sabino',
     pusher: 'MADGRISMAD',
     when: tijuanaStamp(),
-    message: 'chore: machote minegocio para avisos de deploy\n\nVerde bosque, sistema interno.',
+    message: 'chore: machote MiTiendita para avisos de deploy\n\nVerde bosque, sistema interno.',
     commitUrl: 'https://github.com/MADGRISMAD/timberPOS/commit/c0be09a1234567890',
     runUrl: 'https://github.com/MADGRISMAD/timberPOS/actions',
     prodUrl: 'https://www.mitiendita.software/',
@@ -82,9 +82,9 @@ function previewSamples() {
   });
 
   const index = `<!DOCTYPE html>
-<html lang="es"><head><meta charset="utf-8"><title>minegocio · previews</title></head>
+<html lang="es"><head><meta charset="utf-8"><title>MiTiendita · previews</title></head>
 <body style="margin:0;background:#e7efe4;font-family:Figtree,Segoe UI,sans-serif;padding:32px">
-  <h1 style="letter-spacing:-.04em">minegocio · correos de deploy</h1>
+  <h1 style="letter-spacing:-.04em">MiTiendita · correos de deploy</h1>
   ${indexRows.join('')}
 </body></html>`;
   fs.writeFileSync(path.join(outDir, 'index.html'), index, 'utf8');
