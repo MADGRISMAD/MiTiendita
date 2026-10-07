@@ -47,7 +47,7 @@
               <td>{{ p.lastLoginAt ? ago(p.lastLoginAt) : "nunca ha entrado" }}</td>
               <td>
                 <div v-if="p.username !== me" class="acts">
-                  <button type="button" class="adm-btn sm" :disabled="busy === p.id || !p.mfaEnabled" @click="resetMfa(p)">
+                  <button v-if="!p.permanent || mePermanent" type="button" class="adm-btn sm" :disabled="busy === p.id || !p.mfaEnabled" @click="resetMfa(p)">
                     {{ confirm === `mfa${p.id}` ? "¿Restablecer?" : "Restablecer 2FA" }}
                   </button>
                   <button v-if="!p.permanent" type="button" class="adm-btn sm danger-ghost" :disabled="busy === p.id" @click="remove(p)">
@@ -112,6 +112,8 @@ const confirm = ref("");
 let confirmTimer = null;
 
 const me = computed(() => authStore.username || "");
+// Solo un permanente puede restablecer el 2FA de otro permanente.
+const mePermanent = computed(() => staff.value.some((p) => p.username === me.value && p.permanent));
 const fullName = (p) => `${p.name || ""} ${p.lastName || ""}`.trim() || p.username;
 const subtitle = computed(() => {
   const n = staff.value.length;

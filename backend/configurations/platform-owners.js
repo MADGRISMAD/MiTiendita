@@ -1,4 +1,5 @@
-// Admins permanentes de la plataforma: nadie los puede quitar desde la app.
+// Admins permanentes de la plataforma: nadie los puede quitar desde la app, y su 2FA solo lo
+// restablece otro permanente. Es la misma lista en MiColmena y MiConsultorio.
 // Para cambiar esta lista hay que cambiar el código, así queda en el historial de git.
 const PERMANENT_ADMINS = ['madgrismad@gmail.com', 'mayra.bamaca09@gmail.com', 'luispantoja1102@gmail.com'];
 

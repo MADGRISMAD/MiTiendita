@@ -355,6 +355,7 @@ test('equipo: los admins permanentes no se pueden quitar; los demás admins sí'
     assert.equal(staff.find((p) => p.username === 'nuevo').permanent, false);
 
     assert.equal((await call('DELETE', '/platform/staff/p1', 'admin')).status, 403);
+    assert.equal((await call('POST', '/platform/staff/p1/reset-mfa', 'admin')).status, 403, 'un admin normal no le quita el 2FA');
     assert.ok(db.users.find((u) => u._id === 'p1'), 'sigue en el equipo');
     assert.equal((await call('DELETE', '/platform/staff/a2', 'admin')).status, 200);
   } finally {

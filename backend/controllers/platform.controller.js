@@ -849,6 +849,10 @@ async function resetStaffMfa(req, res) {
     if (target.username === req.user.username) {
       return res.status(400).send('Para cambiar tu propia verificación, hazlo desde Configuración.');
     }
+    // Si cualquiera pudiera, debilitaría la cuenta de un admin permanente: solo otro permanente.
+    if (isPermanentAdmin(target) && !isPermanentAdmin(await db.FindUserByUsername(req.user.username))) {
+      return res.status(403).send('Solo otro admin permanente puede restablecer su verificación.');
+    }
     const user = await db.FindUserById(target.id);
     await db.UpdateUserById(target.id, {
       mfaEnabled: false,
