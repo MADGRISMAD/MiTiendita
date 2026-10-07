@@ -753,6 +753,29 @@
                 </p>
               </div>
             </header>
+            <div v-if="missingIntent === 'sale' && pickFoods.length" class="link-box">
+              <label class="link-label" for="link-term">¿Ya lo tienes en tu catálogo? Búscalo y le asigno este código.</label>
+              <input
+                id="link-term"
+                ref="linkInput"
+                v-model="linkTerm"
+                class="inp"
+                type="search"
+                autocomplete="off"
+                placeholder="Nombre del producto"
+                :disabled="linkBusy"
+              />
+              <ul v-if="linkHits.length" class="link-hits">
+                <li v-for="h in linkHits" :key="h.id">
+                  <button type="button" class="link-hit" :disabled="linkBusy" @click="linkScanned(h)">
+                    <span>{{ h.name }}</span>
+                    <small>{{ h.needsPrice ? "Sin precio" : money(h.price) }}</small>
+                  </button>
+                </li>
+              </ul>
+              <p v-else-if="linkTerm.trim().length > 1" class="dlg-note">No encontré ese nombre en tu catálogo.</p>
+              <p v-if="linkErr" class="dlg-err">{{ linkErr }}</p>
+            </div>
             <div class="dlg-stack">
               <button type="button" class="btn primary" @click="startAddMissing">Registrar producto</button>
               <button v-if="missingIntent === 'sale'" type="button" class="btn" @click="missingToMisc">
@@ -2587,7 +2610,47 @@ export default {
       if (scanInput.value) scanInput.value.value = "";
     }
 
+    // Código escaneado que no existe: se le puede asignar a un producto del catálogo (los códigos del catálogo
+    // maestro son de referencia; la primera vez que se escanea el empaque real, se le dice cuál es).
+    const linkTerm = ref("");
+    const linkErr = ref("");
+    const linkBusy = ref(false);
+    const linkInput = ref(null);
+    const linkHits = computed(() => {
+      const tokens = fold(linkTerm.value).split(/\s+/).filter(Boolean);
+      if (!tokens.length) return [];
+      return pickFoods.value
+        .filter((f) => !f.isMisc && tokens.every((t) => fold(f.name).includes(t)))
+        .sort((a, b) => Number(Boolean(b.needsPrice)) - Number(Boolean(a.needsPrice)) || String(a.name).localeCompare(String(b.name), "es"))
+        .slice(0, 6);
+    });
+    async function linkScanned(producto) {
+      const code = missingCode.value;
+      if (!code || linkBusy.value) return;
+      linkBusy.value = true;
+      linkErr.value = "";
+      try {
+        const updated = await apiService.editFood(producto.id, { barcode: code, sku: code });
+        pickFoods.value = pickFoods.value.map((p) => (p.id === updated.id ? { ...p, ...updated } : p));
+        saveCatalog(authStore.tenantId, { foods: pickFoods.value, menus: menus.value }).catch(() => {});
+        missingCode.value = "";
+        addProduct({ ...producto, ...updated }, 1, {}); // si no tiene precio, ahora la caja lo pide
+      } catch (error) {
+        const raw = error.response?.data;
+        linkErr.value = isNetworkError(error)
+          ? "Sin conexión no se puede guardar el código. Intenta de nuevo."
+          : typeof raw === "string" && raw
+            ? raw
+            : raw?.message || "No se pudo asignar el código.";
+      } finally {
+        linkBusy.value = false;
+      }
+    }
+
     function askToAdd(code, intent) {
+      linkTerm.value = "";
+      linkErr.value = "";
+      if (intent === "sale") nextTick(() => linkInput.value?.focus());
       missingCode.value = code;
       missingIntent.value = intent;
       scanError.value = "";
@@ -4304,6 +4367,12 @@ export default {
       runPriceCheck,
       addFromPriceCheck,
       missingCode,
+      linkTerm,
+      linkErr,
+      linkBusy,
+      linkInput,
+      linkHits,
+      linkScanned,
       missingIntent,
       dismissMissing,
       startAddMissing,
@@ -5456,6 +5525,35 @@ html[data-theme="dark"] .avatar {
   display: grid;
   gap: 0.45rem;
 }
+.link-box {
+  display: grid;
+  gap: 0.5rem;
+  margin-bottom: 0.9rem;
+  padding: 0.75rem;
+  border: 1px solid var(--timber-line);
+  border-radius: 0.9rem;
+  background: var(--timber-surface);
+}
+.link-label { font-size: 0.86rem; font-weight: 700; }
+.link-hits { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.3rem; }
+.link-hit {
+  width: 100%;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--timber-line);
+  border-radius: 0.7rem;
+  background: var(--timber-panel);
+  color: var(--timber-ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.link-hit:hover:not(:disabled) { border-color: var(--timber-primary); }
+.link-hit:disabled { opacity: 0.6; cursor: wait; }
+.link-hit small { color: var(--timber-muted); white-space: nowrap; }
 .dlg-err {
   margin: 0;
   padding: 0.6rem 0.8rem;
