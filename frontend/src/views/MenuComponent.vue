@@ -409,6 +409,16 @@
               >
                 <PosIcon name="spark" :size="18" /> Registro mágico
               </button>
+              <button
+                v-if="masterCatalogOn"
+                type="button"
+                class="btn"
+                :disabled="cashBlocked"
+                :title="cashBlocked ? 'Bloqueado hasta el corte de caja' : 'Productos de abarrotes ya capturados: elige los que vendes y ponles tu precio'"
+                @click="showMasterCatalog = true"
+              >
+                <PosIcon name="box" :size="18" /> Catálogo maestro
+              </button>
               <button type="button" class="btn primary hide-mobile" @click="openNewFood">
                 <PosIcon name="plus" :size="18" /> Nuevo producto
               </button>
@@ -597,8 +607,13 @@
                   <PosIcon name="box" class="big-ico" :size="26" />
                   <template v-if="!pickFoods.length">
                     <p><strong>Aún no hay productos.</strong></p>
-                    <p>Agrégalos uno por uno o carga 8 de ejemplo para probar la caja.</p>
+                    <p>
+                      Agrégalos uno por uno{{ masterCatalogOn ? ', elígelos del catálogo maestro' : '' }} o carga 8 de ejemplo para probar la caja.
+                    </p>
                     <div class="empty-acts">
+                      <button v-if="masterCatalogOn" type="button" class="soft-btn" :disabled="cashBlocked" @click="showMasterCatalog = true">
+                        Catálogo maestro
+                      </button>
                       <button type="button" class="soft-btn" @click="openNewFood">Nuevo producto</button>
                       <button type="button" class="soft-btn" :disabled="seeding || cashBlocked" @click="seedStarter">
                         {{ seeding ? 'Cargando…' : 'Cargar 8 de ejemplo' }}
@@ -1022,6 +1037,13 @@
         @manual="onMagicManual"
       />
 
+      <MasterCatalogSheet
+        v-if="masterCatalogOn && showMasterCatalog"
+        :menus="menus"
+        @close="showMasterCatalog = false"
+        @applied="onCatalogApplied"
+      />
+
       <!-- Cobro -->
       <Teleport to="body">
         <div v-if="showPayment" class="dlg-bg">
@@ -1402,6 +1424,8 @@
 <script>
 import AppShell from "../components/AppShell.vue";
 import MagicPricesSheet from "../components/MagicPricesSheet.vue";
+import MasterCatalogSheet from "../components/MasterCatalogSheet.vue";
+import { masterCatalogAvailable } from "../masterCatalog";
 import PosIcon from "../components/PosIcon.js";
 import { ref, reactive, computed, onMounted, onUnmounted, watch, nextTick } from "vue";
 import { useRoute, useRouter } from "vue-router";
@@ -1478,7 +1502,7 @@ function round2(n) {
 const CATEGORY_HUES = [212, 28, 152, 274, 342, 46, 190, 118, 8, 236];
 
 export default {
-  components: { AppShell, MagicPricesSheet, PosIcon },
+  components: { AppShell, MagicPricesSheet, MasterCatalogSheet, PosIcon },
   directives: { selectOnFocus: vSelectOnFocus },
   props: {
     initialMode: { type: String, default: "pos" },
@@ -1567,6 +1591,8 @@ export default {
     const showMenuForm = ref(false);
     const showFoodForm = ref(false);
     const showMagic = ref(false);
+    const showMasterCatalog = ref(false);
+    const masterCatalogOn = computed(() => masterCatalogAvailable(venueStore.businessType));
     const aiEnabled = computed(
       () => billingStore.loaded && billingStore.aiEnabled === true && !billingStore.isPerpetual
     );
@@ -2484,6 +2510,7 @@ export default {
           showFoodForm.value ||
           showMenuForm.value ||
           showMagic.value ||
+          showMasterCatalog.value ||
           showPayment.value ||
           showQty.value ||
           showWeigh.value ||
@@ -2873,6 +2900,7 @@ export default {
         showMenuForm.value ||
         showDiscount.value ||
         showMagic.value ||
+        showMasterCatalog.value ||
         showPayment.value ||
         showQty.value ||
         showWeigh.value ||
@@ -3521,6 +3549,7 @@ export default {
         showMenuForm.value ||
         showDiscount.value ||
         showMagic.value ||
+        showMasterCatalog.value ||
         showPayment.value ||
         showQty.value ||
         showWeigh.value ||
@@ -3608,6 +3637,7 @@ export default {
           showFoodForm.value ||
           showMenuForm.value ||
           showMagic.value ||
+          showMasterCatalog.value ||
           showPayment.value ||
           showQty.value ||
           showWeigh.value ||
@@ -3639,7 +3669,7 @@ export default {
       if (e.defaultPrevented) return;
       if (mode.value !== "pos") return;
       if (e.key === "Escape") {
-        if (showFoodForm.value || showMenuForm.value || showMagic.value) return;
+        if (showFoodForm.value || showMenuForm.value || showMagic.value || showMasterCatalog.value) return;
         if (closeTopLayer()) e.preventDefault();
         return;
       }
@@ -3854,6 +3884,11 @@ export default {
       await fetchMenus();
     }
 
+    async function onCatalogApplied() {
+      // Llegaron productos y quizá categorías nuevas
+      await fetchMenus();
+    }
+
     function closeFoodForm() {
       showFoodForm.value = false;
       editingFood.value = null;
@@ -4034,6 +4069,9 @@ export default {
       seeding,
       seedErr,
       seedStarter,
+      showMasterCatalog,
+      masterCatalogOn,
+      onCatalogApplied,
       businessName,
       showMenuForm,
       showFoodForm,

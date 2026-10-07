@@ -68,6 +68,15 @@ Modelos probados (ir llenando al probar en tienda; formato: modelo · conexión 
 | _pendiente_ | USB ESC/POS genérica 80 mm | Windows · Chrome | _por probar_ |
 | _pendiente_ | Bluetooth 80 mm | Android · Chrome | _por probar_ |
 
+## Catálogo maestro (abarrotes)
+**Productos → Catálogo maestro**: 181 productos de abarrotes, frescos y conveniencia (Tijuana), listos para agregar a la tienda. El dueño marca lo que vende y le pone **su precio**; el catálogo no trae precios. Cada producto se copia al catálogo de la tienda (nombre, presentación, código, unidad de venta), así que después se edita como cualquier otro.
+
+- Lo usan las tiendas de giro **abarrotes**, **conveniencia** y **comercio** (`other`; ahí caen las carnicerías, que no tienen giro propio). Ferretería, farmacia, restaurante, café, bar y hotel no lo ven, y el servidor responde 403.
+- Sin elegir categoría, cada producto va a la de su proveedor (Sabritas, Bimbo, Coca-Cola…), que se crea si no existe. Lo que la tienda ya tiene se omite, y se respeta el tope de productos del plan.
+- Lo fresco por kilo (16 productos con clave PLU) se agrega «por kilo» y con la clave de báscula (`3001`, no `PLU-3001`).
+- Los códigos de barras son de **referencia**: solo 1 de 161 pasa la validación EAN-13. Hay que escanear el empaque real al editar cada producto.
+- Los datos están en `backend/data/catalogo-maestro.json`; para actualizarlos se edita ese archivo y se publica. La lista de giros está en `backend/services/master-catalog.service.js` y en `frontend/src/masterCatalog.js` (una prueba comprueba que coincidan).
+
 ## Configuración inicial
 Tras registrarte, el wizard pide nombre de tienda, tipo (abarrotes / conveniencia / farmacia / ferretería) y logo. Puedes cargar 8 productos de ejemplo para cobrar el mismo día. Términos: `/terminos` · Privacidad: `/privacidad`.
 

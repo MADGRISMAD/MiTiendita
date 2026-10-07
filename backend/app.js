@@ -37,6 +37,7 @@ app.use(limits.global());
 app.use('/usuarios', require('./routers/usuarios.router'));
 app.use('/menus', require('./routers/menus.router'));
 app.use('/foods', require('./routers/foods.router'));
+app.use('/catalog', require('./routers/catalog.router'));
 app.use('/waiters', require('./routers/meseros.router'));
 app.use('/settings', require('./routers/settings.router'));
 app.use('/orders', require('./routers/orders.router'));
