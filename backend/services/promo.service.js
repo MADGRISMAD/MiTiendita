@@ -1,5 +1,5 @@
 /**
- * Promoción de lanzamiento (solo clientes NUEVOS, aparte de los 14 días de prueba):
+ * Promoción de lanzamiento (solo clientes NUEVOS, aparte de los 3 días de prueba):
  * los primeros 3 cobros MENSUALES a 1/3 del precio; después, precio normal.
  *
  * Estado en tenant.promo:

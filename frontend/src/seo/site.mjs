@@ -15,7 +15,7 @@ export const SITE = {
   logo: '/icons/icon-512.png',
   defaultTitle: 'Mi Tiendita — Punto de venta en la nube para abarrotes, farmacias y ferreterías',
   defaultDescription:
-    'Punto de venta (POS) en la nube para tiendas en México: cobra desde celular, tablet o PC, sigue vendiendo sin internet, controla inventario y cortes de caja. 14 días gratis.',
+    'Punto de venta (POS) en la nube para tiendas en México: cobra desde celular, tablet o PC, sigue vendiendo sin internet, controla inventario y cortes de caja. 3 días gratis.',
 };
 
 // Precios (MXN, IVA incluido). Deben coincidir con backend/services/plans.catalog.js
@@ -42,7 +42,7 @@ export const VERTICALS = [
     keyword: 'punto de venta para abarrotes',
     title: 'Punto de venta para abarrotes en la nube | Mi Tiendita',
     description:
-      'Sistema de punto de venta para tiendas de abarrotes: cobra rápido con código de barras, vende sin internet, controla inventario y cortes de caja desde tu celular. Prueba 14 días gratis.',
+      'Sistema de punto de venta para tiendas de abarrotes: cobra rápido con código de barras, vende sin internet, controla inventario y cortes de caja desde tu celular. Prueba 3 días gratis.',
     h1: 'Punto de venta para tiendas de abarrotes',
     lead: 'Cobra en segundos, sabe qué se vende y qué falta, y deja el cuaderno. Mi Tiendita funciona en el celular, la tablet o la PC del mostrador.',
     sections: [
@@ -52,7 +52,7 @@ export const VERTICALS = [
       { h2: 'Carga tu catálogo con una foto', p: 'Con Inventario Mágico tomas foto a la nota del proveedor y los productos, cantidades y costos se cargan solos para que solo revises.' },
     ],
     faq: [
-      { q: '¿Cuánto cuesta un punto de venta para abarrotes?', a: 'Mi Tiendita empieza en $349 al mes con 14 días de prueba gratis y sin tarjeta. Los clientes nuevos pagan sus primeros 3 meses a un tercio del precio.' },
+      { q: '¿Cuánto cuesta un punto de venta para abarrotes?', a: 'Mi Tiendita empieza en $349 al mes con 3 días de prueba gratis y sin tarjeta. Los clientes nuevos pagan sus primeros 3 meses a un tercio del precio.' },
       { q: '¿Necesito comprar una computadora especial?', a: 'No. Funciona en el navegador de un celular, tablet o PC que ya tengas. Si quieres, puedes agregar lector de código de barras, impresora de tickets y báscula.' },
       { q: '¿Funciona sin internet?', a: 'Sí. Puedes seguir cobrando sin conexión y las ventas se sincronizan solas al volver el internet.' },
       { q: '¿Puedo tener varios cajeros?', a: 'Sí. Cada cajero entra con su usuario y el dueño ve las ventas y cortes de todos.' },
@@ -63,7 +63,7 @@ export const VERTICALS = [
     keyword: 'punto de venta para farmacia',
     title: 'Punto de venta para farmacia con control de caducidades | Mi Tiendita',
     description:
-      'Software de punto de venta para farmacias: control de lotes y caducidades, código de barras, inventario y corte de caja en la nube. Funciona sin internet. Prueba 14 días gratis.',
+      'Software de punto de venta para farmacias: control de lotes y caducidades, código de barras, inventario y corte de caja en la nube. Funciona sin internet. Prueba 3 días gratis.',
     h1: 'Punto de venta para farmacias',
     lead: 'Controla lotes y fechas de caducidad, cobra con código de barras y mantén tu inventario al día desde cualquier pantalla.',
     sections: [
@@ -76,7 +76,7 @@ export const VERTICALS = [
       { q: '¿El sistema controla fechas de caducidad?', a: 'Sí. Cada compra se registra con lote y caducidad, y puedes ver los productos que están por vencer.' },
       { q: '¿Puedo usarlo en varias computadoras?', a: 'Sí. Es un sistema en la nube: entras desde cualquier PC, tablet o celular con tu usuario.' },
       { q: '¿Qué pasa si se cae el internet?', a: 'Sigues cobrando. Las ventas se guardan y se suben solas cuando vuelve la conexión.' },
-      { q: '¿Hay prueba gratis?', a: 'Sí, 14 días gratis sin tarjeta.' },
+      { q: '¿Hay prueba gratis?', a: 'Sí, 3 días gratis sin tarjeta.' },
     ],
   },
   {
@@ -84,7 +84,7 @@ export const VERTICALS = [
     keyword: 'punto de venta para ferretería',
     title: 'Punto de venta para ferretería: inventario grande y precios al día | Mi Tiendita',
     description:
-      'Sistema de punto de venta para ferreterías: miles de productos, venta a granel, compras a proveedores y precios actualizados con una foto de la factura. 14 días gratis.',
+      'Sistema de punto de venta para ferreterías: miles de productos, venta a granel, compras a proveedores y precios actualizados con una foto de la factura. 3 días gratis.',
     h1: 'Punto de venta para ferreterías',
     lead: 'Miles de piezas, precios que cambian y ventas por metro o por kilo. Mi Tiendita lo ordena sin que pierdas tiempo.',
     sections: [
@@ -105,7 +105,7 @@ export const VERTICALS = [
     keyword: 'punto de venta para papelería',
     title: 'Punto de venta para papelería y regalos | Mi Tiendita',
     description:
-      'Punto de venta para papelerías: cobra rápido en temporada escolar, controla inventario de miles de artículos y haz tu corte de caja desde el celular. 14 días gratis.',
+      'Punto de venta para papelerías: cobra rápido en temporada escolar, controla inventario de miles de artículos y haz tu corte de caja desde el celular. 3 días gratis.',
     h1: 'Punto de venta para papelerías',
     lead: 'En regreso a clases cada segundo cuenta. Cobra rápido, sabe qué se vende y que no se te acaben los útiles.',
     sections: [
@@ -118,7 +118,7 @@ export const VERTICALS = [
       { q: '¿Puedo cobrar artículos que no tienen código de barras?', a: 'Sí. Búscalos por nombre o usa un artículo libre con el precio que quieras.' },
       { q: '¿Varios cajeros al mismo tiempo?', a: 'Sí, cada uno con su usuario.' },
       { q: '¿Funciona en el celular?', a: 'Sí, en celular, tablet o PC desde el navegador.' },
-      { q: '¿Cuánto cuesta?', a: 'Desde $349 al mes, con 14 días de prueba gratis.' },
+      { q: '¿Cuánto cuesta?', a: 'Desde $349 al mes, con 3 días de prueba gratis.' },
     ],
   },
   {
@@ -126,7 +126,7 @@ export const VERTICALS = [
     keyword: 'punto de venta con báscula',
     title: 'Punto de venta con báscula para carnicería, verdulería y cremería | Mi Tiendita',
     description:
-      'Punto de venta con báscula conectada para carnicerías, verdulerías, cremerías y tiendas a granel: elige el producto, pesa y se agrega solo al ticket. 14 días gratis.',
+      'Punto de venta con báscula conectada para carnicerías, verdulerías, cremerías y tiendas a granel: elige el producto, pesa y se agrega solo al ticket. 3 días gratis.',
     h1: 'Punto de venta con báscula',
     lead: 'Elige el producto, ponlo en la báscula y cuando el peso se estabiliza se agrega solo al ticket con su precio por kilo.',
     sections: [
@@ -139,7 +139,7 @@ export const VERTICALS = [
       { q: '¿Qué báscula necesito?', a: 'Una báscula con salida a computadora (por cable USB o serial) que envíe el peso. Si no tienes, puedes capturar el peso a mano.' },
       { q: '¿Funciona en tablet?', a: 'La lectura automática de la báscula funciona en la computadora con el navegador; en tablet o celular capturas el peso.' },
       { q: '¿Puedo vender por pieza y por kilo en la misma tienda?', a: 'Sí, cada producto tiene su propia unidad de venta.' },
-      { q: '¿Hay prueba gratis?', a: 'Sí, 14 días gratis.' },
+      { q: '¿Hay prueba gratis?', a: 'Sí, 3 días gratis.' },
     ],
   },
   {
@@ -147,7 +147,7 @@ export const VERTICALS = [
     keyword: 'punto de venta sin internet',
     title: 'Punto de venta que funciona sin internet | Mi Tiendita',
     description:
-      'Punto de venta en la nube que sigue cobrando sin internet: las ventas se guardan en el equipo y se sincronizan solas al volver la conexión. Celular, tablet o PC. 14 días gratis.',
+      'Punto de venta en la nube que sigue cobrando sin internet: las ventas se guardan en el equipo y se sincronizan solas al volver la conexión. Celular, tablet o PC. 3 días gratis.',
     h1: 'Punto de venta que funciona sin internet',
     lead: 'Lo mejor de la nube sin depender de ella: si se cae el internet sigues cobrando, y cuando vuelve todo se sube solo.',
     sections: [
@@ -160,7 +160,7 @@ export const VERTICALS = [
       { q: '¿Cómo funciona sin internet si es en la nube?', a: 'La app guarda las ventas en tu equipo mientras no hay conexión y las sube automáticamente cuando vuelve el internet.' },
       { q: '¿Necesito internet para empezar a usarla?', a: 'Necesitas conexión para entrar la primera vez y cargar tu catálogo; después puedes cobrar aunque se vaya.' },
       { q: '¿Qué pasa si se descompone mi computadora?', a: 'Entras desde otro equipo con tu usuario y sigues trabajando: todo está en la nube.' },
-      { q: '¿Cuánto cuesta?', a: 'Desde $349 al mes, con 14 días gratis y una promoción para clientes nuevos.' },
+      { q: '¿Cuánto cuesta?', a: 'Desde $349 al mes, con 3 días gratis y una promoción para clientes nuevos.' },
     ],
   },
 ];
@@ -179,8 +179,8 @@ const PUBLIC = {
     changefreq: 'monthly',
   },
   '/register': {
-    title: 'Crea tu tienda gratis 14 días | Mi Tiendita',
-    description: 'Crea tu cuenta de Mi Tiendita en un minuto: punto de venta en la nube con 14 días gratis y sin tarjeta.',
+    title: 'Crea tu tienda gratis 3 días | Mi Tiendita',
+    description: 'Crea tu cuenta de Mi Tiendita en un minuto: punto de venta en la nube con 3 días gratis y sin tarjeta.',
     priority: '0.8',
     changefreq: 'monthly',
   },

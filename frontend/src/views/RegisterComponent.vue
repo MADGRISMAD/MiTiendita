@@ -16,7 +16,7 @@
     <header class="auth-head">
       <h1>{{ isPartner ? "Sé proveedor oficial" : "Crea tu tienda" }}</h1>
       <p v-if="isPartner">Vende Mi Tiendita en tu zona y gana del 10% al 20% de cada cobro de las tiendas que traigas.</p>
-      <p v-else>14 días gratis. Toma menos de un minuto y puedes cobrar hoy mismo.</p>
+      <p v-else>3 días gratis. Toma menos de un minuto y puedes cobrar hoy mismo.</p>
     </header>
 
     <div class="auth-kind" role="radiogroup" aria-label="¿Qué quieres crear?">

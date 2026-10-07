@@ -116,7 +116,7 @@ const copied = ref("");
 const subtitle = computed(() => (data.value ? data.value.partner.name : "Portal de socios"));
 const link = computed(() => `${window.location.origin}/register?ref=${encodeURIComponent(data.value?.partner.code || "")}`);
 const whatsappShare = computed(
-  () => `https://wa.me/?text=${encodeURIComponent(`Crea tu tienda en Mi Tiendita con 14 días gratis: ${link.value}`)}`
+  () => `https://wa.me/?text=${encodeURIComponent(`Crea tu tienda en Mi Tiendita con 3 días gratis: ${link.value}`)}`
 );
 
 async function copy(text, message) {

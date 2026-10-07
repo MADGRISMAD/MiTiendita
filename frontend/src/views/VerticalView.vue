@@ -9,7 +9,7 @@
       <h1>{{ page.h1 }}</h1>
       <p class="lede">{{ page.lead }}</p>
       <div class="cta">
-        <router-link class="btn primary" to="/register">Probar 14 días gratis</router-link>
+        <router-link class="btn primary" to="/register">Probar 3 días gratis</router-link>
         <router-link class="btn" :to="{ path: '/', hash: '#planes' }">Ver precios</router-link>
       </div>
       <p class="promo">Clientes nuevos: primeros 3 meses a 1/3 del precio. Sin tarjeta para la prueba.</p>
@@ -38,7 +38,7 @@
           <small>o ${{ p.year.toLocaleString("es-MX") }} al año</small>
         </div>
       </div>
-      <p class="muted">Precios en MXN con IVA. 14 días de prueba gratis; los clientes nuevos pagan sus primeros 3 meses a un tercio del precio.</p>
+      <p class="muted">Precios en MXN con IVA. 3 días de prueba gratis; los clientes nuevos pagan sus primeros 3 meses a un tercio del precio.</p>
     </section>
 
     <section class="card" aria-labelledby="faq-title">

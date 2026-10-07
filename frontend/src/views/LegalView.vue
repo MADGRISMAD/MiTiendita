@@ -22,7 +22,7 @@
           <p>
             El registro crea un negocio (tenant) y un usuario administrador.
             Eres responsable de las ventas, el catálogo y las personas que invites.
-            La prueba dura 14 días; después necesitas un plan activo para seguir cobrando.
+            La prueba dura 3 días; después necesitas un plan activo para seguir cobrando.
           </p>
           <h2>2. Planes y pagos</h2>
           <p>

@@ -56,7 +56,7 @@
             </p>
             <div class="hero-cta">
               <router-link v-if="!loggedIn" class="btn amber lg" to="/register">
-                Probar 14 días gratis
+                Probar 3 días gratis
               </router-link>
               <router-link v-else class="btn amber lg" :to="{ name: homeRoute }">
                 Abrir caja
@@ -169,7 +169,7 @@
             <span>en la nube</span>
           </div>
           <div class="trust-item" style="--k: 1">
-            <strong data-count="14" data-suffix=" días">14 días</strong>
+            <strong data-count="3" data-suffix=" días">3 días</strong>
             <span>de prueba gratis</span>
           </div>
           <div class="trust-item" style="--k: 2">
@@ -488,13 +488,13 @@
             <p class="section-kicker">Precios sin letras chiquitas</p>
             <h2>Elige según tu tienda</h2>
             <p class="section-lede">
-              14 días de prueba. Sin tarjeta. Cancela cuando quieras. Precios en MXN con IVA.
+              3 días de prueba. Sin tarjeta. Cancela cuando quieras. Precios en MXN con IVA.
             </p>
             <p class="promo-banner" data-reveal>
               <span class="promo-tag">Lanzamiento</span>
               <span>
                 <strong>Clientes nuevos: 3 meses a 1/3 del precio</strong> con el plan mensual, después precio normal.
-                <em>Aparte de tus 14 días gratis.</em>
+                <em>Aparte de tus 3 días gratis.</em>
               </span>
             </p>
           </div>
@@ -656,7 +656,7 @@
           </div>
           <h2>Tu tienda merece un sistema que no te deje tirado</h2>
           <p>
-            Prueba Mi Tiendita 14 días. Si no te convence, cancelas y listo — sin cobros, sin letras chiquitas.
+            Prueba Mi Tiendita 3 días. Si no te convence, cancelas y listo — sin cobros, sin letras chiquitas.
           </p>
           <div class="final-cta-actions">
             <router-link v-if="!loggedIn" class="btn amber lg" to="/register">

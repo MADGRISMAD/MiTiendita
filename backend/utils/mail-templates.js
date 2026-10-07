@@ -214,7 +214,7 @@ function invoiceStoreEmail({ storeName, folio, total, invoice }) {
 function welcomeEmail({ name, businessName, appUrl, trialDays }) {
   const who = name || 'Hola';
   const shop = businessName || 'tu tienda';
-  const days = trialDays || 14;
+  const days = trialDays || 3;
   return {
     subject: `Bienvenido a Mi Tiendita — ${days} días de prueba`,
     html: renderMachote({

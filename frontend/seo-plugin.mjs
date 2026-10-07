@@ -56,7 +56,7 @@ export function bodyFor(p, page) {
     inner = `
 <h1>${esc(v.h1)}</h1>
 <p>${esc(v.lead)}</p>
-<p><a href="/register">Prueba Mi Tiendita 14 días gratis</a></p>
+<p><a href="/register">Prueba Mi Tiendita 3 días gratis</a></p>
 ${v.sections.map((s) => `<h2>${esc(s.h2)}</h2><p>${esc(s.p)}</p>`).join('\n')}
 <h2>Todo lo que incluye</h2><ul>${COMMON_FEATURES.map((f) => `<li>${esc(f)}</li>`).join('')}</ul>
 <h2>Precios</h2>${prices()}
@@ -70,7 +70,7 @@ ${v.faq.map((f) => `<h3>${esc(f.q)}</h3><p>${esc(f.a)}</p>`).join('\n')}
 <p><a href="/register">Crear mi tienda gratis</a> · <a href="/login">Ingresar</a></p>
 <h2>Qué puedes hacer con Mi Tiendita</h2><ul>${COMMON_FEATURES.map((f) => `<li>${esc(f)}</li>`).join('')}</ul>
 <h2>Precios</h2>${prices()}
-<p>14 días de prueba gratis sin tarjeta. Clientes nuevos: primeros 3 meses a un tercio del precio.</p>
+<p>3 días de prueba gratis sin tarjeta. Clientes nuevos: primeros 3 meses a un tercio del precio.</p>
 <h2>Punto de venta para tu giro</h2>${nav()}
 <p><a href="/ayuda">Ayuda</a> · <a href="/terminos">Términos</a> · <a href="/privacidad">Privacidad</a></p>`;
   } else {

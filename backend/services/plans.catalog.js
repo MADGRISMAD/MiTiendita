@@ -8,7 +8,7 @@ const PLANS = ['basic', 'growth', 'pro'];
 const ALL_PLANS = [...PLANS, 'perpetual'];
 
 /**
- * Promoción de lanzamiento para clientes NUEVOS (aparte de los 14 días de prueba):
+ * Promoción de lanzamiento para clientes NUEVOS (aparte de los 3 días de prueba):
  * los primeros PROMO.months cobros mensuales a 1/3 del precio; después, precio normal.
  */
 const PROMO = {

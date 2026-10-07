@@ -205,7 +205,7 @@ const LADDER = [
 const STEPS = [
   { title: "Mándanos tu solicitud", text: "Te registras como proveedor o nos escribes por WhatsApp. No cuesta nada." },
   { title: "Te activamos tu código", text: "Revisamos tu solicitud y te damos tu número de referencia, tu enlace y acceso a tu portal." },
-  { title: "Registras tiendas", text: "Compartes tu enlace; la tienda crea su cuenta con 14 días gratis y queda ligada a ti." },
+  { title: "Registras tiendas", text: "Compartes tu enlace; la tienda crea su cuenta con 3 días gratis y queda ligada a ti." },
   { title: "Ganas en cada cobro", text: "Cuando la tienda paga su plan, la comisión aparece en tu portal. Te pagamos lo acumulado." },
 ];
 

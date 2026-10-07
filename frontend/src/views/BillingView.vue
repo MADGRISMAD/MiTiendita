@@ -271,7 +271,7 @@ const status = ref({
   isPerpetual: billingStore.isPerpetual,
   aiEnabled: billingStore.aiEnabled,
   billingStatus: "trialing",
-  trialDaysLeft: 14,
+  trialDaysLeft: 3,
   active: true,
   mpConfigured: false,
   mpSandbox: false,

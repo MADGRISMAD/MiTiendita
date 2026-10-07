@@ -22,7 +22,7 @@
             Sigue vendiendo aunque se vaya el internet
           </li>
         </ul>
-        <p class="auth-trial">Prueba gratis de 14 días</p>
+        <p class="auth-trial">Prueba gratis de 3 días</p>
       </div>
 
       <p class="auth-foot">En la nube · celular, tablet y computadora</p>

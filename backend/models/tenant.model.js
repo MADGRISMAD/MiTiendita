@@ -32,7 +32,7 @@ function isOutsideTenant(role) {
 const PLANS = ALL_PLANS;
 const PUBLIC_PLANS = ['basic', 'growth', 'pro'];
 const BILLING_STATUSES = ['trialing', 'active', 'past_due', 'suspended'];
-const TRIAL_DAYS = 14;
+const TRIAL_DAYS = 3;
 
 function trialEndsFrom(date = new Date()) {
   const d = new Date(date);
