@@ -261,21 +261,32 @@
       <!-- ═══ VIDEO ═══ -->
       <section id="video" class="band">
         <div class="section video-wrap" data-reveal>
-          <p class="section-kicker">Míralo en acción</p>
-          <h2>De abrir la caja al corte, en minuto y medio</h2>
-          <p class="section-lede">
-            Así se ve una venta real: escanear, cobrar, ticket con QR de factura y corte de caja.
-          </p>
-          <video
-            class="demo-video"
-            controls
-            playsinline
-            preload="none"
-            poster="/demo-cobro-poster.jpg"
-            aria-label="Demostración de cobro en Mi Tiendita"
-          >
-            <source src="/demo-cobro.mp4" type="video/mp4" />
-          </video>
+          <div class="promo-copy">
+            <p class="section-kicker">Míralo en 20 segundos</p>
+            <h2>Se descompone la PC. Tú sigues vendiendo.</h2>
+            <p class="section-lede">
+              Abres el navegador y ya estás en caja, con o sin internet. Tu catálogo llega con 181 productos
+              ya capturados: solo les pones precio.
+            </p>
+            <ul class="promo-points">
+              <li><span aria-hidden="true">✦</span> Entras desde cualquier equipo</li>
+              <li><span aria-hidden="true">✦</span> Sigues cobrando sin internet</li>
+              <li><span aria-hidden="true">✦</span> 3 días gratis, sin tarjeta</li>
+            </ul>
+          </div>
+          <div class="promo-stage">
+            <div class="promo-glow" aria-hidden="true"></div>
+            <video
+              class="promo-video"
+              controls
+              playsinline
+              preload="metadata"
+              poster="/mitiendita-promo-poster.jpg"
+              aria-label="Mi Tiendita en 20 segundos: el problema, la solución y por qué somos distintos"
+            >
+              <source src="/mitiendita-promo.mp4" type="video/mp4" />
+            </video>
+          </div>
         </div>
       </section>
 
@@ -3119,15 +3130,40 @@ main,
   .lp-modal-cols { grid-template-columns: minmax(0, 1fr); }
 }
 
-.demo-video {
+.video-wrap {
+  display: grid;
+  gap: 2.2rem;
+  align-items: center;
+  justify-items: center;
+  text-align: center;
+}
+.promo-copy { max-width: 32rem; }
+.promo-points { list-style: none; margin: 1.3rem 0 0; padding: 0; display: grid; gap: 0.55rem; justify-items: center; font-weight: 700; }
+.promo-points span { color: var(--timber-accent); margin-right: 0.45rem; }
+.promo-stage { position: relative; width: min(19rem, 78vw); }
+.promo-glow {
+  position: absolute;
+  inset: 8% -22%;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, var(--timber-primary), transparent 70%);
+  opacity: 0.38;
+  filter: blur(34px);
+}
+.promo-video {
+  position: relative;
   display: block;
   width: 100%;
-  max-width: 52rem;
-  margin: 1.5rem auto 0;
-  aspect-ratio: 16 / 9;
-  border-radius: 1rem;
-  background: #000;
-  box-shadow: 0 30px 60px -30px rgba(0, 0, 0, 0.7);
+  aspect-ratio: 9 / 16;
+  object-fit: cover;
+  border: 0.55rem solid #0b0f1f;
+  border-radius: 2.2rem;
+  background: #0a1330;
+  box-shadow: 0 40px 70px -30px rgba(0, 0, 0, 0.75);
+}
+@media (min-width: 860px) {
+  .video-wrap { grid-template-columns: minmax(0, 1fr) auto; gap: 4rem; text-align: left; justify-items: start; }
+  .promo-points { justify-items: start; }
+  .promo-stage { justify-self: center; width: 21rem; }
 }
 .testi-grid {
   display: grid;
