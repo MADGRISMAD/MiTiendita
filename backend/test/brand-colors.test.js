@@ -127,10 +127,10 @@ test('el tema: claro con principal oscuro y barra oscura; oscuro con principal c
 
   // Oscuro: el principal se aclara para verse sobre fondos oscuros, y el texto encima es oscuro
   assert.ok(L(get('dark', 'primary')) >= 0.6, 'oscuro: principal claro');
-  assert.ok(m.contrast(m.hexToRgb(get('dark', 'primary')), m.hexToRgb('#0A1220')) >= 4.5, 'oscuro: texto oscuro legible sobre el principal');
   assert.ok(L(get('dark', 'topbar')) <= 0.12, 'oscuro: barra aún más oscura');
   assert.ok(L(get('dark', 'primary')) > L(get('light', 'primary')), 'el principal del tema oscuro es más claro que el del claro');
-  assert.match(block('dark'), /--timber-on-primary: #0a1220/);
+  assert.ok(L(get('dark', 'on-primary')) <= 0.1, 'oscuro: el texto sobre el principal es oscuro');
+  assert.ok(m.contrast(m.hexToRgb(get('dark', 'on-primary')), m.hexToRgb(get('dark', 'primary'))) >= 4.5, 'y se lee sobre el principal');
   assert.match(block('dark'), /--timber-primary-soft: rgba\(/);
 });
 
@@ -161,4 +161,47 @@ test('el servidor guarda por defecto los mismos colores que usa la app (no un ve
   assert.equal(value.primaryColor, m.DEFAULT_PRIMARY);
   assert.equal(value.accentColor, m.DEFAULT_ACCENT);
   assert.equal(m.brandThemeCss(value.primaryColor, value.accentColor), '', 'y con esos colores no se cambia el tema');
+});
+
+test('los fondos y textos también toman el tono de la marca: con una marca roja el tema oscuro ya no es azul', async () => {
+  const m = await load();
+  const HUES = { rojo: '#BD2332', verde: '#1B7F5C', amarillo: '#8A6D00', morado: '#6B2FA0', naranja: '#B45309' };
+  const hue = (hex) => m.rgbToHsl(m.hexToRgb(hex))[0];
+  const L = (hex) => m.rgbToHsl(m.hexToRgb(hex))[2];
+  const dist = (a, b) => Math.abs(((a - b + 540) % 360) - 180);
+  for (const [name, primary] of Object.entries(HUES)) {
+    const css = m.brandThemeCss(primary, '#E8A0A8');
+    const block = (mode) => css.split(`html[data-theme="${mode}"]`)[1].split('}')[0];
+    const get = (mode, v) => block(mode).match(new RegExp(`--timber-${v}: (#[0-9a-fA-F]{6})`))[1];
+    const brandHue = hue(primary);
+
+    // Oscuro: fondos del tono de la marca (no azul marino), en el mismo orden de claridad de siempre
+    for (const v of ['surface', 'panel', 'panel-elevated', 'dock', 'ink', 'muted', 'on-primary', 'topbar-text']) {
+      assert.ok(dist(hue(get('dark', v)), brandHue) <= 14, `${name} oscuro: ${v} es del tono de la marca (salió ${Math.round(hue(get('dark', v)))}° y la marca ${Math.round(brandHue)}°)`);
+    }
+    const [s, d, pnl, el] = ['surface', 'dock', 'panel', 'panel-elevated'].map((v) => L(get('dark', v)));
+    assert.ok(s < d && d < pnl && pnl < el, `${name} oscuro: de más oscuro a más claro: fondo < dock < panel < tarjeta elevada`);
+    assert.ok(el <= 0.22, `${name} oscuro: los fondos siguen siendo oscuros`);
+    assert.ok(m.contrast(m.hexToRgb(get('dark', 'topbar-text')), m.hexToRgb(get('dark', 'topbar'))) >= 10, `${name} oscuro: el texto de la barra se lee`);
+    assert.ok(m.contrast(m.hexToRgb(get('light', 'topbar-text')), m.hexToRgb(get('light', 'topbar'))) >= 10, `${name} claro: el texto de la barra se lee`);
+    assert.ok(m.contrast(m.hexToRgb(get('dark', 'ink')), m.hexToRgb(get('dark', 'panel'))) >= 10, `${name} oscuro: el texto se lee sobre el panel`);
+    assert.ok(m.contrast(m.hexToRgb(get('dark', 'muted')), m.hexToRgb(get('dark', 'panel'))) >= 4.5, `${name} oscuro: el texto secundario se lee`);
+
+    // Claro: fondos claros con el tono de la marca; el texto, oscuro
+    for (const v of ['surface', 'panel-elevated']) {
+      assert.ok(L(get('light', v)) >= 0.94, `${name} claro: ${v} sigue siendo claro (L ${L(get('light', v)).toFixed(2)})`);
+      assert.ok(dist(hue(get('light', v)), brandHue) <= 14, `${name} claro: ${v} es del tono de la marca`);
+    }
+    assert.ok(m.contrast(m.hexToRgb(get('light', 'ink')), m.hexToRgb(get('light', 'surface'))) >= 10, `${name} claro: el texto se lee sobre el fondo`);
+    assert.ok(m.contrast(m.hexToRgb(get('light', 'muted')), [255, 255, 255]) >= 4.5, `${name} claro: el texto secundario se lee sobre blanco`);
+    assert.ok(m.contrast(m.hexToRgb(get('light', 'muted')), m.hexToRgb(get('light', 'surface'))) >= 4, `${name} claro: y sobre el fondo`);
+  }
+});
+
+test('con un logo en blanco y negro los fondos quedan casi neutros (sin teñir de un color que no tiene)', async () => {
+  const m = await load();
+  const css = m.brandThemeCss('#292D32', '#8A94A0');
+  const dark = css.split('html[data-theme="dark"]')[1].split('}')[0];
+  const surface = dark.match(/--timber-surface: (#[0-9a-fA-F]{6})/)[1];
+  assert.ok(m.rgbToHsl(m.hexToRgb(surface))[1] <= 0.2, 'fondo oscuro casi sin color');
 });

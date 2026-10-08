@@ -199,6 +199,13 @@ export function brandThemeCss(primaryHex, accentHex) {
   const darkAccent = hslToRgb([ah, clamp(as, 0.55, 0.85), 0.7]);
   const brandDark = darkenForWhiteText([h, s, Math.max(l, 0.32)]); // superficies con texto blanco
 
+  // Fondos y textos con el tono de la marca (poca saturación, sin cambiar qué tan claros u oscuros son).
+  // Sin esto, con una marca roja todo el lienzo seguía en el azul marino de Mi Tiendita.
+  const tintL = clamp(s * 0.35, 0.1, 0.22); // tema claro
+  const tintD = clamp(s * 0.4, 0.12, 0.24); // tema oscuro
+  const inkLight = hslToRgb([h, clamp(s * 0.5, 0.12, 0.3), 0.13]);
+  const inkDark = hslToRgb([h, 0.2, 0.94]);
+
   return [
     'html[data-theme="light"] {',
     `  --timber-primary: ${rgbToHex(lightPrimary)};`,
@@ -208,6 +215,13 @@ export function brandThemeCss(primaryHex, accentHex) {
     `  --timber-free: ${rgbToHex(lightPrimary)};`,
     `  --timber-brand: ${rgbToHex(lightPrimary)};`,
     "  --timber-on-primary: #ffffff;",
+    `  --timber-topbar-text: ${hslHex(h, 0.2, 0.96)};`,
+    `  --timber-surface: ${hslHex(h, tintL, 0.95)};`,
+    `  --timber-panel-elevated: ${hslHex(h, tintL, 0.975)};`,
+    `  --timber-ink: ${rgbToHex(inkLight)};`,
+    `  --timber-muted: ${hslHex(h, 0.1, 0.42)};`,
+    `  --timber-line: ${rgba(inkLight, 0.1)};`,
+    `  --timber-dock-text: ${hslHex(h, 0.1, 0.4)};`,
     "}",
     'html[data-theme="dark"] {',
     `  --timber-primary: ${rgbToHex(darkPrimary)};`,
@@ -216,7 +230,16 @@ export function brandThemeCss(primaryHex, accentHex) {
     `  --timber-topbar: ${hslHex(h, Math.min(s, 0.45), 0.08)};`,
     `  --timber-free: ${rgbToHex(darkPrimary)};`,
     `  --timber-brand: ${hslHex(...brandDark)};`,
-    "  --timber-on-primary: #0a1220;",
+    `  --timber-on-primary: ${hslHex(h, 0.35, 0.08)};`,
+    `  --timber-topbar-text: ${rgbToHex(inkDark)};`,
+    `  --timber-surface: ${hslHex(h, tintD, 0.08)};`,
+    `  --timber-panel: ${hslHex(h, tintD, 0.13)};`,
+    `  --timber-panel-elevated: ${hslHex(h, tintD, 0.17)};`,
+    `  --timber-dock: ${hslHex(h, tintD, 0.11)};`,
+    `  --timber-ink: ${rgbToHex(inkDark)};`,
+    `  --timber-muted: ${hslHex(h, 0.12, 0.68)};`,
+    `  --timber-line: ${rgba(inkDark, 0.12)};`,
+    `  --timber-dock-text: ${hslHex(h, 0.12, 0.66)};`,
     "}",
   ].join("\n");
 }

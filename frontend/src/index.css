@@ -180,7 +180,7 @@ textarea {
 .t-btn-primary {
   background: var(--timber-primary);
   color: var(--timber-on-primary);
-  box-shadow: 0 8px 20px rgba(30, 90, 168, 0.22);
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--timber-brand) 22%, transparent);
 }
 
 .t-btn-ghost {
@@ -235,7 +235,7 @@ textarea {
 .t-select:focus {
   outline: none;
   border-color: var(--timber-primary);
-  box-shadow: 0 0 0 3px rgba(30, 90, 168, 0.16);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--timber-brand) 16%, transparent);
 }
 
 .t-modal-bg {
