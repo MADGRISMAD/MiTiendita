@@ -381,7 +381,7 @@ onUnmounted(() => clearInterval(timer));
   font-weight: 600;
 }
 .billing-banner.warn {
-  background: color-mix(in srgb, #e08a1e 28%, var(--timber-panel));
+  background: color-mix(in srgb, var(--timber-accent) 28%, var(--timber-panel));
   color: var(--timber-ink);
 }
 .billing-banner.danger {

@@ -1,10 +1,14 @@
 <template>
   <router-view></router-view>
+  <BrandLoader />
 </template>
 
 <script>
+import BrandLoader from './components/BrandLoader.vue'
+
 export default {
-  name: 'App'
+  name: 'App',
+  components: { BrandLoader }
 }
 </script>
 

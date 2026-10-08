@@ -79,6 +79,15 @@ Cada tienda recibe **181 productos de abarrotes, frescos y conveniencia (Tijuana
 - Los códigos de barras son de **referencia**: solo 1 de 161 pasa la validación EAN-13, así que el lector no reconoce el empaque real. La primera vez que se escanea uno, la caja avisa «No está en el catálogo» y ofrece **buscarlo en el catálogo por nombre**: al elegirlo se le asigna el código real (y se le pide el precio si no lo tiene). Desde entonces la caja lo reconoce sola y no se duplica nada.
 - Los datos están en `backend/data/catalogo-maestro.json`; para actualizarlos se edita ese archivo y se publica (si hay que volver a cargarlo en todas las tiendas, se sube `VERSION` en `services/master-catalog.service.js`). La lista de giros está ahí y en `frontend/src/masterCatalog.js` (una prueba comprueba que coincidan).
 
+## Colores de la marca (desde el logo)
+Al subir el logo (en el asistente de configuración o en Ajustes → Mi negocio), la app **saca la paleta de la propia imagen**, muestra unos segundos el aviso «Preparando tu experiencia» y aplica los colores a toda la app. Se guardan en `primaryColor` y `accentColor` de los ajustes de la tienda.
+
+- **Sin IA generativa ni azar:** es un algoritmo sobre los píxeles (`frontend/src/brandColors.js`), así que la misma imagen da siempre la misma paleta. Ignora el fondo blanco y la transparencia.
+- **Principal:** el tono dominante del logo, oscurecido lo justo para que el texto blanco se lea (contraste ≥ 4.5) sin cambiarle el tono. **Secundario, para detalles:** el segundo color del logo si lo hay, o una versión más clara del principal; siempre más claro que el principal.
+- **Tema claro y oscuro:** el oscuro recibe los mismos tonos aclarados, para que nunca quede oscuro sobre oscuro ni claro sobre claro. La barra superior es una sombra muy oscura del tono principal. Los colores se inyectan como una hoja `#timber-brand` con las variables `--timber-primary`, `--timber-accent`, `--timber-brand`…
+- **Logo en blanco y negro:** paleta neutra (gris azulado oscuro y uno más claro). Si la imagen no tiene nada que leer (toda blanca o transparente), no se cambia nada.
+- Con los colores de Mi Tiendita (`#1E5AA8` y `#E08A1E`, o el verde viejo que guardaba el servidor) no se inyecta nada: se ve igual que siempre. «Usar el de Mi Tiendita» en Ajustes los restablece. Solo funciona con imágenes subidas desde el equipo (no con una URL de otro sitio, que el navegador no deja leer).
+
 ## Configuración inicial
 Tras registrarte, el wizard pide nombre de tienda, tipo (abarrotes / conveniencia / farmacia / ferretería) y logo. Si el giro usa el catálogo maestro, la tienda queda con sus 181 productos cargados (ver arriba). Términos: `/terminos` · Privacidad: `/privacidad`.
 

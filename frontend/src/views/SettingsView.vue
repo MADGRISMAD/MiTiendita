@@ -112,10 +112,16 @@
                         <PosIcon name="image" :size="18" /> Subir imagen
                         <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" class="sr-only" @change="onLogo" />
                       </label>
-                      <button v-if="form.logoUrl && form.logoUrl !== '/logo.svg'" type="button" class="adm-btn danger-ghost" @click="form.logoUrl = '/logo.svg'">
+                      <button v-if="form.logoUrl && form.logoUrl !== '/logo.svg'" type="button" class="adm-btn danger-ghost" @click="useStockLogo">
                         Usar el de Mi Tiendita
                       </button>
-                      <p class="adm-hint">PNG o JPG cuadrado. Lo ajustamos a 256 px para que cargue rápido. Aparece arriba en la app.</p>
+                      <p class="adm-hint">PNG o JPG cuadrado. Lo ajustamos a 256 px para que cargue rápido. Aparece arriba en la app, y con sus colores armamos la paleta de tu tienda.</p>
+                      <p v-if="hasBrand" class="brand-row">
+                        <i :style="{ background: form.primaryColor }" title="Color principal"></i>
+                        <i :style="{ background: form.accentColor }" title="Color para detalles"></i>
+                        <span>Paleta de tu logo</span>
+                      </p>
+                      <p v-if="brandNote" class="adm-hint">{{ brandNote }}</p>
                       <p v-if="logoErr" class="adm-err">{{ logoErr }}</p>
                     </div>
                   </div>
@@ -649,6 +655,7 @@ import PointTerminalSettings from "../components/PointTerminalSettings.vue";
 import { MIN_PASSWORD, passwordProblem } from "../passwordPolicy";
 import { apiService, logoutSession } from "../apiService";
 import { currentVenueSettings, fetchVenueSettings, saveVenueSettings, venueStore } from "../venueStore";
+import { DEFAULT_ACCENT, DEFAULT_PRIMARY, applyBrand, applyBrandPreview, brandFromLogo, isDefaultPalette } from "../brandTheme";
 import { themeStore, applyUiTheme } from "../themeStore";
 import { authStore, isPlatformStaff, setSession } from "../authStore";
 import QRCode from "qrcode";
@@ -792,6 +799,8 @@ function fromStore() {
     address: s.address || "",
     phone: s.phone || "",
     logoUrl: s.logoUrl || "/logo.svg",
+    primaryColor: s.primaryColor || DEFAULT_PRIMARY,
+    accentColor: s.accentColor || DEFAULT_ACCENT,
     timezone: s.timezone || "America/Mexico_City",
     inventoryEnabled: Boolean(s.inventoryEnabled),
     allowNegativeStock: Boolean(s.allowNegativeStock),
@@ -805,7 +814,7 @@ function fromStore() {
 const form = reactive(fromStore());
 const snapshot = ref(JSON.stringify(fromStore()));
 const FIELDS_BY_SECTION = {
-  negocio: ["businessName", "businessType", "address", "phone", "logoUrl", "timezone"],
+  negocio: ["businessName", "businessType", "address", "phone", "logoUrl", "primaryColor", "accentColor", "timezone"],
   ventas: ["taxPercent", "cardFeeEnabled", "cardFeePercent", "scaleBarcodeMode"],
   inventario: ["inventoryEnabled", "allowNegativeStock", "costMethod"],
 };
@@ -822,6 +831,7 @@ function reset() {
 }
 function discard() {
   Object.assign(form, JSON.parse(snapshot.value));
+  applyBrand(form.primaryColor, form.accentColor); // los colores que se veían en vivo vuelven a los guardados
   syncTaxChoice();
   syncFeeChoice();
   saveErr.value = "";
@@ -905,6 +915,8 @@ async function save() {
         address: form.address.trim(),
         phone: form.phone.trim(),
         logoUrl: form.logoUrl || "/logo.svg",
+        primaryColor: form.primaryColor || DEFAULT_PRIMARY,
+        accentColor: form.accentColor || DEFAULT_ACCENT,
         timezone: form.timezone,
         inventoryEnabled: Boolean(form.inventoryEnabled),
         allowNegativeStock: Boolean(form.allowNegativeStock),
@@ -944,6 +956,26 @@ const zoneClock = computed(() => {
 
 // Logo: se reduce a 256 px en el navegador antes de guardarlo
 const logoErr = ref("");
+const brandNote = ref("");
+const hasBrand = computed(() => !isDefaultPalette(form.primaryColor, form.accentColor));
+/** Con el logo nuevo se arma la paleta de la tienda (color principal y uno más claro) y se ve en toda la app. */
+async function adoptBrand(url) {
+  brandNote.value = "";
+  const palette = await brandFromLogo(url);
+  if (!palette) {
+    brandNote.value = "No pudimos sacar colores de esa imagen; se quedan los que tenías.";
+    return;
+  }
+  form.primaryColor = palette.primary;
+  form.accentColor = palette.accent;
+}
+function useStockLogo() {
+  form.logoUrl = "/logo.svg";
+  form.primaryColor = DEFAULT_PRIMARY;
+  form.accentColor = DEFAULT_ACCENT;
+  brandNote.value = "";
+  applyBrandPreview(DEFAULT_PRIMARY, DEFAULT_ACCENT);
+}
 function onLogo(event) {
   const file = event.target.files?.[0];
   event.target.value = "";
@@ -972,6 +1004,7 @@ function onLogo(event) {
       let url = canvas.toDataURL("image/png");
       if (url.length > 300_000) url = canvas.toDataURL("image/jpeg", 0.85);
       form.logoUrl = url;
+      adoptBrand(url);
     };
     img.onerror = () => (logoErr.value = "No se pudo leer la imagen.");
     img.src = String(reader.result);
@@ -1411,7 +1444,7 @@ onBeforeUnmount(() => {
 }
 .theme-card.light .theme-mock { background: #eef2f7; }
 .theme-card.dark .theme-mock { background: #0b1220; }
-.theme-mock i { border-radius: 0.3rem; background: #1e5aa8; }
+.theme-mock i { border-radius: 0.3rem; background: var(--timber-brand); }
 .theme-card.light .theme-mock b { border-radius: 0.35rem; background: #fff; }
 .theme-card.dark .theme-mock b { border-radius: 0.35rem; background: #172133; }
 .theme-mock em {
@@ -1421,8 +1454,10 @@ onBeforeUnmount(() => {
   width: 1.6rem;
   height: 0.7rem;
   border-radius: 999px;
-  background: #e08a1e;
+  background: var(--timber-accent);
 }
+.brand-row { display: flex; align-items: center; gap: 0.4rem; margin: 0.2rem 0 0; font-size: 0.85rem; color: var(--timber-muted); }
+.brand-row i { width: 1.4rem; height: 1.4rem; border-radius: 50%; border: 2px solid var(--timber-panel); box-shadow: 0 0 0 1px var(--timber-line); }
 .theme-name { display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; font-weight: 800; }
 
 /* Cuenta */

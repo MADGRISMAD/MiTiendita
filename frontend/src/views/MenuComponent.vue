@@ -6727,7 +6727,7 @@ html[data-theme="dark"] .avatar {
 .product-banner {
   position: relative;
   height: 9.5rem;
-  background: linear-gradient(160deg, #123056 0%, #1e5aa8 70%, #2f6fbe 100%);
+  background: linear-gradient(160deg, var(--timber-topbar) 0%, var(--timber-brand) 70%, color-mix(in srgb, var(--timber-brand) 85%, white) 100%);
   overflow: hidden;
 }
 .product-banner img {

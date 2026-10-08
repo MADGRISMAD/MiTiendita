@@ -1,5 +1,6 @@
 import { reactive, watch } from "vue";
 import { apiClient } from "./apiService";
+import { applyBrand } from "./brandTheme";
 
 const STORAGE_KEY = "timber_venue_settings";
 
@@ -38,6 +39,13 @@ export const venueStore = reactive({
   loading: false,
   ready: false,
 });
+
+// Los colores de la marca (sacados del logo) se aplican desde lo guardado en este dispositivo, antes de pintar
+applyBrand(venueStore.primaryColor, venueStore.accentColor);
+watch(
+  () => [venueStore.primaryColor, venueStore.accentColor],
+  ([primary, accent]) => applyBrand(primary, accent)
+);
 
 watch(
   venueStore,

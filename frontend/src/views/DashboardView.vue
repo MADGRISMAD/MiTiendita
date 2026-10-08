@@ -1474,7 +1474,7 @@ onMounted(async () => {
   border-radius: 1.1rem;
   background:
     radial-gradient(120% 140% at 100% 0%, color-mix(in srgb, var(--timber-accent, #e08a1e) 22%, transparent), transparent 55%),
-    linear-gradient(150deg, #173f78, #1e5aa8 60%, #2a6dc2);
+    linear-gradient(150deg, color-mix(in srgb, var(--timber-brand) 78%, black), var(--timber-brand) 60%, color-mix(in srgb, var(--timber-brand) 85%, white));
   color: #fff;
   box-shadow: var(--timber-shadow);
   transition: opacity 0.2s ease;
@@ -1663,7 +1663,7 @@ onMounted(async () => {
 .stack i { height: 100%; }
 .stack i + i { box-shadow: -2px 0 0 var(--timber-panel); }
 .m-cash { background: #2e9e6b; color: #fff; }
-.m-card { background: #1e5aa8; color: #fff; }
+.m-card { background: var(--timber-brand); color: #fff; }
 .m-transfer { background: #7a5ac8; color: #fff; }
 .m-other { background: #94a3b8; color: #fff; }
 .pay-list, .cat-list, .mini-list, .top, .sale-list { list-style: none; margin: 0; padding: 0; }

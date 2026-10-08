@@ -1,5 +1,5 @@
 <template>
-  <div class="setup-shell">
+  <div class="setup-shell" :style="{ '--primary': form.primaryColor, '--accent': form.accentColor }">
     <div class="setup-atmosphere" aria-hidden="true"></div>
 
     <div class="setup-panel">
@@ -65,7 +65,7 @@
       <!-- Paso 3: Identidad -->
       <section v-else-if="step === 3" class="step-body">
         <h2>Logo del negocio</h2>
-        <p>El sistema usa colores fijos (claro/oscuro). Aquí solo personalizas el logo del cliente.</p>
+        <p>Sube tu logo y con sus colores armamos la paleta de tu tienda: un color principal y uno más claro para los detalles.</p>
 
         <div class="identity-preview">
           <img :src="previewLogo" alt="Vista previa del logo" class="preview-logo" />
@@ -82,8 +82,15 @@
 
         <label class="field">
           <span>Subir logo</span>
-          <input type="file" accept="image/*" @change="onLogoFile" />
+          <input type="file" accept="image/*" :disabled="busyBrand" @change="onLogoFile" />
         </label>
+        <p v-if="hasBrand" class="brand-row">
+          <i :style="{ background: form.primaryColor }" title="Color principal"></i>
+          <i :style="{ background: form.accentColor }" title="Color para detalles"></i>
+          <span>Paleta de tu logo</span>
+          <button type="button" class="brand-reset" @click="useStockBrand">Usar los colores de Mi Tiendita</button>
+        </p>
+        <p v-if="brandNote" class="brand-note">{{ brandNote }}</p>
       </section>
 
       <!-- Paso 4: Operación -->
@@ -161,6 +168,7 @@ import { saveVenueSettings, venueStore } from "../venueStore";
 import { apiService } from "../apiService";
 import BrandName from "../components/BrandName.vue";
 import { masterCatalogAvailable } from "../masterCatalog";
+import { DEFAULT_ACCENT, DEFAULT_PRIMARY, applyBrandPreview, brandFromLogo, isDefaultPalette } from "../brandTheme";
 
 const router = useRouter();
 const step = ref(1);
@@ -181,8 +189,8 @@ const form = reactive({
   address: venueStore.address || "",
   phone: venueStore.phone || "",
   logoUrl: venueStore.logoUrl || "/logo.svg",
-  primaryColor: venueStore.primaryColor || "#1e5aa8",
-  accentColor: venueStore.accentColor || "#E08A1E",
+  primaryColor: isDefaultPalette(venueStore.primaryColor, venueStore.accentColor) ? DEFAULT_PRIMARY : venueStore.primaryColor,
+  accentColor: isDefaultPalette(venueStore.primaryColor, venueStore.accentColor) ? DEFAULT_ACCENT : venueStore.accentColor,
   timezone: venueStore.timezone || "America/Mexico_City",
   initialTables: 0,
 });
@@ -231,8 +239,34 @@ function onLogoFile(event) {
   const reader = new FileReader();
   reader.onload = () => {
     form.logoUrl = String(reader.result);
+    adoptBrand(form.logoUrl);
   };
   reader.readAsDataURL(file);
+}
+
+const brandNote = ref("");
+const busyBrand = ref(false);
+const hasBrand = computed(() => !isDefaultPalette(form.primaryColor, form.accentColor));
+/** Con el logo se arma la paleta de la tienda; se ve enseguida en el asistente y se guarda al finalizar. */
+async function adoptBrand(url) {
+  brandNote.value = "";
+  busyBrand.value = true;
+  try {
+    const palette = await brandFromLogo(url);
+    if (!palette) {
+      brandNote.value = "No pudimos sacar colores de esa imagen; se quedan los colores de Mi Tiendita.";
+      return;
+    }
+    form.primaryColor = palette.primary;
+    form.accentColor = palette.accent;
+  } finally {
+    busyBrand.value = false;
+  }
+}
+function useStockBrand() {
+  form.primaryColor = DEFAULT_PRIMARY;
+  form.accentColor = DEFAULT_ACCENT;
+  applyBrandPreview(DEFAULT_PRIMARY, DEFAULT_ACCENT);
 }
 
 async function finish() {
@@ -493,6 +527,10 @@ async function finish() {
   text-align: right;
 }
 
+.brand-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.45rem; margin: 0; font-size: 0.88rem; color: #3a433d; }
+.brand-row i { width: 1.6rem; height: 1.6rem; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.15); }
+.brand-reset { margin-left: auto; border: none; background: none; color: var(--primary, #1e5aa8); font: inherit; font-weight: 700; cursor: pointer; text-decoration: underline; }
+.brand-note { margin: 0; font-size: 0.86rem; color: #7a5a1a; }
 .seed-check {
   display: flex;
   gap: 0.7rem;
