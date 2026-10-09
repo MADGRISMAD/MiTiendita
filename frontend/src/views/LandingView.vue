@@ -1060,6 +1060,7 @@ main,
   font-family: var(--font-display);
   font-size: 1.05rem;
 }
+.nav-brand { flex: none; white-space: nowrap; }
 .nav-brand img { border-radius: 0.4rem; }
 .nav-links { display: none; gap: 1.25rem; }
 .nav-links a {
@@ -1084,7 +1085,23 @@ main,
 }
 .nav-links a:hover { color: #fff; }
 .nav-links a:hover::after { transform: scaleX(1); }
-.nav-actions { margin-left: auto; display: flex; gap: 0.4rem; }
+.nav-actions { margin-left: auto; display: flex; gap: 0.4rem; min-width: 0; }
+.nav-actions .btn { white-space: nowrap; }
+/* Celulares angostos: el encabezado se compacta para que logo y botones quepan en una línea */
+@media (max-width: 420px) {
+  .nav { gap: 0.5rem; padding: 0 0.6rem; }
+  .nav-brand { gap: 0.35rem; font-size: 0.95rem; }
+  .nav-brand img { width: 28px; height: 28px; }
+  .nav-actions { gap: 0.3rem; }
+  .nav-actions .btn { padding: 0 0.6rem; font-size: 0.8rem; }
+}
+@media (max-width: 350px) {
+  .nav { gap: 0.35rem; padding: 0 0.45rem; }
+  .nav-brand { font-size: 0.85rem; gap: 0.25rem; }
+  .nav-brand img { width: 24px; height: 24px; }
+  .nav-actions { gap: 0.25rem; }
+  .nav-actions .btn { padding: 0 0.45rem; font-size: 0.74rem; }
+}
 @media (min-width: 880px) {
   .nav-links { display: flex; }
   .nav { padding-inline: 1.5rem; }
@@ -2866,14 +2883,22 @@ main,
 .billing-toggle > span.on { color: var(--timber-ink); }
 .toggle-track {
   position: relative;
+  flex: none;
+  box-sizing: border-box;
   width: 3.1rem;
   height: 1.7rem;
+  min-height: 0; /* anula el min-height táctil global: deformaba el interruptor en celular */
   padding: 0;
   border: 1px solid var(--timber-line);
   border-radius: 999px;
   background: var(--timber-panel);
   cursor: pointer;
   transition: background 0.2s ease, border-color 0.2s ease;
+}
+.toggle-track::before {
+  content: "";
+  position: absolute;
+  inset: -0.55rem -0.4rem; /* área de toque de ~44 px sin cambiar el tamaño visible */
 }
 .toggle-track.annual {
   background: var(--timber-primary-soft);
@@ -3362,6 +3387,18 @@ main,
   display: flex;
   justify-content: center;
   gap: 0.5rem;
+}
+
+/* Celulares y tablets: el túnel 3D (elementos de 34rem con translateZ animado) y la entrada
+   con perspectiva ligada al scroll parpadeaban al moverse la barra del navegador. Se dejan estáticos. */
+@media (max-width: 899.98px), (hover: none) {
+  .tunnel span { display: none; }
+  .tunnel::after { display: none; }
+  .final-inner {
+    transform: none;
+    opacity: 1;
+  }
+  .coin3d { will-change: transform; backface-visibility: hidden; -webkit-backface-visibility: hidden; }
 }
 
 /* ═══════════════════════════════════════════
