@@ -59,7 +59,7 @@ jobs:
 
       # Solo mongo y api: el frontend está en Vercel y Caddy atiende el HTTPS.
       - name: Reconstruir y arrancar
-        run: ssh "$HOST" 'cd ~/mitiendita && docker compose up -d --build mongo api && docker image prune -f'
+        run: ssh "$HOST" 'cd ~/mitiendita && docker compose up -d --build mongo api && docker image prune -f && docker builder prune -f --filter until=24h'
 
       # Sin sesión, /settings responde 401 si la API está viva (502 si Caddy no la alcanza).
       - name: Comprobar que responde
