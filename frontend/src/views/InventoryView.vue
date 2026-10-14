@@ -636,6 +636,9 @@ import { apiService } from "../apiService";
 import { venueStore, fetchVenueSettings } from "../venueStore";
 import { hasRole } from "../authStore";
 import { unitOf } from "../bulk";
+import { errText, fold, hueStyle, initials, money } from "../textUtils";
+import { downloadCsv } from "../download";
+import { useFlash } from "../useFlash";
 
 const WEEKDAYS = [
   { id: 1, short: "Lun", letter: "L", long: "lunes" },
@@ -684,13 +687,7 @@ watch(
 const loading = reactive({ foods: true, suppliers: true, purchases: true, expiry: true, suggestions: true, activity: true });
 const saving = ref(false);
 const error = ref("");
-const flash = ref("");
-let flashTimer = null;
-function say(msg) {
-  flash.value = msg;
-  clearTimeout(flashTimer);
-  flashTimer = setTimeout(() => (flash.value = ""), 4000);
-}
+const { flash, say } = useFlash();
 const settingsLoaded = ref(false);
 
 const foods = ref([]);
@@ -702,10 +699,6 @@ const suggestions = ref({ groups: [] });
 const activity = ref([]);
 
 // ---------- Formato ----------
-const moneyFmt = new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" });
-function money(n) {
-  return moneyFmt.format(Number(n) || 0);
-}
 function qty(n, digits = 3) {
   const v = Number(n || 0);
   return Number.isInteger(v) ? v.toLocaleString("es-MX") : String(Number(v.toFixed(digits)));
@@ -742,21 +735,6 @@ function clock(value) {
   const d = toDate(value);
   return d ? d.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" }) : "";
 }
-function fold(s) {
-  return String(s || "")
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "");
-}
-function initials(name) {
-  const parts = String(name || "?").trim().split(/\s+/).filter(Boolean);
-  return ((parts[0]?.[0] || "?") + (parts[1]?.[0] || "")).toUpperCase();
-}
-function hueStyle(name) {
-  let h = 0;
-  for (const ch of String(name || "")) h = (h * 31 + ch.charCodeAt(0)) % 360;
-  return { "--h": h };
-}
 function digitsOf(phone) {
   const d = String(phone || "").replace(/\D/g, "");
   return d.length === 10 ? `52${d}` : d;
@@ -787,12 +765,6 @@ function itemsSummary(items) {
   const list = items || [];
   if (!list.length) return "Sin productos";
   return list.length > 1 ? `${list[0].name} y ${list.length - 1} más` : list[0].name;
-}
-function errText(e, fallback) {
-  const d = e?.response?.data;
-  if (typeof d === "string" && d) return d;
-  if (d?.message) return d.message;
-  return fallback;
 }
 
 // ---------- Existencias ----------
@@ -939,31 +911,17 @@ const expiryRows = computed(() => {
   return expiryFilter.value === "all" ? items : items.filter((r) => r.bucket === expiryFilter.value);
 });
 const expiryAlert = computed(() => Number(expiry.value?.summary?.expired || 0) + Number(expiry.value?.summary?.d7 || 0));
-function csvCell(v) {
-  const s = String(v ?? "");
-  return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-}
 function exportExpiry() {
-  const rows = (expiry.value.items || []).map((row) =>
-    [
-      row.foodName || "",
-      row.lot || "",
-      row.expiresAt ? new Date(row.expiresAt).toISOString().slice(0, 10) : "",
-      row.daysLeft == null ? "" : row.daysLeft,
-      Number(row.quantity) || 0,
-      Number(row.unitCost) || 0,
-      row.bucket === "expired" ? "Vencido" : `${row.daysLeft} dias`,
-    ]
-      .map(csvCell)
-      .join(",")
-  );
-  const body = ["Producto,Lote,Caducidad,Dias,Cantidad,Costo unitario,Alerta", ...rows].join("\n");
-  const url = URL.createObjectURL(new Blob(["﻿" + body], { type: "text/csv;charset=utf-8;" }));
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `caducidad_${todayISO()}.csv`;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  const rows = (expiry.value.items || []).map((row) => [
+    row.foodName || "",
+    row.lot || "",
+    row.expiresAt ? new Date(row.expiresAt).toISOString().slice(0, 10) : "",
+    row.daysLeft == null ? "" : row.daysLeft,
+    Number(row.quantity) || 0,
+    Number(row.unitCost) || 0,
+    row.bucket === "expired" ? "Vencido" : `${row.daysLeft} dias`,
+  ]);
+  downloadCsv(`caducidad_${todayISO()}.csv`, ["Producto", "Lote", "Caducidad", "Dias", "Cantidad", "Costo unitario", "Alerta"], rows);
 }
 
 // ---------- Compras ----------
@@ -1327,18 +1285,8 @@ function loadActivity() {
 }
 
 function exportActivity() {
-  const cell = (v) => {
-    const t = String(v ?? "");
-    return /[",\n;]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
-  };
   const rows = activity.value.map((r) => [toDate(r.createdAt)?.toLocaleString("es-MX") || "", r.user || "", r.type, r.message]);
-  const body = [["Fecha", "Usuario", "Tipo", "Detalle"], ...rows].map((r) => r.map(cell).join(",")).join("\n");
-  const url = URL.createObjectURL(new Blob(["\uFEFF" + body], { type: "text/csv;charset=utf-8;" }));
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "bitacora.csv";
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  downloadCsv("bitacora.csv", ["Fecha", "Usuario", "Tipo", "Detalle"], rows);
 }
 
 onMounted(() => {

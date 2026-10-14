@@ -333,6 +333,8 @@ import AppShell from "../components/AppShell.vue";
 import PosIcon from "../components/PosIcon.js";
 import { apiService } from "../apiService";
 import { formatMxPhone, phoneDigits, prettyPhone } from "../phone";
+import { errText, hueStyle, initials } from "../textUtils";
+import { useFlash } from "../useFlash";
 
 const ROLE = {
   admin: { label: "Admin", tone: "info", can: "Todo: productos, precios, reportes, ajustes y equipo." },
@@ -363,13 +365,7 @@ function setTab(id) {
 const loading = reactive({ team: true, staff: true });
 const saving = ref(false);
 const error = ref("");
-const flash = ref("");
-let flashTimer = null;
-function say(msg) {
-  flash.value = msg;
-  clearTimeout(flashTimer);
-  flashTimer = setTimeout(() => (flash.value = ""), 4000);
-}
+const { flash, say } = useFlash();
 const busyId = ref("");
 const confirmId = ref("");
 let confirmTimer = null;
@@ -384,23 +380,8 @@ function needsConfirm(id) {
   confirmTimer = setTimeout(() => (confirmId.value = ""), 4000);
   return true;
 }
-function errText(e, fallback) {
-  const d = e?.response?.data;
-  if (typeof d === "string" && d) return d;
-  if (d?.message) return d.message;
-  return fallback;
-}
 
 // ---------- Utilidades ----------
-function initials(name) {
-  const parts = String(name || "?").trim().split(/\s+/).filter(Boolean);
-  return ((parts[0]?.[0] || "?") + (parts[1]?.[0] || "")).toUpperCase();
-}
-function hueStyle(name) {
-  let h = 0;
-  for (const ch of String(name || "")) h = (h * 31 + ch.charCodeAt(0)) % 360;
-  return { "--h": h };
-}
 function onCell(e) {
   personForm.cellphone = phoneDigits(e.target.value);
   e.target.value = formatMxPhone(personForm.cellphone);

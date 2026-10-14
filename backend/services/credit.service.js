@@ -10,15 +10,9 @@
  *
  * Toda la lógica pasa por `store` para probarla sin base de datos (ver database/credit.db.js).
  */
+const { httpError } = require('../utils/http-error');
 
 const METHODS = ['cash', 'card', 'transfer'];
-
-function httpError(status, message, code) {
-  const err = new Error(message);
-  err.status = status;
-  if (code) err.code = code;
-  return err;
-}
 
 const cents = (n) => Math.round((Number(n) || 0) * 100);
 const money = (c) => c / 100;

@@ -686,6 +686,8 @@ import { closingLine } from "../ticketShell";
 import { prettyPhone } from "../phone";
 import { printerStore, printerSupport, printTestPage, savePrinterSettings, connectPrinter } from "../thermalPrinter";
 import { SCALE_COMMANDS, connectScale, disconnectScale, saveScaleSettings, scaleLive, scaleStore, scaleSupported } from "../scale";
+import { errText as sharedErrText, money } from "../textUtils";
+import { useFlash } from "../useFlash";
 
 const PRINTER_MODES = [
   { id: "browser", label: "Navegador (actual)", hint: "Abre el ticket y el diálogo de imprimir de Chrome. Sirve con cualquier impresora." },
@@ -902,27 +904,13 @@ const feeError = computed(() => {
   return !Number.isFinite(v) || v <= 0 || v > 30 ? "La comisión va de 0.1 a 30%." : "";
 });
 const thanksPreview = computed(() => closingLine(form.businessType));
-const moneyFmt = new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" });
-function money(n) {
-  return moneyFmt.format(Number(n) || 0);
-}
 
 const saving = ref(false);
 const saveErr = ref("");
-const flash = ref("");
-let flashTimer = null;
-function say(msg) {
-  flash.value = msg;
-  clearTimeout(flashTimer);
-  flashTimer = setTimeout(() => (flash.value = ""), 4000);
-}
-function errText(e, fallback) {
-  const d = e?.response?.data;
-  if (typeof d === "string" && d) return d;
-  if (d?.message) return d.message;
-  if (!e?.response) return "Sin conexión con el servidor. Revisa tu internet y vuelve a intentar.";
-  return fallback;
-}
+const { flash, say } = useFlash();
+// Sin respuesta del servidor = sin internet
+const errText = (e, fallback) =>
+  sharedErrText(e, e?.response ? fallback : "Sin conexión con el servidor. Revisa tu internet y vuelve a intentar.");
 async function save() {
   if (nameError.value || taxError.value || feeError.value) {
     saveErr.value = nameError.value || taxError.value || feeError.value;

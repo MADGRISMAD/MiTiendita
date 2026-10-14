@@ -1,16 +1,10 @@
-// Cliente opcional en el cobro: búsqueda y alta rápida. Sin imports ni Vue: se prueba con Vitest (src/__tests__).
+// Cliente opcional en el cobro: búsqueda y alta rápida. Sin Vue: se prueba con Vitest (src/__tests__).
 
-const fold = (s) =>
-  String(s ?? "")
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase()
-    .trim();
-const digitsOf = (s) => String(s ?? "").replace(/\D/g, "");
+import { digits as digitsOf, fold } from "./textUtils";
 
 /** Clientes que coinciden por nombre (sin acentos) o por teléfono (3 dígitos o más). Sin texto, ninguno. */
 export function matchCustomers(customers, query, limit = 5) {
-  const term = fold(query);
+  const term = fold(query).trim();
   if (!term) return [];
   const digits = digitsOf(query);
   return customers

@@ -2,18 +2,12 @@
  * backend/database/credit.db.js
  * Acceso a datos del fiado: libro de movimientos (`credit_entries`) y saldo del cliente (`customers.balance`).
  */
-const { ObjectId } = require('mongodb');
 const mongo = require('./mongodb');
+const { oid, out } = require('./ids');
 
 const ENTRIES = 'credit_entries';
 const CUSTOMERS = 'customers';
 
-const oid = (id) => (ObjectId.isValid(String(id)) && String(new ObjectId(String(id))) === String(id) ? new ObjectId(String(id)) : null);
-const out = (doc) => {
-  if (!doc) return null;
-  const { _id, ...rest } = doc;
-  return { ...rest, id: String(_id) };
-};
 const round2 = (n) => Math.round(n * 100) / 100;
 
 let indexed = false;

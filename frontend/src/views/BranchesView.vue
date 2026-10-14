@@ -173,6 +173,8 @@ import AppShell from "../components/AppShell.vue";
 import PosIcon from "../components/PosIcon.js";
 import { apiService } from "../apiService";
 import { applyOrg, enterBranch } from "../orgStore";
+import { saveBlob } from "../download";
+import { money } from "../textUtils";
 
 const proLimit = 5;
 const loading = ref(true);
@@ -193,7 +195,6 @@ const PRESETS = [
   { id: "30", label: "30 días" },
 ];
 
-const money = (n) => new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(Number(n) || 0);
 const msgOf = (e, fallback) => e?.response?.data?.message || (typeof e?.response?.data === "string" ? e.response.data : "") || fallback;
 const initials = (name) => {
   const p = String(name || "?").trim().split(/\s+/).filter(Boolean);
@@ -316,12 +317,7 @@ async function enter(b) {
 async function downloadCsv() {
   try {
     const blob = await apiService.getOrgSummaryCsv(range());
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `sucursales_${range().from}_${range().to}.csv`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 2000);
+    saveBlob(blob, `sucursales_${range().from}_${range().to}.csv`);
   } catch (e) {
     error.value = msgOf(e, "No se pudo descargar el CSV.");
   }

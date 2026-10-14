@@ -1592,6 +1592,7 @@ import {
 } from "../bulk";
 import { apiService as apiSvc } from "../apiService";
 import { matchCustomers, quickCustomerPayload } from "../saleCustomer";
+import { downloadCsv } from "../download";
 import { authStore } from "../authStore";
 import { isNetworkError, newClientSaleId } from "../net";
 import {
@@ -2407,10 +2408,6 @@ export default {
     }
 
     function exportCatalog() {
-      const cell = (v) => {
-        const t = String(v ?? "");
-        return /[",\n;]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
-      };
       const header = ["Producto", "Código", "Categoría", "Descripción", "Precio", "Costo", "Existencias", "Mínimo", "Incluye IVA"];
       const rows = catalogRows.value.map((p) =>
         [
@@ -2423,14 +2420,9 @@ export default {
           Number(p.stock) || 0,
           p.lowStockThreshold ?? 5,
           p.priceIncludesTax ? "Sí" : "No",
-        ].map(cell).join(",")
+        ]
       );
-      const blob = new Blob(["\uFEFF" + [header.join(","), ...rows].join("\n")], { type: "text/csv;charset=utf-8;" });
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = "productos.csv";
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+      downloadCsv("productos.csv", header, rows);
     }
 
     let flashTimer = null;

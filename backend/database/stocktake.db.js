@@ -2,16 +2,10 @@
  * backend/database/stocktake.db.js
  * Acceso a datos del conteo de inventario. Colección `stocktakes` (una por conteo, con sus renglones).
  */
-const { ObjectId } = require('mongodb');
 const mongo = require('./mongodb');
+const { oid, out } = require('./ids');
 
 const COL = 'stocktakes';
-const oid = (id) => (ObjectId.isValid(String(id)) && String(new ObjectId(String(id))) === String(id) ? new ObjectId(String(id)) : null);
-const out = (doc) => {
-  if (!doc) return null;
-  const { _id, ...rest } = doc;
-  return { ...rest, id: String(_id) };
-};
 
 let indexed = false;
 async function col() {

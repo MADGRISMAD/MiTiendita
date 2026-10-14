@@ -433,6 +433,8 @@ import { venueStore } from "../venueStore";
 import { hasRole } from "../authStore";
 import { lineBreakdown, rateOf } from "../tax";
 import { fromStoreWall, storeClock, toStoreWall } from "../storeTime";
+import { fold } from "../textUtils";
+import { downloadCsv } from "../download";
 
 const PERIOD_KEY = "timber_report_period";
 const PERIODS = [
@@ -1074,12 +1076,6 @@ const saleTabs = computed(() => [
   { id: "unpaid", label: "Por cobrar", count: cur.value.unpaid },
   { id: "void", label: "Devueltas", count: cur.value.voidCount },
 ]);
-function fold(s) {
-  return String(s || "")
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "");
-}
 const filteredSales = computed(() => {
   const term = fold(q.value.trim().replace(/^#/, ""));
   return [...orders.value]
@@ -1156,10 +1152,6 @@ function jump(id) {
 }
 
 // ---------- Exportar ----------
-function csvCell(v) {
-  const s = String(v ?? "");
-  return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-}
 // Excel en algunos países (España, Argentina…) separa con «;» en vez de «,»
 const csvSep = ref(",");
 try {
@@ -1175,15 +1167,7 @@ watch(csvSep, (v) => {
   }
 });
 function download(name, header, rows) {
-  const sep = csvSep.value;
-  const body = [header.map(csvCell).join(sep), ...rows.map((r) => r.map(csvCell).join(sep))].join("\n");
-  const blob = new Blob(["﻿" + body], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = name;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  downloadCsv(name, header, rows, csvSep.value);
 }
 const fileRange = computed(() => {
   const a = keyOf(range.value.from);

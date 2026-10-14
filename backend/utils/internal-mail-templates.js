@@ -2,6 +2,7 @@
  * Machote de correos del sistema interno de MiTiendita.
  * Paleta bosque — distinta del POS azul de Mi Tiendita.
  */
+const { escapeHtml } = require('./html');
 
 const LOGO_URL = 'https://www.mitiendita.software/icons/icon-192.png';
 
@@ -21,14 +22,6 @@ const INTERNAL = {
   fail: '#7a2e2a',
   warn: '#8a5a18',
 };
-
-function escapeHtml(value) {
-  return String(value ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
 
 function brandWordmark(onDark, sizePx) {
   const size = sizePx || 28;

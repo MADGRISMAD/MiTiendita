@@ -6,13 +6,7 @@
  * - Con permiso: se descuenta siempre (el stock puede quedar negativo) y se reportan los
  *   faltantes para que la venta quede marcada para revisión.
  */
-
-function httpError(status, message, extra = {}) {
-  const err = new Error(message);
-  err.status = status;
-  Object.assign(err, extra);
-  return err;
-}
+const { httpError } = require('../utils/http-error');
 
 /** Suma cantidades por producto (el mismo producto puede venir en varios renglones). */
 function groupSaleLines(items = []) {

@@ -232,19 +232,33 @@ async function getStatus(req, res) {
   }
 }
 
+/**
+ * Plan e intervalo que pide el cliente y la tienda que lo pide. Si algo no procede responde el error y devuelve null.
+ */
+async function readPlanChoice(req, res) {
+  const plan = String(req.body?.plan || 'basic');
+  const interval = String(req.body?.interval || 'month') === 'year' ? 'year' : 'month';
+  if (!PUBLIC_PLANS.includes(plan)) {
+    res.status(400).send('plan debe ser basic, growth o pro');
+    return null;
+  }
+  const tenant = await db.GetTenantById(req.tenantId);
+  if (!tenant) {
+    res.status(404).send('Tenant no encontrado');
+    return null;
+  }
+  if (isPerpetual(tenant.plan)) {
+    res.status(400).send('Esta tienda tiene licencia perpetua. Para un plan con magia, pídelo en soporte.');
+    return null;
+  }
+  return { plan, interval, tenant };
+}
+
 async function checkout(req, res) {
   try {
-    const plan = String(req.body?.plan || 'basic');
-    const interval = String(req.body?.interval || 'month') === 'year' ? 'year' : 'month';
-    if (!PUBLIC_PLANS.includes(plan)) {
-      return res.status(400).send('plan debe ser basic, growth o pro');
-    }
-
-    const tenant = await db.GetTenantById(req.tenantId);
-    if (!tenant) return res.status(404).send('Tenant no encontrado');
-    if (isPerpetual(tenant.plan)) {
-      return res.status(400).send('Esta tienda tiene licencia perpetua. Para un plan con magia, pídelo en soporte.');
-    }
+    const choice = await readPlanChoice(req, res);
+    if (!choice) return undefined;
+    const { plan, interval, tenant } = choice;
 
     const payerEmail =
       String(req.body?.email || '').trim() ||
@@ -342,16 +356,9 @@ async function devActivate(req, res) {
     if (process.env.NODE_ENV === 'production') {
       return res.status(404).send('Not found');
     }
-    const plan = String(req.body?.plan || 'basic');
-    const interval = String(req.body?.interval || 'month') === 'year' ? 'year' : 'month';
-    if (!PUBLIC_PLANS.includes(plan)) {
-      return res.status(400).send('plan debe ser basic, growth o pro');
-    }
-    const tenant = await db.GetTenantById(req.tenantId);
-    if (!tenant) return res.status(404).send('Tenant no encontrado');
-    if (isPerpetual(tenant.plan)) {
-      return res.status(400).send('Esta tienda tiene licencia perpetua. Para un plan con magia, pídelo en soporte.');
-    }
+    const choice = await readPlanChoice(req, res);
+    if (!choice) return undefined;
+    const { plan, interval, tenant } = choice;
 
     const keepTrial = trialDaysLeftNow(tenant) > 0;
     const updated = await db.UpdateTenant(req.tenantId, {

@@ -1,6 +1,7 @@
 const { ObjectId } = require('mongodb');
 const { roundQty } = require('../utils/units');
 const db = require('../database/mongodb');
+const { httpError } = require('../utils/http-error');
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const SUGGEST_SALES_DAYS = 14;
@@ -8,12 +9,6 @@ const EXPIRY_WINDOWS = [7, 15, 30];
 
 function roundMoney(n) {
   return Number((Math.max(0, Number(n) || 0).toFixed(4)));
-}
-
-function httpError(status, message) {
-  const err = new Error(message);
-  err.status = status;
-  return err;
 }
 
 function nextCost(food, incomingQty, unitCost, method) {

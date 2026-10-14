@@ -480,6 +480,7 @@ import { isNetworkError } from "../net";
 import { cardFeeRateOf, lineBreakdown, rateOf } from "../tax";
 import { directPrinting } from "../thermalPrinter";
 import { printCashCloseById } from "../cashCloseData";
+import { errText, fold } from "../textUtils";
 
 const vSelectOnFocus = {
   mounted(el) {
@@ -674,12 +675,6 @@ watch([tab, search], () => {
   expanded.value = "";
 });
 
-function fold(v) {
-  return String(v ?? "")
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "");
-}
 const baseSales = computed(() => {
   if (tab.value === "shift") return sessionOrders.value;
   if (tab.value === "unpaid") return unpaid.value;
@@ -776,11 +771,6 @@ function saleTone(o) {
 }
 function toggle(id) {
   expanded.value = expanded.value === id ? "" : id;
-}
-function errText(e, fallback) {
-  const data = e?.response?.data;
-  if (typeof data === "string" && data) return data;
-  return data?.message || fallback;
 }
 function replaceOrder(updated) {
   if (!updated?.id) return;

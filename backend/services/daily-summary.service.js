@@ -2,12 +2,12 @@
  * Resumen diario por correo al dueño. Se envía una vez al día, pasada la hora de cierre en la zona de la tienda,
  * y solo si hubo movimiento. El día se reserva antes de enviar (atómico), así dos instancias no mandan dos correos.
  */
+const { round2 } = require('../utils/tax');
 const { storeParts, storeDayKey, storeDayRange } = require('../utils/store-time');
 
 const SEND_FROM_HOUR = 21; // 9 pm hora de la tienda
 const MAX_LOW_STOCK = 15;
 
-const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
 /** Arma los números del día. Funciones puras: reciben lo que ya leyó la base. */
 function buildSummary({ orders = [], sessions = [], lowStock = [] }) {

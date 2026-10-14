@@ -376,6 +376,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import { apiService } from "../apiService";
 import { authStore } from "../authStore";
 import PosIcon from "./PosIcon.js";
+import { errText, money } from "../textUtils";
 
 const props = defineProps({
   menus: { type: Array, default: () => [] },
@@ -525,16 +526,7 @@ const saveLabel = computed(() => {
   return `Guardar ${parts.join(' y ')}`;
 });
 
-function money(n) {
-  return new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(Number(n) || 0);
-}
 
-function errText(e, fallback) {
-  const data = e?.response?.data;
-  if (typeof data === "string" && data) return data;
-  if (data?.message) return data.message;
-  return fallback;
-}
 
 function defaultMenu() {
   return props.defaultMenuId || catalogMenus.value[0]?.id || "";

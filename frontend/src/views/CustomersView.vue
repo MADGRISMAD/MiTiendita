@@ -199,6 +199,9 @@ import { prettyPhone } from "../phone";
 import CreditAccountDialog from "../components/CreditAccountDialog.vue";
 import { venueStore } from "../venueStore";
 import { hasRole } from "../authStore";
+import { digits, errText, fold, hueStyle, initials, money } from "../textUtils";
+import { downloadCsv } from "../download";
+import { useFlash } from "../useFlash";
 
 const SORT_KEY = "timber_customers_sort";
 
@@ -206,13 +209,7 @@ const customers = ref([]);
 const loading = ref(true);
 const saving = ref(false);
 const error = ref("");
-const flash = ref("");
-let flashTimer = null;
-function say(msg) {
-  flash.value = msg;
-  clearTimeout(flashTimer);
-  flashTimer = setTimeout(() => (flash.value = ""), 4000);
-}
+const { flash, say } = useFlash();
 
 const q = ref("");
 const sort = ref(readSort());
@@ -224,24 +221,6 @@ function readSort() {
   }
 }
 
-function fold(s) {
-  return String(s || "")
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "");
-}
-function digits(s) {
-  return String(s || "").replace(/\D/g, "");
-}
-function initials(name) {
-  const parts = String(name || "?").trim().split(/\s+/).filter(Boolean);
-  return ((parts[0]?.[0] || "?") + (parts[1]?.[0] || "")).toUpperCase();
-}
-function hueStyle(name) {
-  let h = 0;
-  for (const ch of String(name || "")) h = (h * 31 + ch.charCodeAt(0)) % 360;
-  return { "--h": h };
-}
 
 function waLink(p) {
   const d = digits(p);
@@ -270,7 +249,6 @@ const isAdmin = computed(() => hasRole("admin"));
 const owing = ref({ total: 0, count: 0, customers: [] });
 const onlyOwing = ref(false);
 const account = ref(null);
-const money = (n) => new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(Number(n) || 0);
 function openAccount(c) {
   account.value = c;
 }
@@ -394,10 +372,6 @@ function openEdit(c) {
   fill(c);
   showForm.value = true;
 }
-function errText(e, fallback) {
-  const d = e?.response?.data;
-  return typeof d === "string" && d ? d : fallback;
-}
 
 async function save() {
   const payload = {
@@ -452,20 +426,8 @@ async function remove() {
 }
 
 function exportCsv() {
-  const cell = (v) => {
-    const s = String(v ?? "");
-    return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-  };
-  const rows = filtered.value.map((c) =>
-    [c.name, c.phone, c.email, c.notes, c.createdAt ? new Date(c.createdAt).toISOString().slice(0, 10) : ""].map(cell).join(",")
-  );
-  const body = ["Nombre,Telefono,Correo,Notas,Alta", ...rows].join("\n");
-  const url = URL.createObjectURL(new Blob(["﻿" + body], { type: "text/csv;charset=utf-8;" }));
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "clientes.csv";
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  const rows = filtered.value.map((c) => [c.name, c.phone, c.email, c.notes, c.createdAt ? new Date(c.createdAt).toISOString().slice(0, 10) : ""]);
+  downloadCsv("clientes.csv", ["Nombre", "Telefono", "Correo", "Notas", "Alta"], rows);
 }
 
 async function load() {

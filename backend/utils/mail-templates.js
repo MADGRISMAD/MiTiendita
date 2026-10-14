@@ -2,6 +2,7 @@
  * Machote HTML de correos Mi Tiendita — un solo diseño para todos los envíos.
  * Colores alineados al POS (azul #1e5aa8 / topbar #123056).
  */
+const { escapeHtml } = require('./html');
 
 const BRAND = {
   name: 'Mi Tiendita',
@@ -21,14 +22,6 @@ function wordmark(onDark) {
   const mi = onDark ? '#f0a94a' : BRAND.accent;
   const rest = onDark ? '#ffffff' : BRAND.primary;
   return `<span style="font-weight:800;letter-spacing:-0.03em;white-space:nowrap"><span style="color:${mi}">Mi</span><span style="color:${rest}"> Tiendita</span></span>`;
-}
-
-function escapeHtml(value) {
-  return String(value ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
 }
 
 /** Botón principal + enlace de respaldo */

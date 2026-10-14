@@ -100,6 +100,7 @@
 import { computed, onMounted, ref } from "vue";
 import PosIcon from "./PosIcon.js";
 import { apiService } from "../apiService";
+import { money } from "../textUtils";
 
 const props = defineProps({
   customer: { type: Object, required: true },
@@ -124,7 +125,6 @@ const amount = ref(null);
 const method = ref("cash");
 const note = ref("");
 
-const money = (n) => new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(Number(n) || 0);
 const when = (v) => (v ? new Date(v).toLocaleString("es-MX", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "");
 const msgOf = (e, fallback) => e?.response?.data?.message || (typeof e?.response?.data === "string" ? e.response.data : "") || fallback;
 const labelOf = (e) => (e.type === "charge" ? "Venta fiada" : e.type === "void" ? "Venta anulada" : `Abono en ${({ cash: "efectivo", card: "tarjeta", transfer: "transferencia" })[e.method] || "otro medio"}`);

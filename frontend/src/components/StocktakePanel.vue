@@ -203,6 +203,7 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
 import PosIcon from "./PosIcon.js";
 import { apiService } from "../apiService";
+import { money } from "../textUtils";
 
 const props = defineProps({
   isAdmin: { type: Boolean, default: false },
@@ -225,7 +226,6 @@ const confirming = ref(false);
 const draft = reactive({}); // lo escrito y aún no guardado: { foodId: texto }
 let saveTimer = null;
 
-const money = (n) => new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(Number(n) || 0);
 const qty = (n) => {
   const v = Number(n) || 0;
   return Number.isInteger(v) ? String(v) : String(Number(v.toFixed(3)));

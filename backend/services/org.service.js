@@ -14,13 +14,7 @@
  */
 const { branchLimitOf } = require('./plans.catalog');
 const { isSubscriptionActive } = require('../models/tenant.model');
-
-function httpError(status, message, code) {
-  const err = new Error(message);
-  err.status = status;
-  if (code) err.code = code;
-  return err;
-}
+const { httpError } = require('../utils/http-error');
 
 const errNotOwner = () => httpError(403, 'Solo el dueño de la organización puede hacer esto.', 'NOT_ORG_OWNER');
 const cleanName = (v) => String(v || '').replace(/\s+/g, ' ').trim();

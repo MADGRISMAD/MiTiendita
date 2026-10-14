@@ -2,11 +2,12 @@
  * Clientes frecuentes e historial. Funciones puras: reciben lo que ya leyó la base.
  * Una venta cuenta para un cliente si quedó ligada a él (`customerId`) y está cobrada; las anuladas no.
  */
+const { round2 } = require('../utils/tax');
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 const WINDOW_DAYS = 30;
 const FREQUENT_VISITS = 4; // visitas en los últimos 30 días para ser «frecuente»
 
-const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
 /**
  * Segmento de un cliente:

@@ -8,6 +8,7 @@ const pointCharges = require('../services/point.charges.service');
 const { firstUnpriced } = require('../services/unpriced-items.service');
 const creditSvc = require('../services/credit.service');
 const creditDb = require('../database/credit.db');
+const { httpError } = require('../utils/http-error');
 
 /**
  * Rango de un reporte. Un día «AAAA-MM-DD» se toma en la zona de la tienda
@@ -48,20 +49,49 @@ async function getById(req, res) {
   }
 }
 
+/**
+ * Compatibilidad con clientes viejos: `foods` en lugar de `items` y modalidad numérica.
+ * Modifica `body` en el lugar.
+ */
+function upgradeLegacyBody(body) {
+  if ((!body.items || !body.items.length) && Array.isArray(body.foods)) {
+    body.items = body.foods.map((f) => ({
+      foodId: f.food || f.foodId || f.id,
+      name: f.name || 'Producto',
+      price: Number(f.price || 0),
+      quantity: Number(f.quantity || 1),
+    }));
+  }
+  if (typeof body.modality === 'number') {
+    body.modality = body.modality === 2 ? 'takeaway' : 'dine-in';
+  }
+  return body;
+}
+
+/** Mensaje de error si algún producto del pedido aún no tiene precio (null si todos tienen). */
+async function unpricedMessage(items, tenantId) {
+  const unpriced = await firstUnpriced(db, items, tenantId);
+  return unpriced ? `«${unpriced.name}» todavía no tiene precio. Ponle uno antes de venderlo.` : null;
+}
+
+/** Rango `from`/`to` de un reporte, o responde 400 y devuelve null. */
+async function reportRange(req, res) {
+  const { from, to } = req.query;
+  if (!from || !to) {
+    res.status(400).send('Parámetros from y to son requeridos');
+    return null;
+  }
+  const r = await resolveReportRange(req.tenantId, String(from), String(to));
+  if (Number.isNaN(new Date(r.from).getTime()) || Number.isNaN(new Date(r.to).getTime())) {
+    res.status(400).send('Fechas inválidas');
+    return null;
+  }
+  return r;
+}
+
 async function create(req, res) {
   try {
-    const body = req.body || {};
-    if ((!body.items || !body.items.length) && Array.isArray(body.foods)) {
-      body.items = body.foods.map((f) => ({
-        foodId: f.food || f.foodId || f.id,
-        name: f.name || 'Producto',
-        price: Number(f.price || 0),
-        quantity: Number(f.quantity || 1),
-      }));
-    }
-    if (typeof body.modality === 'number') {
-      body.modality = body.modality === 2 ? 'takeaway' : 'dine-in';
-    }
+    const body = upgradeLegacyBody(req.body || {});
 
     const payload = normalizeOrder(body);
     payload.tenantId = req.tenantId;
@@ -69,8 +99,8 @@ async function create(req, res) {
     if (!payload.items.length) {
       return res.status(400).send('El pedido necesita al menos un producto');
     }
-    const unpriced = await firstUnpriced(db, payload.items, req.tenantId);
-    if (unpriced) return res.status(409).send(`«${unpriced.name}» todavía no tiene precio. Ponle uno antes de venderlo.`);
+    const unpriced = await unpricedMessage(payload.items, req.tenantId);
+    if (unpriced) return res.status(409).send(unpriced);
 
     const created = await db.CreateOrder(payload);
 
@@ -98,12 +128,6 @@ async function updateStatus(req, res) {
     console.error(err);
     return res.status(500).send(err.message || 'Error al actualizar estado');
   }
-}
-
-function httpError(status, message) {
-  const err = new Error(message);
-  err.status = status;
-  return err;
 }
 
 /**
@@ -325,17 +349,7 @@ async function sale(req, res) {
 
     let createdHere = false;
     if (!existing) {
-      if (typeof body.modality === 'number') {
-        body.modality = body.modality === 2 ? 'takeaway' : 'dine-in';
-      }
-      if ((!body.items || !body.items.length) && Array.isArray(body.foods)) {
-        body.items = body.foods.map((f) => ({
-          foodId: f.food || f.foodId || f.id,
-          name: f.name || 'Producto',
-          price: Number(f.price || 0),
-          quantity: Number(f.quantity || 1),
-        }));
-      }
+      upgradeLegacyBody(body);
       const payload = normalizeOrder(body);
       payload.tenantId = req.tenantId;
       payload.invoiceToken = newToken();
@@ -346,8 +360,8 @@ async function sale(req, res) {
       if (!payload.items.length) {
         return res.status(400).send('El pedido necesita al menos un producto');
       }
-      const unpriced = await firstUnpriced(db, payload.items, req.tenantId);
-      if (unpriced) return res.status(409).send(`«${unpriced.name}» todavía no tiene precio. Ponle uno antes de venderlo.`);
+      const unpriced = await unpricedMessage(payload.items, req.tenantId);
+      if (unpriced) return res.status(409).send(unpriced);
       try {
         existing = await db.CreateOrder(payload);
         createdHere = true;
@@ -626,12 +640,8 @@ module.exports = { returnItems, removedLines, list, getById, create, updateStatu
 
 async function report(req, res) {
   try {
-    const { from, to } = req.query;
-    if (!from || !to) return res.status(400).send('Parámetros from y to son requeridos');
-    const r = await resolveReportRange(req.tenantId, String(from), String(to));
-    if (Number.isNaN(new Date(r.from).getTime()) || Number.isNaN(new Date(r.to).getTime())) {
-      return res.status(400).send('Fechas inválidas');
-    }
+    const r = await reportRange(req, res);
+    if (!r) return undefined;
     const orders = await db.GetOrdersByDateRange(req.tenantId, r.from, r.to);
     return res.status(200).json(orders);
   } catch (err) {
@@ -642,12 +652,8 @@ async function report(req, res) {
 
 async function reportSummary(req, res) {
   try {
-    const { from, to } = req.query;
-    if (!from || !to) return res.status(400).send('Parámetros from y to son requeridos');
-    const r = await resolveReportRange(req.tenantId, String(from), String(to));
-    if (Number.isNaN(new Date(r.from).getTime()) || Number.isNaN(new Date(r.to).getTime())) {
-      return res.status(400).send('Fechas inválidas');
-    }
+    const r = await reportRange(req, res);
+    if (!r) return undefined;
     const summary = await db.GetSalesReport(req.tenantId, r.from, r.to);
     return res.status(200).json(summary);
   } catch (err) {

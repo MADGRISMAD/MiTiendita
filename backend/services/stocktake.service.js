@@ -11,15 +11,9 @@
  *
  * El acceso a datos entra por `store` para poder probar la lógica sin base de datos.
  */
+const { httpError } = require('../utils/http-error');
 
 const STATUS = { OPEN: 'open', APPLIED: 'applied', CANCELLED: 'cancelled' };
-
-function httpError(status, message, code) {
-  const err = new Error(message);
-  err.status = status;
-  if (code) err.code = code;
-  return err;
-}
 
 const round3 = (n) => Math.round((Number(n) || 0) * 1000) / 1000;
 

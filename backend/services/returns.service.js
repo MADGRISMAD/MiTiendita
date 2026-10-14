@@ -8,15 +8,9 @@
  * Funciones puras: reciben la venta y regresan el plan; guardar y mover dinero lo hace el controlador.
  */
 const { lineBreakdown, round2 } = require('../utils/tax');
+const { httpError } = require('../utils/http-error');
 
 const qty3 = (n) => Math.round((Number(n) || 0) * 1000) / 1000;
-
-function httpError(status, message, code) {
-  const err = new Error(message);
-  err.status = status;
-  err.code = code;
-  return err;
-}
 
 /** Cuánto de cada renglón ya se devolvió (por posición en `items`). */
 function returnedByIndex(order) {
