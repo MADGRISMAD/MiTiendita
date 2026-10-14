@@ -29,6 +29,9 @@ jobs:
       - name: Tests del backend
         run: npm test --workspace backend
 
+      - name: Compilar el frontend (incluye la revisión de SEO)
+        run: npm run front:prod
+
   deploy:
     needs: test
     runs-on: ubuntu-latest
