@@ -103,6 +103,7 @@ const limits = {
   reset: () => rateLimit({ name: 'reset', windowMs: HOUR, max: 10 }),
   mfa: () => rateLimit({ name: 'mfa', windowMs: 15 * MIN, max: 15, message: 'Demasiados códigos. Espera 15 minutos.' }),
   refresh: () => rateLimit({ name: 'refresh', windowMs: 5 * MIN, max: 120 }),
+  clientErrors: () => rateLimit({ name: 'client-errors', windowMs: 10 * MIN, max: 20 }),
   publicRead: () => rateLimit({ name: 'public-read', windowMs: 10 * MIN, max: 120 }),
   publicWrite: () => rateLimit({ name: 'public-write', windowMs: HOUR, max: 15 }),
 };

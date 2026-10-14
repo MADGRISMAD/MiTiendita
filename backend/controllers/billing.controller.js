@@ -12,6 +12,7 @@ const { resolveAppUrl } = require('../utils/app-url.utils');
 const { verifyMpSignature } = require('../utils/mp-signature');
 const referrals = require('../services/referral.service');
 const promo = require('../services/promo.service');
+const errorReport = require('../services/error-report.service');
 
 function daysLeft(trialEndsAt) {
   if (!trialEndsAt) return 0;
@@ -456,6 +457,7 @@ async function webhook(req, res) {
       const check = verifyMpSignature({ headers: req.headers || {}, query, body, secret });
       if (!check.ok) {
         console.warn('[mp:webhook] rechazado:', check.reason);
+        errorReport.captureMessage(`Webhook de Mercado Pago rechazado: ${check.reason}`, { where: 'billing.webhook', level: 'warning' });
         // Bitácora de la plataforma (no es de ninguna tienda)
         const requestId = String(req.headers?.['x-request-id'] || '').slice(0, 80);
         await recordEvent({

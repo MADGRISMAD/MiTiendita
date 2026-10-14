@@ -8,6 +8,12 @@ const server = require('http').createServer(app);
 
 app.set('trust proxy', 1);
 app.disable('x-powered-by');
+const errorReport = require('./services/error-report.service');
+errorReport.init();
+process.on('unhandledRejection', (reason) => {
+  console.error('[unhandledRejection]', reason);
+  errorReport.captureError(reason instanceof Error ? reason : new Error(String(reason)), { where: 'unhandledRejection' });
+});
 const { securityHeaders } = require('./middleware/security.middleware');
 const { limits } = require('./services/rate-limit.service');
 app.use(securityHeaders);
@@ -54,9 +60,21 @@ app.use('/ai', require('./routers/ai.router'));
 app.use('/platform', require('./routers/platform.router'));
 app.use('/partner', require('./routers/partner.router'));
 app.use('/point', require('./routers/point.router'));
+app.use('/client-errors', require('./routers/client-errors.router'));
 
 const { verifyMailConfig } = require('./utils/mail.utils');
 verifyMailConfig().catch(() => {});
+
+// Último recurso: un error que ningún controlador atrapó. Responde 500 sin detalles y lo reporta.
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, _next) => {
+  const status = Number(err?.status || err?.statusCode);
+  if (status >= 400 && status < 500) return res.status(status).send(status === 413 ? 'Solicitud demasiado grande' : 'Solicitud inválida');
+  console.error('[error]', err);
+  errorReport.captureError(err, errorReport.fromReq(req));
+  if (res.headersSent) return undefined;
+  return res.status(500).send('Error interno');
+});
 
 if (!process.env.VERCEL) {
   server.listen(process.env.PORT, () => {

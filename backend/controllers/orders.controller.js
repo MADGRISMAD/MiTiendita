@@ -1,5 +1,6 @@
 const db = require('../database/mongodb');
 const saleAudit = require('../services/sale-audit.service');
+const errorReport = require('../services/error-report.service');
 const { normalizeOrder, orderStatuses, paymentMethods, newToken } = require('../models/order.model');
 const { storeDayRange } = require('../utils/store-time');
 const pointCharges = require('../services/point.charges.service');
@@ -376,6 +377,7 @@ async function sale(req, res) {
   } catch (err) {
     if (err.status) return res.status(err.status).send(err.message);
     console.error(err);
+    errorReport.captureError(err, errorReport.fromReq(req, 'orders.sale'));
     return res.status(500).send(err.message || 'Error al registrar la venta');
   }
 }
@@ -519,6 +521,7 @@ async function voidSale(req, res) {
     return res.status(200).json(updated);
   } catch (err) {
     console.error(err);
+    errorReport.captureError(err, errorReport.fromReq(req, 'orders.void'));
     return res.status(500).send(err.message || 'Error al cancelar la venta');
   }
 }
