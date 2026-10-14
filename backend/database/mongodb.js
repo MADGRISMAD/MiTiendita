@@ -1159,6 +1159,33 @@ async function DeleteCustomer(id, tenantId) {
   if (!filter) return { deletedCount: 0 };
   return await dbConnection.collection('customers').deleteOne(filter);
 }
+/** Compras cobradas por cliente (para clientes frecuentes). Solo ventas ligadas a un cliente. */
+async function CustomerOrderStats(tenantId, since30) {
+  return dbConnection
+    .collection('orders')
+    .aggregate([
+      { $match: { tenantId: String(tenantId), paymentStatus: 'paid', status: { $ne: 'cancelled' }, customerId: { $type: 'string', $ne: '' } } },
+      {
+        $group: {
+          _id: '$customerId',
+          visits: { $sum: 1 },
+          spent: { $sum: '$total' },
+          last: { $max: '$createdAt' },
+          visits30: { $sum: { $cond: [{ $gte: ['$createdAt', since30] }, 1, 0] } },
+        },
+      },
+    ])
+    .toArray()
+    .then((rows) => rows.map((r) => ({ customerId: r._id, visits: r.visits, spent: r.spent, last: r.last, visits30: r.visits30 })));
+}
+async function GetOrdersByCustomer(tenantId, customerId, limit = 500) {
+  return (await dbConnection
+    .collection('orders')
+    .find({ tenantId: String(tenantId), customerId: String(customerId) })
+    .sort({ createdAt: -1 })
+    .limit(limit)
+    .toArray()).map(withId);
+}
 async function SearchCustomers(tenantId, query) {
   const q = String(query || '').trim();
   if (!q) return GetCustomers(tenantId);
@@ -1412,7 +1439,7 @@ async function Ping() {
 }
 
 module.exports = {
-  Ping, ApplyOrderReturn, GetClosedCashSessionsBetween, ListSettingsWithDailySummary, ClaimDailySummary, ReleaseDailySummary,
+  Ping, CustomerOrderStats, GetOrdersByCustomer, ApplyOrderReturn, GetClosedCashSessionsBetween, ListSettingsWithDailySummary, ClaimDailySummary, ReleaseDailySummary,
   ensureConnection,
   CreateTenant, GetTenantById, UpdateTenant, ListTenants, CountUsersByTenant, CountPendingInvites, ListUsersByTenant, GetTenantByMpPreapprovalId,
   CreateUser, FindUserByEmail, LoginUsuario, FindUserByUsername, UpdateUserById, FindUserByResetToken,

@@ -28,6 +28,12 @@
         <small>{{ owing.count }} {{ owing.count === 1 ? "cliente debe" : "clientes deben" }} · toca para {{ onlyOwing ? "ver todos" : "filtrar" }}</small>
       </button>
 
+      <div v-if="hasStats" class="adm-tabs cus-seg" role="group" aria-label="Segmento de clientes">
+        <button v-for="o in segmentOptions" :key="o.id" type="button" :class="{ on: segment === o.id }" :aria-pressed="segment === o.id" @click="segment = o.id">
+          {{ o.label }} <small>{{ o.count }}</small>
+        </button>
+      </div>
+
       <div v-if="customers.length" class="adm-tools">
         <label class="adm-search">
           <PosIcon name="search" :size="17" />
@@ -59,6 +65,10 @@
                   <li v-if="c.phone"><PosIcon name="phone" :size="15" /> {{ prettyPhone(c.phone) }}</li>
                   <li v-if="c.email"><PosIcon name="mail" :size="15" /> {{ c.email }}</li>
                 </ul>
+                <p v-if="statOf(c).visits" class="cus-stats">
+                  <span class="cus-badge" :class="statOf(c).segment">{{ SEGMENT_LABEL[statOf(c).segment] }}</span>
+                  {{ statOf(c).visits }} {{ statOf(c).visits === 1 ? 'compra' : 'compras' }} · {{ money(statOf(c).spent) }} · última {{ lastSeen(statOf(c).lastVisit) }}
+                </p>
                 <p v-if="c.notes" class="cus-notes">{{ c.notes }}</p>
                 <button v-if="c.balance > 0 || c.creditLimit > 0" type="button" class="cus-credit" :class="{ owes: c.balance > 0 }" @click="openAccount(c)">
                   <PosIcon name="receipt" :size="15" />
@@ -67,6 +77,7 @@
                 </button>
                 <div class="cus-acts">
                   <button type="button" class="adm-btn sm" @click="openAccount(c)"><PosIcon name="receipt" :size="16" /> Cuenta</button>
+                  <button type="button" class="adm-btn sm" @click="openHistory(c)"><PosIcon name="history" :size="16" /> Compras</button>
                 </div>
                 <div v-if="c.phone || c.email" class="cus-acts">
                   <a v-if="waLink(c.phone)" class="adm-btn wa sm" :href="waLink(c.phone)" target="_blank" rel="noopener">
@@ -98,6 +109,38 @@
         @close="account = null"
         @changed="reloadCredit"
       />
+
+      <!-- Historial de compras -->
+      <Teleport to="body">
+        <div v-if="history" class="adm-dlg-bg" @click.self="history = null">
+          <div class="adm-dlg" role="dialog" aria-modal="true" aria-labelledby="cus-hist-title">
+            <div class="adm-dlg-head">
+              <span class="adm-avatar" :style="hueStyle(history.customer.name)">{{ initials(history.customer.name) }}</span>
+              <div>
+                <h3 id="cus-hist-title">{{ history.customer.name }}</h3>
+                <p v-if="history.data">{{ history.data.visits }} compras · ticket promedio {{ money(history.data.avgTicket) }} · {{ money(history.data.spent) }} en total</p>
+                <p v-else-if="history.error">{{ history.error }}</p>
+                <p v-else>Cargando…</p>
+              </div>
+              <button type="button" class="adm-dlg-x" aria-label="Cerrar" @click="history = null"><PosIcon name="x" :size="18" /></button>
+            </div>
+            <template v-if="history.data && history.data.visits">
+              <h4 class="cus-h4">Lo que más lleva</h4>
+              <p class="cus-top-products">
+                <span v-for="p in history.data.topProducts" :key="p.name">{{ p.name }} <small>×{{ p.quantity }}</small></span>
+              </p>
+              <h4 class="cus-h4">Últimas compras</h4>
+              <ul class="cus-buys">
+                <li v-for="b in history.data.purchases" :key="b.id">
+                  <div><strong>{{ lastSeen(b.at) }}</strong> <small>{{ b.items.join(' · ') }}</small></div>
+                  <b>{{ money(b.total) }}</b>
+                </li>
+              </ul>
+            </template>
+            <p v-else-if="history.data" class="adm-hint">Todavía no tiene compras ligadas. En la caja, elige al cliente al cobrar para ir armando su historial.</p>
+          </div>
+        </div>
+      </Teleport>
 
       <!-- Alta / edición -->
       <Teleport to="body">
@@ -243,11 +286,49 @@ async function reloadCredit() {
   }
 }
 
+// ---------- Compras y clientes frecuentes ----------
+const stats = ref({}); // por id de cliente
+const segment = ref("all");
+const SEGMENT_LABEL = { frequent: "Frecuente", inactive: "Inactivo", new: "Nuevo", regular: "Regular", none: "" };
+const hasStats = computed(() => Object.values(stats.value).some((s) => s.visits > 0));
+const statOf = (c) => stats.value[c.id] || { visits: 0, spent: 0, segment: "none", lastVisit: null };
+const segmentOptions = computed(() => {
+  const n = (seg) => customers.value.filter((c) => statOf(c).segment === seg).length;
+  return [
+    { id: "all", label: "Todos", count: customers.value.length },
+    { id: "frequent", label: "Frecuentes", count: n("frequent") },
+    { id: "inactive", label: "Inactivos (30+ días)", count: n("inactive") },
+    { id: "new", label: "Nuevos", count: n("new") },
+  ];
+});
+function lastSeen(value) {
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString("es-MX", { day: "numeric", month: "short" }).replace(".", "");
+}
+async function loadStats() {
+  try {
+    const rows = await apiService.getCustomerInsights();
+    stats.value = Object.fromEntries((Array.isArray(rows) ? rows : []).map((r) => [r.id, r]));
+  } catch {
+    stats.value = {};
+  }
+}
+const history = ref(null);
+async function openHistory(c) {
+  history.value = { customer: c, data: null, error: "" };
+  try {
+    history.value.data = await apiService.getCustomerHistory(c.id);
+  } catch {
+    history.value.error = "No se pudo cargar el historial.";
+  }
+}
+
 const filtered = computed(() => {
   const term = fold(q.value.trim());
   const termDigits = digits(q.value);
   const list = customers.value.filter((c) => {
     if (onlyOwing.value && !(c.balance > 0)) return false;
+    if (segment.value !== 'all' && statOf(c).segment !== segment.value) return false;
     if (!term) return true;
     return (
       fold(c.name).includes(term) ||
@@ -393,6 +474,7 @@ async function load() {
     const list = await apiService.getCustomers();
     customers.value = Array.isArray(list) ? list : [];
     apiService.getCreditSummary().then((s) => (owing.value = s || owing.value)).catch(() => {});
+    loadStats();
   } catch {
     error.value = "No se pudieron cargar los clientes.";
     customers.value = [];
@@ -459,6 +541,19 @@ watch(sort, (v) => {
 }
 .cus-contact li { display: flex; align-items: center; gap: 0.4rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cus-contact svg { flex-shrink: 0; color: var(--timber-muted); }
+.cus-seg { margin-bottom: 0.75rem; flex-wrap: wrap; }
+.cus-seg small { opacity: 0.7; margin-left: 0.2rem; }
+.cus-stats { margin: 0.35rem 0 0; font-size: 0.82rem; color: var(--timber-muted); }
+.cus-badge { display: inline-block; margin-right: 0.35rem; padding: 0.08rem 0.5rem; border-radius: 999px; font-size: 0.72rem; font-weight: 800; background: color-mix(in srgb, currentColor 12%, transparent); }
+.cus-badge.frequent { color: var(--timber-success, #1b7f4b); }
+.cus-badge.inactive { color: var(--timber-danger, #c0392b); }
+.cus-badge.new { color: var(--timber-primary); }
+.cus-h4 { margin: 0.9rem 0 0.35rem; font-size: 0.85rem; font-weight: 800; }
+.cus-top-products { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0; }
+.cus-top-products span { padding: 0.2rem 0.6rem; border-radius: 999px; background: color-mix(in srgb, currentColor 8%, transparent); font-size: 0.84rem; }
+.cus-buys { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.4rem; max-height: 40vh; overflow-y: auto; }
+.cus-buys li { display: flex; justify-content: space-between; gap: 0.75rem; padding: 0.4rem 0; border-bottom: 1px solid color-mix(in srgb, currentColor 10%, transparent); }
+.cus-buys small { display: block; color: var(--timber-muted); }
 .cus-notes {
   display: -webkit-box;
   margin: 0;

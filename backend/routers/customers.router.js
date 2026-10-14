@@ -2,6 +2,7 @@ const router = require('express').Router();
 const db = require('../database/mongodb');
 const creditDb = require('../database/credit.db');
 const credit = require('../services/credit.service');
+const insights = require('../services/customer-insights.service');
 const { rateLimit } = require('../services/rate-limit.service');
 const { requireAuth, requireActiveSubscription, requireRoles } = require('../middleware/auth.middleware');
 
@@ -47,6 +48,30 @@ router.get('/credit/summary', ...staff, async (req, res) => {
     rows.sort((a, b) => b.days - a.days || b.balance - a.balance);
     const total = Math.round(rows.reduce((s, r) => s + r.balance, 0) * 100) / 100;
     return res.status(200).json({ total, count: rows.length, customers: rows });
+  } catch (err) {
+    return failCredit(res, err);
+  }
+});
+
+// Clientes frecuentes: compras, gasto, última visita y segmento de cada cliente (va antes de '/:id')
+router.get('/insights', ...staff, async (req, res) => {
+  try {
+    const now = new Date();
+    const since30 = new Date(now.getTime() - insights.WINDOW_DAYS * 24 * 60 * 60 * 1000);
+    const [customers, stats] = await Promise.all([db.GetCustomers(req.tenantId), db.CustomerOrderStats(req.tenantId, since30)]);
+    return res.status(200).json(insights.withStats(customers, stats, now));
+  } catch (err) {
+    return failCredit(res, err);
+  }
+});
+
+// Historial de compras de un cliente
+router.get('/:id/history', ...staff, async (req, res) => {
+  try {
+    const customer = await db.GetCustomerById(req.params.id, req.tenantId);
+    if (!customer) return res.status(404).json({ message: 'Cliente no encontrado' });
+    const orders = await db.GetOrdersByCustomer(req.tenantId, customer.id);
+    return res.status(200).json(insights.historyOf(orders));
   } catch (err) {
     return failCredit(res, err);
   }

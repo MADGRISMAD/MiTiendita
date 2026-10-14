@@ -196,6 +196,15 @@ async function settlePayment(req, existing, body, { requireCash = true, paidAt }
     creditInfo = { customerId: String(customer.id), customerName: customer.name, creditAmount: split.credit, downPayment: split.down };
   }
 
+  // Cliente de la compra (opcional): en fiado es el del fiado; en las demás, el que eligió el cajero.
+  // Si ya no existe, la venta sigue: un cliente mal ligado nunca debe frenar un cobro.
+  let buyer = null;
+  if (creditInfo) buyer = { id: creditInfo.customerId, name: creditInfo.customerName };
+  else if (body?.customerId) {
+    const c = await db.GetCustomerById(String(body.customerId), req.tenantId).catch(() => null);
+    if (c) buyer = { id: String(c.id), name: c.name };
+  }
+
   try {
   let stockShortages = [];
   if (settings?.inventoryEnabled && !existing.inventoryApplied) {
@@ -251,6 +260,7 @@ async function settlePayment(req, existing, body, { requireCash = true, paidAt }
       change: change > 0 ? change : 0,
       paymentReference: paymentReference || null,
       pointChargeId,
+      ...(buyer ? { customerId: buyer.id, customerName: buyer.name } : {}),
       ...(creditInfo
         ? {
             creditCustomerId: creditInfo.customerId,

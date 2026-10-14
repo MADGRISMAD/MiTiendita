@@ -670,6 +670,13 @@ export const apiService = {
     return axios.get('/org/reports/summary.csv', { params: range, responseType: 'blob' }).then((r) => r.data as Blob);
   },
   // Fiado y abonos
+  /** Compras, gasto, última visita y segmento (frecuente / inactivo / nuevo) de cada cliente. */
+  getCustomerInsights() {
+    return axios.get("/customers/insights").then((r) => r.data);
+  },
+  getCustomerHistory(id: string) {
+    return axios.get(`/customers/${id}/history`).then((r) => r.data);
+  },
   getCreditSummary() {
     return axios.get('/customers/credit/summary').then((r) => r.data);
   },

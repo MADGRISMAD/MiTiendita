@@ -1223,6 +1223,36 @@
               </div>
 
 
+              <!-- Cliente de la compra (opcional): para su historial; el fiado elige el suyo más abajo -->
+              <div v-if="payMethod !== 'credit' && customersReady" class="sale-cust">
+                <p v-if="saleCustomer" class="sale-cust-chip">
+                  <span>Cliente: <strong>{{ saleCustomer.name }}</strong></span>
+                  <button type="button" class="link-btn" :disabled="sending" @click="saleCustomerId = ''">Quitar</button>
+                </p>
+                <template v-else>
+                  <input
+                    v-model.trim="saleCustomerQuery"
+                    class="inp"
+                    type="search"
+                    autocomplete="off"
+                    placeholder="Cliente (opcional): nombre o teléfono"
+                    aria-label="Cliente de esta compra"
+                    :disabled="sending"
+                  />
+                  <ul v-if="saleCustomerMatches.length" class="credit-pick" role="listbox" aria-label="Clientes">
+                    <li v-for="c in saleCustomerMatches" :key="c.id">
+                      <button type="button" role="option" class="credit-opt" :aria-selected="false" @click="saleCustomerId = c.id">
+                        <strong>{{ c.name }}</strong>
+                        <small v-if="c.phone">{{ c.phone }}</small>
+                      </button>
+                    </li>
+                  </ul>
+                  <button v-if="saleCustomerQuery && !saleCustomerMatches.length" type="button" class="btn" :disabled="sending || creatingCustomer" @click="createSaleCustomer">
+                    {{ creatingCustomer ? 'Guardando…' : `Guardar «${saleCustomerQuery}» como cliente nuevo` }}
+                  </button>
+                </template>
+              </div>
+
               <template v-if="payMethod === 'cash' || payMethod === 'split'">
                 <label class="field">
                   <span>Efectivo recibido</span>
@@ -1789,17 +1819,47 @@ export default {
     // ── Fiado ──
     const creditCustomers = ref([]);
     const creditLoading = ref(false);
+    // Cliente opcional en cualquier cobro (historial y clientes frecuentes). Sin internet no se ofrece.
+    const saleCustomerId = ref("");
+    const saleCustomerQuery = ref("");
+    const creatingCustomer = ref(false);
+    const customersReady = computed(() => offlineStore.online);
+    const saleCustomer = computed(() => creditCustomers.value.find((c) => c.id === saleCustomerId.value) || null);
+    const saleCustomerMatches = computed(() => {
+      const term = fold(saleCustomerQuery.value.trim());
+      if (!term) return [];
+      const digits = saleCustomerQuery.value.replace(/\D/g, "");
+      return creditCustomers.value
+        .filter((c) => fold(c.name).includes(term) || (digits.length >= 3 && String(c.phone || "").replace(/\D/g, "").includes(digits)))
+        .slice(0, 5);
+    });
+    async function createSaleCustomer() {
+      const raw = saleCustomerQuery.value.trim();
+      if (!raw || creatingCustomer.value) return;
+      creatingCustomer.value = true;
+      try {
+        const isPhone = /^[\d\s()+-]{7,}$/.test(raw);
+        const created = await apiService.createCustomer(isPhone ? { name: "Cliente " + raw.replace(/\D/g, "").slice(-4), phone: raw } : { name: raw });
+        creditCustomers.value.push(created);
+        saleCustomerId.value = created.id;
+        saleCustomerQuery.value = "";
+      } catch {
+        payError.value = "No se pudo guardar el cliente. Cobra sin cliente o intenta de nuevo.";
+      } finally {
+        creatingCustomer.value = false;
+      }
+    }
     const creditQuery = ref("");
     const creditCustomerId = ref("");
     const creditDown = ref("");
-    async function loadCreditCustomers() {
+    async function loadCreditCustomers({ quiet = false } = {}) {
       if (creditLoading.value) return;
       creditLoading.value = true;
       try {
         const list = await apiService.getCustomers();
         creditCustomers.value = Array.isArray(list) ? list : [];
       } catch {
-        payError.value = "No se pudieron cargar los clientes para el fiado.";
+        if (!quiet) payError.value = "No se pudieron cargar los clientes para el fiado.";
       } finally {
         creditLoading.value = false;
       }
@@ -3671,6 +3731,9 @@ export default {
       creditCustomerId.value = "";
       creditDown.value = "";
       creditQuery.value = "";
+      saleCustomerId.value = "";
+      saleCustomerQuery.value = "";
+      if (offlineStore.online && !creditCustomers.value.length) loadCreditCustomers({ quiet: true });
       payError.value = "";
       openingFloat.value = "";
       showMobileCart.value = false;
@@ -3753,7 +3816,7 @@ export default {
         taxRate: TAX_RATE.value,
         items,
         paymentMethod: payMethod.value,
-        customerId: payMethod.value === "credit" ? creditCustomerId.value : undefined,
+        customerId: payMethod.value === "credit" ? creditCustomerId.value : saleCustomerId.value || undefined,
         downPayment: payMethod.value === "credit" && Number(creditDown.value) > 0 ? Number(creditDown.value) : undefined,
         cashReceived: takesCash.value ? Number(payCashReceived.value || 0) : undefined,
         cardAmount: payMethod.value === "split" ? Number(payCardAmount.value || 0) : undefined,
@@ -4601,6 +4664,13 @@ export default {
       payMethod,
       payReference,
       creditQuery,
+      saleCustomerId,
+      saleCustomerQuery,
+      saleCustomer,
+      saleCustomerMatches,
+      customersReady,
+      creatingCustomer,
+      createSaleCustomer,
       creditCustomerId,
       creditDown,
       creditMatches,
@@ -6190,6 +6260,8 @@ html[data-theme="dark"] .avatar {
 .fee-row span { display: grid; gap: 0.1rem; }
 .fee-row strong { font-size: 0.95rem; }
 .fee-row small { font-size: 0.8rem; color: var(--timber-muted); }
+.sale-cust { display: grid; gap: 0.4rem; margin-bottom: 0.75rem; }
+.sale-cust-chip { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin: 0; padding: 0.5rem 0.75rem; border-radius: 10px; background: color-mix(in srgb, var(--timber-primary) 10%, transparent); font-size: 0.9rem; }
 .credit-pick { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.4rem; }
 .credit-opt {
   width: 100%;
