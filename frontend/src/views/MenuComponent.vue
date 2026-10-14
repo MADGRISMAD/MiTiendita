@@ -442,6 +442,9 @@
             <button type="button" class="kpi" :class="{ on: statusFilter === 'noprice' }" @click="statusFilter = 'noprice'">
               <span>Sin precio</span><strong>{{ catalogStats.noprice }}</strong>
             </button>
+            <button v-if="catalogStats.noprice" type="button" class="kpi" @click="showBulkPrices = true">
+              <span>Poner precios</span><strong>{{ catalogStats.noprice }} pendientes</strong>
+            </button>
             <button type="button" class="kpi" :class="{ on: statusFilter === 'nocode' }" @click="statusFilter = 'nocode'">
               <span>Sin código</span><strong>{{ catalogStats.nocode }}</strong>
             </button>
@@ -687,6 +690,16 @@
           </div>
         </Teleport>
       </template>
+
+      <!-- Poner precios en lote (catálogo maestro) -->
+      <BulkPricesDialog
+        v-if="showBulkPrices"
+        :foods="pickFoods.filter((p) => p.needsPrice)"
+        :menus="menus"
+        :total="pickFoods.length"
+        @close="showBulkPrices = false"
+        @saved="onBulkPricesSaved"
+      />
 
       <!-- Consulta de precio (F4) -->
       <Teleport to="body">
@@ -1523,6 +1536,7 @@
 <script>
 import AppShell from "../components/AppShell.vue";
 import MagicPricesSheet from "../components/MagicPricesSheet.vue";
+import BulkPricesDialog from "../components/BulkPricesDialog.vue";
 import PosIcon from "../components/PosIcon.js";
 import { ref, reactive, computed, onMounted, onUnmounted, watch, nextTick } from "vue";
 import { useRoute, useRouter } from "vue-router";
@@ -1599,7 +1613,7 @@ function round2(n) {
 const CATEGORY_HUES = [212, 28, 152, 274, 342, 46, 190, 118, 8, 236];
 
 export default {
-  components: { AppShell, MagicPricesSheet, PosIcon },
+  components: { AppShell, MagicPricesSheet, BulkPricesDialog, PosIcon },
   directives: { selectOnFocus: vSelectOnFocus },
   props: {
     initialMode: { type: String, default: "pos" },
@@ -1684,6 +1698,12 @@ export default {
     const showDiscount = ref(false);
     const discountDraft = ref(0);
     const showPriceCheck = ref(false);
+    const showBulkPrices = ref(false);
+    async function onBulkPricesSaved(n) {
+      showBulkPrices.value = false;
+      await fetchMenus();
+      msg.value = `${n} precio${n === 1 ? "" : "s"} guardado${n === 1 ? "" : "s"}.`;
+    }
     const priceCode = ref("");
     const priceResult = ref(null);
     const priceErr = ref("");
@@ -4378,6 +4398,8 @@ export default {
       sortBy,
       catLimit,
       catalogStats,
+      showBulkPrices,
+      onBulkPricesSaved,
       catalogRows,
       visibleRows,
       catalogPlaceholder,

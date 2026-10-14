@@ -3,6 +3,7 @@ const { roundQty, saleUnitOf } = require('../utils/units');
 const limits = require('../services/plan-limits.service');
 const { ObjectId } = require('mongodb');
 const saleAudit = require('../services/sale-audit.service');
+const { sanitizePriceRows, MAX_ROWS } = require('../services/bulk-prices.service');
 
 function sanitizeSupplierIds(raw) {
   if (!Array.isArray(raw)) return [];
@@ -199,6 +200,52 @@ async function updateFood(req, res) {
   }
 }
 
+/** Poner precio (y costo) a muchos productos de una vez. Respeta el tope de productos del plan. */
+async function bulkPrices(req, res) {
+  try {
+    if (Array.isArray(req.body?.items) && req.body.items.length > MAX_ROWS) {
+      return res.status(400).send(`Máximo ${MAX_ROWS} productos por envío`);
+    }
+    const { rows, rejected } = sanitizePriceRows(req.body?.items);
+    if (!rows.length) return res.status(400).send('No hay precios válidos que guardar');
+
+    const foods = new Map((await db.GetFoods(req.tenantId)).map((f) => [String(f.id), f]));
+    const mine = rows.filter((r) => foods.has(r.id));
+    for (const r of rows) if (!foods.has(r.id)) rejected.push({ id: r.id, reason: 'Producto no encontrado' });
+
+    // Un producto sin precio no cuenta para el tope del plan; al ponerle precio, sí
+    const newlyPriced = mine.filter((r) => foods.get(r.id).needsPrice).length;
+    if (newlyPriced) {
+      try {
+        await limits.assertProductRoom(req.tenantId, req.tenant?.plan || 'basic', newlyPriced);
+      } catch (limitErr) {
+        if (limits.sendLimit(res, limitErr)) return;
+        throw limitErr;
+      }
+    }
+
+    let updated = 0;
+    for (const r of mine) {
+      const before = foods.get(r.id);
+      const patch = { price: r.price, ...(r.cost !== undefined ? { cost: r.cost } : {}) };
+      if (!(await db.UpdateFood(r.id, patch, req.tenantId))) {
+        rejected.push({ id: r.id, reason: 'Producto no encontrado' });
+        continue;
+      }
+      updated += 1;
+      // Poner el primer precio no es un «cambio»: solo se registran los cambios sobre un precio que ya existía
+      if (!before.needsPrice) {
+        const entries = saleAudit.priceChangeEntries({ tenantId: req.tenantId, user: req.user?.username, before, after: patch });
+        await Promise.all(entries.map((e) => db.CreateActivityLog(e).catch(() => {})));
+      }
+    }
+    return res.status(200).json({ updated, rejected });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).send(err.message || 'Error al guardar los precios');
+  }
+}
+
 async function deleteFood(req, res) {
   try {
     const result = await db.DeleteFood(req.params.id, req.tenantId);
@@ -265,6 +312,7 @@ module.exports = {
   updateMenu,
   deleteMenu,
   listFoods,
+  bulkPrices,
   getFood,
   lookupFood,
   createFood,

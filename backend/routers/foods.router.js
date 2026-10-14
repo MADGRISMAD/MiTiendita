@@ -11,6 +11,7 @@ router.get('/low-stock', requireAuth, requireActiveSubscription, readRoles, menu
 router.get('/search', requireAuth, requireActiveSubscription, readRoles, menus.searchFoods);
 router.get('/:id', requireAuth, requireActiveSubscription, readRoles, menus.getFood);
 router.post('/', requireAuth, requireActiveSubscription, writeRoles, menus.createFood);
+router.put('/prices/bulk', requireAuth, requireActiveSubscription, writeRoles, menus.bulkPrices);
 router.put('/:id', requireAuth, requireActiveSubscription, writeRoles, menus.updateFood);
 router.delete('/:id', requireAuth, requireActiveSubscription, writeRoles, menus.deleteFood);
 

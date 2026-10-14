@@ -223,6 +223,10 @@ export const apiService = {
   searchFoods(q: string) {
     return axios.get('/foods/search', { params: { q } }).then((r) => r.data);
   },
+  /** Poner precio (y costo) a muchos productos a la vez (catálogo maestro). */
+  saveBulkPrices(items: { id: string; price: number; cost?: number }[]) {
+    return axios.put("/foods/prices/bulk", { items }).then((r) => r.data);
+  },
   createFood(foodDTO: {
     name: string;
     price: number;
