@@ -15,8 +15,11 @@
 
         <div class="bp-tools">
           <input v-model="q" class="bp-inp" type="search" placeholder="Buscar producto o código" aria-label="Buscar producto" />
+          <button type="button" class="bp-btn" @click="$refs.file.click()">Importar CSV</button>
+          <input ref="file" type="file" accept=".csv,text/csv" hidden @change="importCsv" />
           <span class="bp-count">{{ filled }} con precio capturado</span>
         </div>
+        <p v-if="importNote" class="bp-note" role="status">{{ importNote }}</p>
 
         <div class="bp-list">
           <div v-for="row in visible" :key="row.id" class="bp-row">
@@ -59,6 +62,7 @@
 <script setup>
 import { computed, reactive, ref } from "vue";
 import { apiService } from "../apiService";
+import { matchPriceRows, parseCsv } from "../priceImport";
 
 const props = defineProps({
   foods: { type: Array, required: true }, // productos sin precio
@@ -92,6 +96,34 @@ const num = (v) => Number(String(v).replace(/[$,\s]/g, ""));
 const valid = (id) => num(draft[id].price) > 0;
 const filled = computed(() => rows.value.filter((r) => valid(r.id)).length);
 const priced = computed(() => props.total - rows.value.length);
+
+const importNote = ref("");
+/** Llena la tabla con los precios de un CSV (código y/o nombre, precio, costo). No guarda: el dueño revisa y guarda. */
+async function importCsv(e) {
+  const file = e.target.files?.[0];
+  e.target.value = "";
+  if (!file) return;
+  error.value = "";
+  importNote.value = "";
+  if (file.size > 2_000_000) {
+    error.value = "El archivo es muy grande (máximo 2 MB).";
+    return;
+  }
+  const res = matchPriceRows(parseCsv(await file.text()), props.foods);
+  if (res.error) {
+    error.value = res.error;
+    return;
+  }
+  for (const m of res.matches) {
+    if (!draft[m.id]) continue;
+    draft[m.id].price = String(m.price);
+    if (m.cost !== undefined) draft[m.id].cost = String(m.cost);
+  }
+  const bits = [`${res.matches.length} precio${res.matches.length === 1 ? "" : "s"} cargado${res.matches.length === 1 ? "" : "s"}`];
+  if (res.unmatched.length) bits.push(`${res.unmatched.length} no están en tus productos sin precio (${res.unmatched.slice(0, 3).join(", ")}${res.unmatched.length > 3 ? "…" : ""})`);
+  if (res.invalid.length) bits.push(`${res.invalid.length} con precio inválido`);
+  importNote.value = bits.join(" · ") + ". Revisa y presiona Guardar.";
+}
 
 function focusNext(id) {
   const i = visible.value.findIndex((r) => r.id === id);
@@ -142,6 +174,7 @@ function close() {
 .bp-fld { display: grid; gap: 0.15rem; font-size: 0.7rem; font-weight: 700; opacity: 0.9; }
 .bp-inp { width: 100%; min-height: 40px; padding: 0 0.6rem; border-radius: 10px; border: 1px solid color-mix(in srgb, currentColor 22%, transparent); background: transparent; color: inherit; font: inherit; }
 .bp-empty { padding: 1rem 0; text-align: center; opacity: 0.6; }
+.bp-note { margin: 0 1.25rem 0.4rem; font-size: 0.84rem; font-weight: 600; }
 .bp-err { margin: 0.5rem 1.25rem 0; color: #c0392b; font-weight: 600; }
 .bp-acts { display: flex; justify-content: flex-end; gap: 0.6rem; padding: 0.9rem 1.25rem 1.1rem; }
 .bp-btn { min-height: 42px; padding: 0 1.1rem; border-radius: 10px; border: 1px solid color-mix(in srgb, currentColor 25%, transparent); background: transparent; color: inherit; font-weight: 700; cursor: pointer; }
