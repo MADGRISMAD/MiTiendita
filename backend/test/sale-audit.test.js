@@ -63,3 +63,25 @@ test('descuento grande: se registra desde 20 %, debajo no', () => {
   assert.equal(e.type, 'discount_applied');
   assert.match(e.message, /25% en venta por \$75\.00/);
 });
+
+test('catálogo: alta, cambios de datos, baja con respaldo de lo que tenía y categorías', () => {
+  const { foodCreatedEntry, foodChangeEntries, foodDeletedEntry, menuEntry } = require('../services/sale-audit.service');
+  const created = foodCreatedEntry({ tenantId: 't1', user: 'dueño', food: { id: 'f1', name: 'Coca', price: 18, barcode: '750' } });
+  assert.equal(created.type, 'product_created');
+  assert.match(created.message, /Coca a \$18\.00/);
+
+  const before = { id: 'f1', name: 'Coca', barcode: '750', saleUnit: 'pz', menuId: 'm1', priceIncludesTax: true };
+  const changes = foodChangeEntries({ tenantId: 't1', user: 'dueño', before, after: { name: 'Coca 600', barcode: '750', saleUnit: 'pz', price: 20 } });
+  assert.equal(changes.length, 1); // solo cambió el nombre; el precio tiene su propio registro
+  assert.match(changes[0].message, /Nombre de Coca: «Coca» → «Coca 600»/);
+  assert.equal(foodChangeEntries({ tenantId: 't1', before, after: { name: 'Coca' } }).length, 0);
+
+  const del = foodDeletedEntry({ tenantId: 't1', user: 'dueño', food: { id: 'f1', name: 'Coca', price: 18, cost: 12, stock: 7, barcode: '750', menuId: 'm1' } });
+  assert.equal(del.type, 'product_deleted');
+  assert.match(del.message, /7 en existencia/);
+  assert.deepEqual([del.meta.price, del.meta.cost, del.meta.stock, del.meta.barcode], [18, 12, 7, '750']);
+
+  assert.equal(menuEntry({ tenantId: 't1', kind: 'created', menu: { id: 'm1', name: 'Bebidas' } }).type, 'category_created');
+  assert.match(menuEntry({ tenantId: 't1', kind: 'renamed', menu: { id: 'm1', name: 'Refrescos' }, from: { id: 'm1', name: 'Bebidas' } }).message, /«Bebidas» → «Refrescos»/);
+  assert.match(menuEntry({ tenantId: 't1', kind: 'deleted', menu: { id: 'm1', name: 'Bebidas' }, productCount: 12 }).message, /tenía 12 productos/);
+});

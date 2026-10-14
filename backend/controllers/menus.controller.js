@@ -5,6 +5,15 @@ const { ObjectId } = require('mongodb');
 const saleAudit = require('../services/sale-audit.service');
 const { sanitizePriceRows, MAX_ROWS } = require('../services/bulk-prices.service');
 
+/** Bitácora del catálogo: nunca debe tumbar el guardado. */
+async function logCatalog(entries) {
+  try {
+    await Promise.all([].concat(entries).filter(Boolean).map((e) => db.CreateActivityLog(e)));
+  } catch (e) {
+    console.error('[bitácora]', e.message);
+  }
+}
+
 function sanitizeSupplierIds(raw) {
   if (!Array.isArray(raw)) return [];
   return [...new Set(raw.map((id) => String(id || '').trim()).filter((id) => ObjectId.isValid(id)))];
@@ -39,6 +48,7 @@ async function createMenu(req, res) {
       description: description || '',
       tenantId: req.tenantId,
     });
+    await logCatalog(saleAudit.menuEntry({ tenantId: req.tenantId, user: req.user?.username, kind: 'created', menu: created }));
     return res.status(201).json(created);
   } catch (err) {
     console.error(err);
@@ -48,8 +58,12 @@ async function createMenu(req, res) {
 
 async function updateMenu(req, res) {
   try {
+    const before = await db.GetMenuById(req.params.id, req.tenantId).catch(() => null);
     const updated = await db.UpdateMenu(req.params.id, req.body || {}, req.tenantId);
     if (!updated) return res.status(404).send('Menú no encontrado');
+    if (before && updated.name !== before.name) {
+      await logCatalog(saleAudit.menuEntry({ tenantId: req.tenantId, user: req.user?.username, kind: 'renamed', menu: updated, from: before }));
+    }
     return res.status(200).json(updated);
   } catch (err) {
     console.error(err);
@@ -59,10 +73,13 @@ async function updateMenu(req, res) {
 
 async function deleteMenu(req, res) {
   try {
+    const menu = await db.GetMenuById(req.params.id, req.tenantId).catch(() => null);
+    const productCount = menu ? (await db.GetFoods(req.tenantId)).filter((f) => String(f.menuId) === String(menu.id)).length : 0;
     const result = await db.DeleteMenu(req.params.id, req.tenantId);
     if (!result || result.deletedCount === 0) {
       return res.status(404).send('Menú no encontrado');
     }
+    await logCatalog(saleAudit.menuEntry({ tenantId: req.tenantId, user: req.user?.username, kind: 'deleted', menu: menu || { id: req.params.id }, productCount }));
     return res.status(200).json({ ok: true });
   } catch (err) {
     console.error(err);
@@ -141,6 +158,7 @@ async function createFood(req, res) {
       supplierIds: sanitizeSupplierIds(supplierIds),
       saleUnit: saleUnitOf(saleUnit),
     });
+    await logCatalog(saleAudit.foodCreatedEntry({ tenantId: req.tenantId, user: req.user?.username, food: created }));
     return res.status(201).json(created);
   } catch (err) {
     console.error(err);
@@ -187,12 +205,10 @@ async function updateFood(req, res) {
     const updated = await db.UpdateFood(req.params.id, body, req.tenantId);
     if (!updated) return res.status(404).send('Producto no encontrado');
     // Bitácora (no debe tumbar el guardado)
-    try {
-      const entries = saleAudit.priceChangeEntries({ tenantId: req.tenantId, user: req.user?.username, before, after: body });
-      await Promise.all(entries.map((e) => db.CreateActivityLog(e)));
-    } catch (e) {
-      console.error('[bitácora]', e.message);
-    }
+    await logCatalog([
+      ...saleAudit.priceChangeEntries({ tenantId: req.tenantId, user: req.user?.username, before, after: body }),
+      ...saleAudit.foodChangeEntries({ tenantId: req.tenantId, user: req.user?.username, before, after: body }),
+    ]);
     return res.status(200).json(updated);
   } catch (err) {
     console.error(err);
@@ -248,10 +264,12 @@ async function bulkPrices(req, res) {
 
 async function deleteFood(req, res) {
   try {
+    const food = await db.GetFoodById(req.params.id, req.tenantId).catch(() => null);
     const result = await db.DeleteFood(req.params.id, req.tenantId);
     if (!result || result.deletedCount === 0) {
       return res.status(404).send('Platillo no encontrado');
     }
+    if (food) await logCatalog(saleAudit.foodDeletedEntry({ tenantId: req.tenantId, user: req.user?.username, food }));
     return res.status(200).json({ ok: true });
   } catch (err) {
     console.error(err);

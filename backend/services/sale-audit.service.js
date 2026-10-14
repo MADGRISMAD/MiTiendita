@@ -134,4 +134,69 @@ function bigDiscountEntry({ tenantId, user, order, now = new Date() }) {
   };
 }
 
-module.exports = { bigDiscountEntry, DISCOUNT_ALERT_PERCENT, sanitizeRemovedLines, removedLineEntry, voidEntry, priceChangeEntries, cashOpenEntry, cashCloseEntry, MAX_LINES };
+const base = (tenantId, user, now) => ({ tenantId: String(tenantId), user: user || '', createdAt: now });
+
+/** Alta de un producto. */
+function foodCreatedEntry({ tenantId, user, food, now = new Date() }) {
+  return {
+    ...base(tenantId, user, now),
+    type: 'product_created',
+    message: `Producto nuevo: ${food.name} a ${money(food.price)}`,
+    meta: { foodId: String(food.id || ''), name: food.name, price: Number(food.price) || 0, barcode: food.barcode || '' },
+  };
+}
+
+const FOOD_FIELDS = [
+  ['name', 'Nombre'],
+  ['barcode', 'Código'],
+  ['saleUnit', 'Unidad de venta'],
+  ['menuId', 'Categoría'],
+  ['priceIncludesTax', 'Precio con IVA'],
+];
+
+/** Cambios de datos de un producto que no son precio ni costo (esos ya tienen su propio registro). */
+function foodChangeEntries({ tenantId, user, before, after, now = new Date() }) {
+  const out = [];
+  for (const [field, label] of FOOD_FIELDS) {
+    if (after[field] === undefined || String(after[field] ?? '') === String(before?.[field] ?? '')) continue;
+    out.push({
+      ...base(tenantId, user, now),
+      type: 'product_updated',
+      message: `${label} de ${before?.name || after.name || 'producto'}: «${before?.[field] ?? ''}» → «${after[field] ?? ''}»`,
+      meta: { foodId: String(before?.id || ''), field, from: before?.[field] ?? null, to: after[field] ?? null },
+    });
+  }
+  return out;
+}
+
+/** Baja de un producto, con lo necesario para recrearlo si fue un error. */
+function foodDeletedEntry({ tenantId, user, food, now = new Date() }) {
+  return {
+    ...base(tenantId, user, now),
+    type: 'product_deleted',
+    message: `Producto eliminado: ${food.name} (${money(food.price)}, ${Number(food.stock) || 0} en existencia)`,
+    meta: {
+      foodId: String(food.id || ''),
+      name: food.name,
+      price: Number(food.price) || 0,
+      cost: Number(food.cost) || 0,
+      stock: Number(food.stock) || 0,
+      barcode: food.barcode || '',
+      menuId: food.menuId || '',
+      saleUnit: food.saleUnit || 'pz',
+    },
+  };
+}
+
+/** Alta, cambio de nombre o baja de una categoría. */
+function menuEntry({ tenantId, user, kind, menu, from = null, productCount = 0, now = new Date() }) {
+  const name = menu?.name || from?.name || 'categoría';
+  const text = {
+    created: `Categoría nueva: ${name}`,
+    renamed: `Categoría renombrada: «${from?.name}» → «${name}»`,
+    deleted: `Categoría eliminada: ${name}${productCount ? ` (tenía ${productCount} productos)` : ''}`,
+  }[kind];
+  return { ...base(tenantId, user, now), type: `category_${kind}`, message: text, meta: { menuId: String(menu?.id || from?.id || ''), name, productCount } };
+}
+
+module.exports = { foodCreatedEntry, foodChangeEntries, foodDeletedEntry, menuEntry, bigDiscountEntry, DISCOUNT_ALERT_PERCENT, sanitizeRemovedLines, removedLineEntry, voidEntry, priceChangeEntries, cashOpenEntry, cashCloseEntry, MAX_LINES };
