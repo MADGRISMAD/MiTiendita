@@ -118,4 +118,20 @@ function cashCloseEntry({ tenantId, user, session, now = new Date() }) {
   };
 }
 
-module.exports = { sanitizeRemovedLines, removedLineEntry, voidEntry, priceChangeEntries, cashOpenEntry, cashCloseEntry, MAX_LINES };
+const DISCOUNT_ALERT_PERCENT = 20;
+
+/** Descuento grande en una venta (a partir de 20 %): queda para que el dueño lo revise. */
+function bigDiscountEntry({ tenantId, user, order, now = new Date() }) {
+  const pct = Number(order?.discountPercent) || 0;
+  if (pct < DISCOUNT_ALERT_PERCENT) return null;
+  return {
+    tenantId: String(tenantId),
+    type: 'discount_applied',
+    message: `Descuento de ${pct}% en venta por ${money(order.total)}`,
+    meta: { orderId: String(order.id || ''), discountPercent: pct, discountAmount: Number(order.discountAmount || 0), total: Number(order.total || 0) },
+    user: user || '',
+    createdAt: now,
+  };
+}
+
+module.exports = { bigDiscountEntry, DISCOUNT_ALERT_PERCENT, sanitizeRemovedLines, removedLineEntry, voidEntry, priceChangeEntries, cashOpenEntry, cashCloseEntry, MAX_LINES };

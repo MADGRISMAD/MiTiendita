@@ -55,3 +55,11 @@ test('bitácora de caja: apertura y corte con faltante/sobrante', () => {
   assert.match(cashCloseEntry({ tenantId: 't1', user: 'u', session: { difference: 25 } }).message, /sobrante de \$25\.00/);
   assert.match(cashCloseEntry({ tenantId: 't1', user: 'u', session: { difference: 0 } }).message, /cuadró/);
 });
+
+test('descuento grande: se registra desde 20 %, debajo no', () => {
+  const { bigDiscountEntry } = require('../services/sale-audit.service');
+  assert.equal(bigDiscountEntry({ tenantId: 't1', user: 'u', order: { discountPercent: 10, total: 90 } }), null);
+  const e = bigDiscountEntry({ tenantId: 't1', user: 'u', order: { id: 'o1', discountPercent: 25, total: 75, discountAmount: 25 } });
+  assert.equal(e.type, 'discount_applied');
+  assert.match(e.message, /25% en venta por \$75\.00/);
+});

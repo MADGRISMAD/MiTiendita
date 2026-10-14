@@ -366,6 +366,8 @@ async function sale(req, res) {
     }
     if (createdHere) {
       const user = req.user?.username || '';
+      const big = saleAudit.bigDiscountEntry({ tenantId: req.tenantId, user, order: updated || existing });
+      if (big) await audit(big);
       for (const line of saleAudit.sanitizeRemovedLines(body.removedLines)) {
         await audit(saleAudit.removedLineEntry({ tenantId: req.tenantId, user, line, orderId: updated?.id || existing.id }));
       }
