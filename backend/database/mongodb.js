@@ -728,6 +728,18 @@ async function UpdateOrder(id, data, tenantId) {
   await dbConnection.collection('orders').updateOne(filter, { $set: clean });
   return GetOrderById(id, tenantId);
 }
+/**
+ * Aplica una devolución parcial solo si la venta sigue igual que cuando se calculó (mismo total y cobrada):
+ * dos devoluciones al mismo tiempo no pueden reembolsar de más. Devuelve la venta nueva o null si cambió.
+ */
+async function ApplyOrderReturn(id, tenantId, expectedTotal, set, entry) {
+  const filter = oidFilter(id, tenantId);
+  if (!filter) return null;
+  const res = await dbConnection
+    .collection('orders')
+    .updateOne({ ...filter, paymentStatus: 'paid', total: expectedTotal }, { $set: set, $push: { returns: entry } });
+  return res.modifiedCount === 1 ? GetOrderById(id, tenantId) : null;
+}
 async function GetOrdersByCashSession(sessionId, tenantId) {
   return (await dbConnection.collection('orders').find({ cashSessionId: sessionId, ...(tenantId ? { tenantId } : {}) }).toArray()).map(withId);
 }
@@ -1400,7 +1412,7 @@ async function Ping() {
 }
 
 module.exports = {
-  Ping, GetClosedCashSessionsBetween, ListSettingsWithDailySummary, ClaimDailySummary, ReleaseDailySummary,
+  Ping, ApplyOrderReturn, GetClosedCashSessionsBetween, ListSettingsWithDailySummary, ClaimDailySummary, ReleaseDailySummary,
   ensureConnection,
   CreateTenant, GetTenantById, UpdateTenant, ListTenants, CountUsersByTenant, CountPendingInvites, ListUsersByTenant, GetTenantByMpPreapprovalId,
   CreateUser, FindUserByEmail, LoginUsuario, FindUserByUsername, UpdateUserById, FindUserByResetToken,

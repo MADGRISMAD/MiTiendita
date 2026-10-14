@@ -1,6 +1,7 @@
 const db = require('../database/mongodb');
 const saleAudit = require('../services/sale-audit.service');
 const errorReport = require('../services/error-report.service');
+const returnsSvc = require('../services/returns.service');
 const { normalizeOrder, orderStatuses, paymentMethods, newToken } = require('../models/order.model');
 const { storeDayRange } = require('../utils/store-time');
 const pointCharges = require('../services/point.charges.service');
@@ -427,6 +428,87 @@ async function removedLines(req, res) {
   }
 }
 
+/** Devolución parcial: el cliente regresa algunos productos de un ticket cobrado. */
+async function returnItems(req, res) {
+  try {
+    const order = await db.GetOrderById(req.params.id, req.tenantId);
+    if (!order) return res.status(404).send('Pedido no encontrado');
+    const plan = returnsSvc.planReturn(order, req.body?.lines);
+    const reason = String(req.body?.reason || '').trim().slice(0, 200);
+    const split = returnsSvc.refundSplit(order, plan.amount);
+
+    // El efectivo sale del cajón: hace falta una caja abierta
+    let session = null;
+    if (split.cash > 0) {
+      session = await db.GetOpenCashSession(req.tenantId);
+      if (!session) return res.status(400).send('Abre la caja para devolver el dinero.');
+    }
+
+    const done = returnsSvc.returnedByIndex(order);
+    const now = new Date();
+    const entry = {
+      id: `${now.getTime().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
+      at: now,
+      by: req.user?.username || '',
+      reason,
+      amount: plan.amount,
+      cash: split.cash,
+      manual: split.manual,
+      method: split.method,
+      lines: plan.lines.map(({ index, name, quantity, amount, restock }) => ({ index, name, quantity, amount, restock })),
+    };
+    const set = {
+      total: Number((Number(order.total) - plan.amount).toFixed(2)),
+      tax: Number((Number(order.tax || 0) - plan.tax).toFixed(2)),
+      cardExtraTax: Number(Math.max(0, Number(order.cardExtraTax || 0) - plan.cardFee).toFixed(2)),
+      originalTotal: order.originalTotal ?? order.total,
+      returnedAmount: Number((Number(order.returnedAmount || 0) + plan.amount).toFixed(2)),
+      updatedAt: now,
+    };
+    if (split.method === 'split') {
+      // Lo que se regresa por tarjeta baja la parte de tarjeta; el corte reparte el resto como efectivo
+      set.originalCardAmount = order.originalCardAmount ?? order.cardAmount ?? 0;
+      set.cardAmount = Number(Math.max(0, Number(order.cardAmount || 0) - split.manual).toFixed(2));
+    }
+    const updated = await db.ApplyOrderReturn(order.id, req.tenantId, order.total, set, entry);
+    if (!updated) return res.status(409).send('La venta cambió mientras se hacía la devolución. Revísala e intenta de nuevo.');
+
+    // Efectivo devuelto en OTRO turno: el corte de hoy lo descuenta (en el mismo turno ya baja solo por el total)
+    if (session && String(order.cashSessionId || '') !== String(session.id)) {
+      const next = Number(session.cashRefunds || 0) + split.cash;
+      await db.UpdateCashSession(session.id, { cashRefunds: Number(next.toFixed(2)), updatedAt: now }, req.tenantId);
+    }
+
+    // Inventario: regresa lo que el cajero marcó (lo demás es merma)
+    if (order.inventoryApplied) {
+      for (const l of plan.lines) {
+        if (!l.restock || !l.foodId) continue;
+        try {
+          const allocations = returnsSvc.allocationsToRestore(order.items[l.index], done[l.index] || 0, l.quantity);
+          await db.RestoreSaleStock(l.foodId, l.quantity, allocations, req.tenantId);
+        } catch (e) {
+          console.warn('No se pudo regresar stock:', l.foodId, e.message);
+        }
+      }
+    }
+
+    await audit({
+      tenantId: String(req.tenantId),
+      type: 'order_partial_return',
+      message: `Devolución de ${plan.lines.map((l) => `${l.quantity} × ${l.name}`).join(', ')} por $${plan.amount.toFixed(2)}${reason ? ` — ${reason}` : ''}`,
+      meta: { orderId: String(order.id), ...entry, at: undefined },
+      user: req.user?.username || '',
+      createdAt: now,
+    });
+    return res.status(200).json({ order: updated, refund: { amount: plan.amount, cash: split.cash, manual: split.manual, method: split.method } });
+  } catch (err) {
+    if (err.status) return res.status(err.status).send(err.message);
+    console.error(err);
+    errorReport.captureError(err, errorReport.fromReq(req, 'orders.return'));
+    return res.status(500).send(err.message || 'Error al registrar la devolución');
+  }
+}
+
 async function voidSale(req, res) {
   try {
     const existing = await db.GetOrderById(req.params.id, req.tenantId);
@@ -478,11 +560,15 @@ async function voidSale(req, res) {
     }
 
     if (existing.inventoryApplied) {
-      for (const item of existing.items || []) {
+      const returned = returnsSvc.returnedByIndex(existing);
+      for (const [i, item] of (existing.items || []).entries()) {
         const foodId = item.foodId || item.food;
         if (!foodId) continue;
+        // Lo que ya se devolvió por partes ya se regresó (o se marcó merma): aquí solo lo que sigue vendido
+        const remaining = returnsSvc.qty3(item.quantity - (returned[i] || 0));
+        if (remaining <= 0) continue;
         try {
-          await db.RestoreSaleStock(foodId, item.quantity, item.lotAllocations || [], req.tenantId);
+          await db.RestoreSaleStock(foodId, remaining, returnsSvc.allocationsToRestore(item, returned[i] || 0, remaining), req.tenantId);
         } catch (e) {
           console.warn('No se pudo regresar stock:', foodId, e.message);
         }
@@ -526,7 +612,7 @@ async function voidSale(req, res) {
   }
 }
 
-module.exports = { removedLines, list, getById, create, updateStatus, pay, sale, markInvoiceIssued, voidSale, report, reportSummary };
+module.exports = { returnItems, removedLines, list, getById, create, updateStatus, pay, sale, markInvoiceIssued, voidSale, report, reportSummary };
 
 async function report(req, res) {
   try {

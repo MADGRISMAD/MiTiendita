@@ -308,6 +308,10 @@ export const apiService = {
   reportRemovedLines(lines: unknown[]) {
     return axios.post("/orders/removed-lines", { lines }).then((r) => r.data);
   },
+  /** Devolución parcial: regresa algunos productos de un ticket cobrado. */
+  returnOrderItems(orderId: string, lines: { index: number; quantity: number; restock: boolean }[], reason = "") {
+    return axios.post(`/orders/${orderId}/return`, { lines, reason }).then((r) => r.data);
+  },
   markInvoiceIssued(orderId: string) {
     return axios.put(`/orders/${orderId}/invoice`).then((r) => r.data);
   },

@@ -36,6 +36,7 @@ router.put(
   orders.updateStatus
 );
 router.put('/:id/pay', requireAuth, requireActiveSubscription, requireRoles('admin', 'cashier'), orders.pay);
+router.post('/:id/return', requireAuth, requireActiveSubscription, requireRoles('admin', 'cashier'), orders.returnItems);
 router.put('/:id/void', requireAuth, requireActiveSubscription, requireRoles('admin', 'cashier'), orders.voidSale);
 router.put(
   '/:id/invoice',

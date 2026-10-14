@@ -224,6 +224,7 @@
                 </li>
               </ul>
               <dl class="detail-meta">
+                <div v-if="o.returnedAmount"><dt>Devuelto</dt><dd>−{{ money(o.returnedAmount) }} (se cobró {{ money(o.originalTotal) }})</dd></div>
                 <div v-if="o.discountAmount"><dt>Descuento {{ o.discountPercent }}%</dt><dd>−{{ money(o.discountAmount) }}</dd></div>
                 <div v-if="o.paymentMethod"><dt>Pago</dt><dd>{{ methodLabel(o.paymentMethod) }}</dd></div>
                 <div v-if="o.paymentMethod === 'split'"><dt>Con tarjeta</dt><dd>{{ money(o.cardAmount) }}</dd></div>
@@ -241,8 +242,11 @@
                 <button v-if="o.invoice?.status === 'requested'" type="button" class="btn" @click="markIssued(o)">
                   <PosIcon name="receipt" :size="18" /> Ya la facturé
                 </button>
+                <button v-if="canReturnItems(o)" type="button" class="btn" @click="askReturn(o)">
+                  <PosIcon name="undo" :size="18" /> Devolver productos
+                </button>
                 <button v-if="canReturn(o)" type="button" class="btn danger-ghost" @click="askVoid(o)">
-                  <PosIcon name="undo" :size="18" /> Devolver
+                  <PosIcon name="undo" :size="18" /> Devolver todo
                 </button>
                 <button v-else-if="canCancel(o)" type="button" class="btn danger-ghost" @click="askVoid(o)">
                   Cancelar venta
@@ -395,6 +399,42 @@
         </div>
       </Teleport>
 
+      <!-- Devolver productos (parcial) -->
+      <Teleport to="body">
+        <div v-if="returnOrder" class="dlg-bg">
+          <form class="dlg" role="dialog" aria-labelledby="ret-title" @submit.prevent="confirmReturn">
+            <header class="dlg-head">
+              <span class="dlg-ico warn"><PosIcon name="undo" /></span>
+              <div>
+                <h3 id="ret-title">Devolver productos · venta #{{ folio(returnOrder) }}</h3>
+                <p>Elige cuántas piezas regresa el cliente. El resto de la venta se queda igual.</p>
+              </div>
+            </header>
+            <ul class="ret-list">
+              <li v-for="row in returnRows" :key="row.index">
+                <div class="ret-name">
+                  <strong>{{ row.name }}</strong>
+                  <small>Pueden devolverse hasta {{ formatQty(row.left) }}</small>
+                </div>
+                <input v-model="row.qty" class="inp num ret-qty" inputmode="decimal" placeholder="0" :aria-label="`Piezas de ${row.name} a devolver`" />
+                <label v-if="returnOrder.inventoryApplied" class="check ret-stock" :title="'Quita la marca si se echó a perder (merma)'">
+                  <input v-model="row.restock" type="checkbox" /> Al inventario
+                </label>
+              </li>
+            </ul>
+            <input v-model="voidReason" class="inp" maxlength="200" placeholder="Motivo (opcional). Ej. Venía dañado" />
+            <p class="ret-sum">Se devuelve aprox. <strong>{{ money(returnEstimate) }}</strong> · {{ returnHow }}</p>
+            <p v-if="returnErr" class="dlg-err" role="alert">{{ returnErr }}</p>
+            <div class="dlg-acts">
+              <button type="button" class="btn" :disabled="returnBusy" @click="returnOrder = null">Volver</button>
+              <button type="submit" class="btn danger" :disabled="returnBusy || !returnEstimate">
+                {{ returnBusy ? 'Guardando…' : 'Devolver' }}
+              </button>
+            </div>
+          </form>
+        </div>
+      </Teleport>
+
       <!-- Devolver / cancelar -->
       <Teleport to="body">
         <div v-if="voidOrder" class="dlg-bg">
@@ -490,6 +530,78 @@ const payMethods = [
   { id: "transfer", label: "Transferencia", icon: "transfer" },
   { id: "other", label: "Otro", icon: "receipt" },
 ];
+
+const returnOrder = ref(null);
+const returnRows = ref([]);
+const returnBusy = ref(false);
+const returnErr = ref("");
+
+function returnedQty(o, index) {
+  let n = 0;
+  for (const r of o.returns || []) for (const l of r.lines || []) if (l.index === index) n += Number(l.quantity) || 0;
+  return Math.round(n * 1000) / 1000;
+}
+/** Una venta cobrada se puede devolver por partes si no es fiado, terminal ni facturada, y queda algo por devolver. */
+function canReturnItems(o) {
+  if (o.paymentStatus !== "paid" || o.status === "cancelled") return false;
+  if (o.paymentMethod === "credit" || o.pointChargeId || o.invoice) return false;
+  return (o.items || []).some((it, i) => Number(it.quantity) - returnedQty(o, i) > 0.0005);
+}
+function askReturn(o) {
+  returnErr.value = "";
+  voidReason.value = "";
+  returnRows.value = (o.items || [])
+    .map((it, index) => ({ index, name: it.name, left: Math.round((Number(it.quantity) - returnedQty(o, index)) * 1000) / 1000, qty: "", restock: true, item: it }))
+    .filter((r) => r.left > 0.0005);
+  returnOrder.value = o;
+}
+const returnEstimate = computed(() => {
+  const o = returnOrder.value;
+  if (!o) return 0;
+  const d = Math.min(100, Math.max(0, Number(o.discountPercent) || 0)) / 100;
+  let total = 0;
+  for (const r of returnRows.value) {
+    const q = Math.min(Number(String(r.qty).replace(",", ".")) || 0, r.left);
+    if (q <= 0) continue;
+    const b = lineBreakdown(r.item.price, r.item.quantity, r.item.priceIncludesTax, rateOf(o.taxRate, TAX_RATE.value));
+    total += b.gross * (q / r.item.quantity) * (1 - d);
+  }
+  return round2(total);
+});
+const returnHow = computed(() => {
+  const m = returnOrder.value?.paymentMethod;
+  if (m === "cash") return "sale del cajón";
+  if (m === "split") return "la parte en efectivo sale del cajón";
+  return `se devuelve fuera del sistema (${methodLabel(m).toLowerCase()})`;
+});
+async function confirmReturn() {
+  if (!returnOrder.value || returnBusy.value) return;
+  const lines = returnRows.value
+    .map((r) => ({ index: r.index, quantity: Math.min(Number(String(r.qty).replace(",", ".")) || 0, r.left), restock: r.restock }))
+    .filter((l) => l.quantity > 0);
+  if (!lines.length) {
+    returnErr.value = "Escribe cuántas piezas se devuelven.";
+    return;
+  }
+  returnBusy.value = true;
+  returnErr.value = "";
+  try {
+    const res = await apiService.returnOrderItems(returnOrder.value.id, lines, voidReason.value.trim());
+    replaceOrder(res.order);
+    const r = res.refund;
+    cashErr.value = "";
+    cashMsg.value =
+      r.manual > 0
+        ? `Devolución registrada: ${r.cash > 0 ? `entrega ${money(r.cash)} en efectivo y ` : ""}devuelve ${money(r.manual)} por ${methodLabel(r.method).toLowerCase()} (fuera del sistema).`
+        : `Devolución registrada: entrega ${money(r.amount)} en efectivo.`;
+    returnOrder.value = null;
+    await loadCash();
+  } catch (e) {
+    returnErr.value = errText(e, "No se pudo registrar la devolución.");
+  } finally {
+    returnBusy.value = false;
+  }
+}
 
 const voidOrder = ref(null);
 const voidBusy = ref(false);
@@ -1028,6 +1140,13 @@ onUnmounted(() => {
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--timber-primary) 15%, transparent);
 }
 .inp.big { min-height: 3.5rem; font-size: 1.45rem; font-weight: 800; }
+.ret-list { list-style: none; margin: 0.75rem 0; padding: 0; display: grid; gap: 0.5rem; max-height: 46vh; overflow-y: auto; }
+.ret-list li { display: grid; grid-template-columns: 1fr 5rem auto; gap: 0.6rem; align-items: center; }
+.ret-name { display: grid; min-width: 0; }
+.ret-name small { color: var(--timber-muted); }
+.ret-qty { text-align: center; }
+.ret-stock { font-size: 0.8rem; }
+.ret-sum { margin: 0.6rem 0 0; font-size: 0.9rem; }
 .inp.num {
   text-align: right;
   font-variant-numeric: tabular-nums;
