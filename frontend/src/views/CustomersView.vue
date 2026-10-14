@@ -175,8 +175,8 @@
               <textarea v-model="form.notes" class="adm-inp" rows="3" maxlength="400" placeholder="Le gusta el pan dulce, paga los viernes…"></textarea>
             </label>
             <p v-if="formErr" class="adm-err">{{ formErr }}</p>
-            <div class="adm-dlg-acts" :class="{ three: editing }">
-              <button v-if="editing" type="button" class="adm-btn danger-ghost" :disabled="saving" @click="remove">
+            <div class="adm-dlg-acts" :class="{ three: editing && isAdmin }">
+              <button v-if="editing && isAdmin" type="button" class="adm-btn danger-ghost" :disabled="saving" @click="remove">
                 {{ confirmDelete ? '¿Seguro?' : 'Eliminar' }}
               </button>
               <button type="button" class="adm-btn" @click="showForm = false">Cancelar</button>

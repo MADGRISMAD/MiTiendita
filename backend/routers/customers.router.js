@@ -199,9 +199,10 @@ router.put(
 );
 
 // Eliminar cliente
+// Solo el administrador: el cliente lleva su historial y su libro de fiado
 router.delete(
   '/:id',
-  requireAuth, requireActiveSubscription, requireRoles('admin', 'cashier'),
+  requireAuth, requireActiveSubscription, requireRoles('admin'),
   async (req, res) => {
     try {
       const customer = await creditDb.getCustomer(req.tenantId, req.params.id);
@@ -210,6 +211,16 @@ router.delete(
       }
       const result = await db.DeleteCustomer(req.params.id, req.tenantId);
       if (!result.deletedCount) return res.status(404).send('Cliente no encontrado');
+      await db
+        .CreateActivityLog({
+          tenantId: String(req.tenantId),
+          type: 'customer_deleted',
+          message: `Baja del cliente ${customer?.name || req.params.id}`,
+          meta: { customerId: String(req.params.id), name: customer?.name || '', creditLimit: Number(customer?.creditLimit) || 0 },
+          user: req.user?.username || '',
+          createdAt: new Date(),
+        })
+        .catch(() => {});
       return res.status(200).json({ ok: true });
     } catch (err) {
       console.error(err);

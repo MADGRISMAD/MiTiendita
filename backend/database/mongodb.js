@@ -776,6 +776,18 @@ async function GetClosedCashSessionsBetween(tenantId, from, to) {
     .find({ tenantId, status: 'closed', closedAt: { $gte: new Date(from), $lte: new Date(to) } })
     .toArray()).map(withId);
 }
+/** Reserva el aviso de pago fallido del día N de forma atómica: solo una instancia lo consigue. */
+async function ClaimDunningNotice(tenantId, day) {
+  if (!ObjectId.isValid(tenantId)) return false;
+  const r = await dbConnection
+    .collection('tenants')
+    .updateOne({ _id: new ObjectId(tenantId), dunningSent: { $ne: day } }, { $addToSet: { dunningSent: day }, $set: { updatedAt: new Date() } });
+  return r.modifiedCount === 1;
+}
+async function ReleaseDunningNotice(tenantId, day) {
+  if (!ObjectId.isValid(tenantId)) return;
+  await dbConnection.collection('tenants').updateOne({ _id: new ObjectId(tenantId) }, { $pull: { dunningSent: day } });
+}
 /** Tiendas con el resumen diario activado y correo destino. */
 async function ListSettingsWithDailySummary() {
   return dbConnection
@@ -1439,7 +1451,7 @@ async function Ping() {
 }
 
 module.exports = {
-  Ping, CustomerOrderStats, GetOrdersByCustomer, ApplyOrderReturn, GetClosedCashSessionsBetween, ListSettingsWithDailySummary, ClaimDailySummary, ReleaseDailySummary,
+  Ping, ClaimDunningNotice, ReleaseDunningNotice, CustomerOrderStats, GetOrdersByCustomer, ApplyOrderReturn, GetClosedCashSessionsBetween, ListSettingsWithDailySummary, ClaimDailySummary, ReleaseDailySummary,
   ensureConnection,
   CreateTenant, GetTenantById, UpdateTenant, ListTenants, CountUsersByTenant, CountPendingInvites, ListUsersByTenant, GetTenantByMpPreapprovalId,
   CreateUser, FindUserByEmail, LoginUsuario, FindUserByUsername, UpdateUserById, FindUserByResetToken,

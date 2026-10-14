@@ -8,6 +8,7 @@ const server = require('http').createServer(app);
 
 app.set('trust proxy', 1);
 app.disable('x-powered-by');
+require('./utils/env-check').assertEnv();
 const errorReport = require('./services/error-report.service');
 errorReport.init();
 process.on('unhandledRejection', (reason) => {

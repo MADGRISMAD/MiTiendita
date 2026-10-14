@@ -43,14 +43,23 @@ test('si el servidor estuvo caído, manda solo el aviso vigente', () => {
   assert.deepEqual(noticeDue({ billingStatus: 'past_due', pastDueSince: daysAgo(4, now.getTime()), dunningSent: [] }, now), { day: 3, daysLeft: 3 });
 });
 
-test('sendDue: manda el correo, lo registra y no lo repite; si falla, reintenta', async () => {
-  const tenant = { id: 't1', name: 'La Esquina', billingStatus: 'past_due', pastDueSince: daysAgo(0.2), dunningSent: [] };
-  const updates = [];
-  const db = {
+function fakeDunningDb(tenant) {
+  return {
     async ListTenants() { return [tenant]; },
     async GetSettings() { return { businessName: 'La Esquina' }; },
-    async UpdateTenant(id, patch) { updates.push(patch); Object.assign(tenant, patch); },
+    // Igual que la base: solo reserva si el aviso aún no está en la lista
+    async ClaimDunningNotice(_id, day) {
+      if ((tenant.dunningSent || []).includes(day)) return false;
+      tenant.dunningSent = [...(tenant.dunningSent || []), day];
+      return true;
+    },
+    async ReleaseDunningNotice(_id, day) { tenant.dunningSent = (tenant.dunningSent || []).filter((d) => d !== day); },
   };
+}
+
+test('sendDue: manda el correo, lo registra y no lo repite; si falla, libera para reintentar', async () => {
+  const tenant = { id: 't1', name: 'La Esquina', billingStatus: 'past_due', pastDueSince: daysAgo(0.2), dunningSent: [] };
+  const db = fakeDunningDb(tenant);
   const sent = [];
   const mail = { async sendPaymentFailedEmail(o) { sent.push(o); return { sent: true }; } };
   const deps = { emailFor: async () => 'dueno@x.com' };
@@ -58,10 +67,21 @@ test('sendDue: manda el correo, lo registra y no lo repite; si falla, reintenta'
   assert.equal(await sendDue(db, mail, deps), 0);
   assert.equal(sent[0].to, 'dueno@x.com');
   assert.equal(sent[0].daysLeft, 7);
-  assert.deepEqual(updates[0].dunningSent, [0]);
+  assert.deepEqual(tenant.dunningSent, [0]);
 
   tenant.dunningSent = [];
   const boom = { async sendPaymentFailedEmail() { throw new Error('smtp'); } };
   assert.equal(await sendDue(db, boom, deps), 0);
-  assert.deepEqual(tenant.dunningSent, []); // no se marcó: se reintenta
+  assert.deepEqual(tenant.dunningSent, []); // se liberó: se reintenta
+});
+
+test('dos instancias a la vez: el aviso sale una sola vez', async () => {
+  const tenant = { id: 't1', name: 'La Esquina', billingStatus: 'past_due', pastDueSince: daysAgo(0.2), dunningSent: [] };
+  const db = fakeDunningDb(tenant);
+  let n = 0;
+  const mail = { async sendPaymentFailedEmail() { n += 1; await new Promise((r) => setTimeout(r, 10)); return { sent: true }; } };
+  const deps = { emailFor: async () => 'dueno@x.com' };
+  const total = (await Promise.all([sendDue(db, mail, deps), sendDue(db, mail, deps)])).reduce((a, b) => a + b, 0);
+  assert.equal(total, 1);
+  assert.equal(n, 1);
 });

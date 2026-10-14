@@ -1176,7 +1176,7 @@ function iconOf(type) {
   if (type === "purchase_confirmed") return { name: "truck", tone: "good" };
   if (type === "stock_adjusted") return { name: "sliders", tone: "warn" };
   if (type === "cash_opened" || type === "cash_closed") return { name: "sliders", tone: "info" };
-  if (["sale_voided", "order_line_removed", "price_changed", "cost_changed", "discount_applied"].includes(type)) return { name: "sliders", tone: "warn" };
+  if (["sale_voided", "order_line_removed", "price_changed", "cost_changed", "discount_applied", "customer_deleted"].includes(type)) return { name: "sliders", tone: "warn" };
   if (String(type).startsWith("supplier_")) return { name: "users", tone: "info" };
   return { name: "history", tone: "" };
 }
@@ -1268,6 +1268,7 @@ const LOG_GROUPS = [
   { id: "precios", label: "Precios y costos", types: ["price_changed", "cost_changed"] },
   { id: "caja", label: "Caja (apertura y corte)", types: ["cash_opened", "cash_closed"] },
   { id: "inventario", label: "Inventario", types: ["stock_adjusted", "purchase_confirmed", "supplier_created", "supplier_deleted"] },
+  { id: "clientes", label: "Clientes dados de baja", types: ["customer_deleted"] },
 ];
 const logFilters = reactive({ from: "", to: "", group: "", user: "" });
 function loadActivity() {

@@ -25,9 +25,11 @@ async function sendDue(db, mail, { emailFor, appUrl = process.env.APP_URL || 'ht
   for (const tenant of await db.ListTenants({ includeBranches: false })) {
     const due = noticeDue(tenant, now);
     if (!due) continue;
+    // Se reserva el aviso ANTES de enviar: con dos instancias solo una lo manda
+    if (!(await db.ClaimDunningNotice(tenant.id, due.day))) continue;
     try {
       const to = await emailFor(tenant);
-      if (!to) continue;
+      if (!to) throw new Error('la tienda no tiene correo');
       const settings = await db.GetSettings(tenant.id);
       const res = await mail.sendPaymentFailedEmail({
         to,
@@ -37,10 +39,10 @@ async function sendDue(db, mail, { emailFor, appUrl = process.env.APP_URL || 'ht
         appUrl: appUrl.replace(/\/$/, ''),
       });
       if (res?.sent === false) throw new Error(res.error || 'no se envió');
-      await db.UpdateTenant(tenant.id, { dunningSent: [...(tenant.dunningSent || []), due.day] });
       sent += 1;
     } catch (err) {
       console.warn('[dunning] aviso no enviado, se reintenta:', err.message);
+      await db.ReleaseDunningNotice(tenant.id, due.day).catch(() => {});
     }
   }
   return sent;
