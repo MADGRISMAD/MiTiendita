@@ -267,8 +267,9 @@ export const apiService = {
     return axios.delete(`/menus/${menuId}`).then((r) => r.status === 200);
   },
 
-  getOrders() {
-    return axios.get('/orders').then((r) => r.data);
+  /** Ventas, las más nuevas primero. Sin parámetros: las últimas 1,000. `before`: página anterior a esa fecha. */
+  getOrders(params: { limit?: number; before?: string; cashSessionId?: string } = {}) {
+    return axios.get('/orders', { params }).then((r) => r.data);
   },
   getOrdersById(orderId: string) {
     return axios.get(`/orders/${orderId}`).then((r) => r.data);

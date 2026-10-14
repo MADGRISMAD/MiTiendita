@@ -183,7 +183,7 @@ export async function printCashCloseById(id, hint = {}) {
   const session = { ...base, abonos: base?.abonos || raw?.totals?.abonos };
   let orders = Array.isArray(raw?.orders) ? raw.orders : null;
   if (!orders) {
-    const all = await apiService.getOrders().catch(() => []);
+    const all = await apiService.getOrders({ cashSessionId: sid }).catch(() => []);
     orders = (Array.isArray(all) ? all : []).filter((o) => String(o.cashSessionId || "") === sid);
   }
   orders = [...orders].sort((x, y) => new Date(x.paidAt || x.createdAt) - new Date(y.paidAt || y.createdAt));

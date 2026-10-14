@@ -29,9 +29,21 @@ async function ensureInvoiceToken(order) {
   return db.UpdateOrder(order.id, { invoiceToken: newToken(), updatedAt: new Date() }, order.tenantId);
 }
 
+/**
+ * Ventas de la tienda, las más nuevas primero. Sin parámetros devuelve las últimas 1,000.
+ *   ?limit=N (1–1000) · ?before=<fecha ISO> (página anterior) · ?cashSessionId=<turno>
+ */
 async function list(req, res) {
   try {
-    return res.status(200).json(await db.GetOrders(req.tenantId));
+    const before = req.query.before ? new Date(String(req.query.before)) : null;
+    if (before && Number.isNaN(before.getTime())) return res.status(400).send('Fecha inválida en before');
+    return res.status(200).json(
+      await db.GetOrders(req.tenantId, {
+        limit: Number(req.query.limit) || 1000,
+        before,
+        cashSessionId: req.query.cashSessionId ? String(req.query.cashSessionId) : null,
+      })
+    );
   } catch (err) {
     console.error(err);
     return res.status(500).send(err.message || 'Error al listar pedidos');

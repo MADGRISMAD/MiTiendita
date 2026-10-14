@@ -259,6 +259,10 @@
             Ver más ({{ filteredSales.length - visibleSales.length }})
           </button>
 
+          <button v-if="hasMoreSales && filteredSales.length <= visibleSales.length" type="button" class="btn more" :disabled="loadingOlder" @click="loadOlder">
+            {{ loadingOlder ? 'Cargando…' : 'Cargar ventas anteriores' }}
+          </button>
+
           <div v-if="loaded && !filteredSales.length" class="empty">
             <PosIcon name="receipt" :size="26" class="empty-ico" />
             <p><strong>{{ emptyTitle }}</strong></p>
@@ -772,6 +776,23 @@ function saleTone(o) {
 function toggle(id) {
   expanded.value = expanded.value === id ? "" : id;
 }
+/** Trae las 500 ventas anteriores a la más vieja que ya se tiene. */
+async function loadOlder() {
+  const oldest = orders.value[orders.value.length - 1];
+  if (!oldest || loadingOlder.value) return;
+  loadingOlder.value = true;
+  try {
+    const page = await apiService.getOrders({ limit: PAGE, before: new Date(oldest.createdAt).toISOString() });
+    const list = Array.isArray(page) ? page : [];
+    const have = new Set(orders.value.map((o) => o.id));
+    orders.value = [...orders.value, ...list.filter((o) => !have.has(o.id))];
+    hasMoreSales.value = list.length >= PAGE;
+  } catch {
+    cashErr.value = "No se pudieron cargar las ventas anteriores.";
+  } finally {
+    loadingOlder.value = false;
+  }
+}
 function replaceOrder(updated) {
   if (!updated?.id) return;
   for (const list of [orders, sessionOrders]) {
@@ -794,11 +815,15 @@ async function loadCash() {
   }
 }
 
+const PAGE = 500;
+const hasMoreSales = ref(false);
+const loadingOlder = ref(false);
 async function load() {
   await flushOfflineSales();
   try {
-    const list = await apiService.getOrders();
+    const list = await apiService.getOrders({ limit: PAGE });
     orders.value = Array.isArray(list) ? list : [];
+    hasMoreSales.value = orders.value.length >= PAGE;
   } catch {
     orders.value = [];
   }

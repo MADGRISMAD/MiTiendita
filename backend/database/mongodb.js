@@ -61,6 +61,17 @@ async function ensureIndexes() {
     { tenantId: 1, clientSaleId: 1 },
     { unique: true, sparse: true, name: 'tenant_clientSaleId' }
   );
+  // Consultas más usadas de ventas: reportes y tablero (fecha), corte de caja (turno) e historial de clientes
+  for (const [col, keys] of [
+    ['orders', { tenantId: 1, createdAt: -1 }],
+    ['orders', { tenantId: 1, cashSessionId: 1 }],
+    ['orders', { tenantId: 1, customerId: 1, createdAt: -1 }],
+    ['foods', { tenantId: 1, barcode: 1 }],
+    ['foods', { tenantId: 1, sku: 1 }],
+    ['cash_sessions', { tenantId: 1, status: 1 }],
+  ]) {
+    await dbConnection.collection(col).createIndex(keys).catch(() => {});
+  }
   await dbConnection.collection('suppliers').createIndex({ tenantId: 1, name: 1 }).catch(() => {});
   await dbConnection.collection('purchases').createIndex({ tenantId: 1, date: -1 }).catch(() => {});
   await dbConnection.collection('lots').createIndex({ tenantId: 1, foodId: 1, expiresAt: 1 }).catch(() => {});
@@ -692,9 +703,13 @@ async function UpdateSettings(data, tenantId) {
   return await GetSettings(tid);
 }
 
-async function GetOrders(tenantId) {
+/** Ventas de la tienda, las más nuevas primero. `before`: solo las anteriores a esa fecha (paginación). */
+async function GetOrders(tenantId, { limit = 1000, before = null, cashSessionId = null } = {}) {
   const filter = tenantId ? { tenantId } : {};
-  return (await dbConnection.collection('orders').find(filter).sort({ createdAt: -1 }).toArray()).map(withId);
+  if (before) filter.createdAt = { $lt: new Date(before) };
+  if (cashSessionId) filter.cashSessionId = String(cashSessionId);
+  const cap = Math.min(1000, Math.max(1, Number(limit) || 1000));
+  return (await dbConnection.collection('orders').find(filter).sort({ createdAt: -1 }).limit(cap).toArray()).map(withId);
 }
 async function GetOrderById(id, tenantId) {
   const filter = oidFilter(id, tenantId);

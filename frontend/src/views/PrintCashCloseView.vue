@@ -382,7 +382,7 @@ onMounted(async () => {
     session.value = { ...base, abonos: base?.abonos || raw?.totals?.abonos };
     let list = Array.isArray(raw?.orders) ? raw.orders : null;
     if (!list) {
-      const all = await apiService.getOrders().catch(() => []);
+      const all = await apiService.getOrders({ cashSessionId: id }).catch(() => []);
       list = (Array.isArray(all) ? all : []).filter((o) => String(o.cashSessionId || "") === id);
     }
     orders.value = [...list].sort((a, b) => new Date(a.paidAt || a.createdAt) - new Date(b.paidAt || b.createdAt));
