@@ -88,6 +88,10 @@
                 <em v-if="order.paymentMethod === 'split'">
                   Tarjeta {{ money(order.cardAmount) }}<br />Efectivo {{ money(order.cashReceived) }}
                 </em>
+                <em v-else-if="order.paymentMethod === 'credit'">
+                  {{ order.creditCustomerName }}<br />
+                  <template v-if="order.downPayment">Anticipo {{ money(order.downPayment) }}<br /></template>A deber {{ money(order.creditAmount) }}
+                </em>
                 <em v-else-if="order.cashReceived">{{ money(order.cashReceived) }}</em>
                 <em v-if="order.paymentReference">Ref. {{ order.paymentReference }}</em>
               </div>
@@ -220,6 +224,7 @@ const METHOD = {
   card: "Tarjeta",
   transfer: "Transferencia",
   split: "Tarjeta y efectivo",
+  credit: "Fiado",
   other: "Otro medio",
 };
 const methodText = computed(() => METHOD[order.value?.paymentMethod] || "—");

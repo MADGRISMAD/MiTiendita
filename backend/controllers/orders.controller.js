@@ -3,6 +3,8 @@ const { normalizeOrder, orderStatuses, paymentMethods, newToken } = require('../
 const { storeDayRange } = require('../utils/store-time');
 const pointCharges = require('../services/point.charges.service');
 const { firstUnpriced } = require('../services/unpriced-items.service');
+const creditSvc = require('../services/credit.service');
+const creditDb = require('../database/credit.db');
 
 /**
  * Rango de un reporte. Un día «AAAA-MM-DD» se toma en la zona de la tienda
@@ -163,6 +165,35 @@ async function settlePayment(req, existing, body, { requireCash = true, paidAt }
     }
   }
 
+  // Fiado: se carga al cliente ANTES de tocar existencias; si algo falla después, el cargo se deshace
+  let creditInfo = null;
+  if (method === 'credit') {
+    if (body?.pointChargeId) throw httpError(400, 'El fiado no se cobra con terminal.');
+    if (!body?.customerId) throw httpError(400, 'Elige al cliente al que se le fía.');
+    const customer = await creditDb.getCustomer(req.tenantId, body.customerId);
+    if (!customer) throw httpError(404, 'Cliente no encontrado.');
+    let split;
+    try {
+      split = creditSvc.splitSale(total, body?.downPayment);
+    } catch (err) {
+      throw httpError(err.status || 400, err.message);
+    }
+    try {
+      await creditSvc.chargeSale(creditDb, {
+        tenantId: req.tenantId,
+        customer,
+        orderId: String(existing.id),
+        amount: split.credit,
+        user: req.user?.username || '',
+        cashSessionId: session?.id || null,
+      });
+    } catch (err) {
+      throw httpError(err.status || 500, err.message);
+    }
+    creditInfo = { customerId: String(customer.id), customerName: customer.name, creditAmount: split.credit, downPayment: split.down };
+  }
+
+  try {
   let stockShortages = [];
   if (settings?.inventoryEnabled && !existing.inventoryApplied) {
     // Una venta hecha sin internet ya se entregó: se registra aunque falte stock y queda para revisión
@@ -217,6 +248,14 @@ async function settlePayment(req, existing, body, { requireCash = true, paidAt }
       change: change > 0 ? change : 0,
       paymentReference: paymentReference || null,
       pointChargeId,
+      ...(creditInfo
+        ? {
+            creditCustomerId: creditInfo.customerId,
+            creditCustomerName: creditInfo.customerName,
+            creditAmount: creditInfo.creditAmount,
+            downPayment: creditInfo.downPayment,
+          }
+        : {}),
       inventoryApplied: Boolean(settings?.inventoryEnabled),
       stockReview: stockShortages.length > 0,
       stockShortages,
@@ -226,6 +265,14 @@ async function settlePayment(req, existing, body, { requireCash = true, paidAt }
   );
 
   return updated;
+  } catch (err) {
+    if (creditInfo) {
+      await creditSvc
+        .undoCharge(creditDb, { tenantId: req.tenantId, customerId: creditInfo.customerId, orderId: String(existing.id), amount: creditInfo.creditAmount })
+        .catch((e) => console.error('[fiado] no se pudo deshacer el cargo:', e.message));
+    }
+    throw err;
+  }
 }
 
 async function pay(req, res) {
@@ -382,6 +429,23 @@ async function voidSale(req, res) {
       }
     }
 
+    // Fiado: primero se cancela lo que quedó a deber (es idempotente: si algo falla después, reintentar no cobra doble)
+    if ((existing.paymentMethod || 'cash') === 'credit') {
+      try {
+        await creditSvc.reverseSale(creditDb, {
+          tenantId: req.tenantId,
+          customerId: existing.creditCustomerId,
+          orderId: String(existing.id),
+          amount: existing.creditAmount,
+          user: req.user?.username || '',
+          note: 'Venta anulada',
+        });
+      } catch (e) {
+        console.error('[fiado] no se pudo anular el fiado:', e.message);
+        return res.status(500).send('No se pudo cancelar el fiado de esta venta. Intenta de nuevo.');
+      }
+    }
+
     if (existing.inventoryApplied) {
       for (const item of existing.items || []) {
         const foodId = item.foodId || item.food;
@@ -396,7 +460,13 @@ async function voidSale(req, res) {
 
     const sameSession = String(existing.cashSessionId || '') === String(session.id);
     const method = existing.paymentMethod || 'cash';
-    if (!sameSession && method === 'cash') {
+    if (method === 'credit') {
+      const down = Number(existing.downPayment || 0);
+      if (!sameSession && down > 0) {
+        const next = Number(session.cashRefunds || 0) + down;
+        await db.UpdateCashSession(session.id, { cashRefunds: Number(next.toFixed(2)), updatedAt: new Date() }, req.tenantId);
+      }
+    } else if (!sameSession && method === 'cash') {
       const next = Number(session.cashRefunds || 0) + Number(existing.total || 0);
       await db.UpdateCashSession(
         session.id,

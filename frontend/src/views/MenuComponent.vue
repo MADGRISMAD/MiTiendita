@@ -1257,6 +1257,58 @@
                   Cobra <strong>{{ money(chargeTotal) }}</strong> en la terminal y confirma cuando salga aprobado.
                 </p>
               </template>
+              <template v-else-if="payMethod === 'credit'">
+                <label class="field">
+                  <span>Cliente</span>
+                  <input
+                    v-model.trim="creditQuery"
+                    class="inp"
+                    type="search"
+                    autocomplete="off"
+                    placeholder="Buscar por nombre o teléfono"
+                    :disabled="sending"
+                  />
+                </label>
+                <ul v-if="creditMatches.length" class="credit-pick" role="listbox" aria-label="Clientes">
+                  <li v-for="c in creditMatches" :key="c.id">
+                    <button
+                      type="button"
+                      role="option"
+                      :aria-selected="creditCustomerId === c.id"
+                      class="credit-opt"
+                      :class="{ on: creditCustomerId === c.id }"
+                      @click="creditCustomerId = c.id"
+                    >
+                      <strong>{{ c.name }}</strong>
+                      <small v-if="Number(c.creditLimit) > 0">
+                        Debe {{ money(c.balance || 0) }} · límite {{ money(c.creditLimit) }}
+                      </small>
+                      <small v-else class="credit-none">Sin fiado autorizado</small>
+                    </button>
+                  </li>
+                </ul>
+                <p v-else-if="!creditLoading" class="pay-note">
+                  No hay clientes que coincidan. Da de alta al cliente en <strong>Clientes</strong> y autorízale un límite de fiado.
+                </p>
+                <label class="field">
+                  <span>Anticipo en efectivo <em>(opcional)</em></span>
+                  <input
+                    v-model.number="creditDown"
+                    class="inp"
+                    type="number"
+                    inputmode="decimal"
+                    min="0"
+                    step="0.01"
+                    placeholder="0.00"
+                    :disabled="sending"
+                  />
+                </label>
+                <p v-if="creditCustomer" class="pay-note">
+                  A deber: <strong>{{ money(creditToOwe) }}</strong>
+                  <template v-if="Number(creditDown) > 0"> · Cobra ahora <strong>{{ money(Number(creditDown)) }}</strong> en efectivo</template>
+                </p>
+                <p v-if="creditProblem && creditCustomer" class="dlg-err">{{ creditProblem }}</p>
+              </template>
               <template v-else-if="payMethod === 'transfer' || payMethod === 'other'">
                 <p class="pay-note">
                   <template v-if="payMethod === 'transfer'">
@@ -1283,7 +1335,7 @@
 
               <div class="dlg-acts">
                 <button type="button" class="btn" :disabled="sending" @click="closePayment">Cancelar</button>
-                <button ref="payConfirmBtn" type="submit" class="btn accent" :disabled="sending || cashBlocked || pointBlocked">
+                <button ref="payConfirmBtn" type="submit" class="btn accent" :disabled="sending || cashBlocked || pointBlocked || creditBlocked">
                   {{ sending ? (point.phase === 'waiting' ? 'Esperando terminal…' : 'Cobrando…') : (pointActive ? 'Cobrar en terminal' : 'Confirmar cobro') }}
                   <kbd class="only-pc">Enter</kbd>
                 </button>
@@ -1700,13 +1752,77 @@ export default {
     // Estado del modal de pago
     const showPayment = ref(false);
     const payMethod = ref("cash"); // 'cash' | 'card' | 'transfer' | 'split' | 'other'
-    const payMethods = [
+    const BASE_PAY_METHODS = [
       { id: "cash", label: "Efectivo", icon: "cash" },
       { id: "card", label: "Tarjeta", icon: "card" },
       { id: "transfer", label: "Transferencia", icon: "transfer" },
       { id: "split", label: "Mixto", icon: "split" },
       { id: "other", label: "Otro", icon: "receipt" },
     ];
+    // El fiado revisa el saldo y el límite del cliente en el servidor: necesita internet
+    const payMethods = computed(() =>
+      offlineStore.online
+        ? [...BASE_PAY_METHODS.slice(0, 4), { id: "credit", label: "Fiado", icon: "users" }, BASE_PAY_METHODS[4]]
+        : BASE_PAY_METHODS
+    );
+
+    // ── Fiado ──
+    const creditCustomers = ref([]);
+    const creditLoading = ref(false);
+    const creditQuery = ref("");
+    const creditCustomerId = ref("");
+    const creditDown = ref("");
+    async function loadCreditCustomers() {
+      if (creditLoading.value) return;
+      creditLoading.value = true;
+      try {
+        const list = await apiService.getCustomers();
+        creditCustomers.value = Array.isArray(list) ? list : [];
+      } catch {
+        payError.value = "No se pudieron cargar los clientes para el fiado.";
+      } finally {
+        creditLoading.value = false;
+      }
+    }
+    const creditMatches = computed(() => {
+      const term = fold(creditQuery.value.trim());
+      const digitsTerm = creditQuery.value.replace(/\D/g, "");
+      return creditCustomers.value
+        .filter((c) => !term || fold(c.name).includes(term) || (digitsTerm.length >= 3 && String(c.phone || "").replace(/\D/g, "").includes(digitsTerm)))
+        .sort((a, b) => Number(b.creditLimit > 0) - Number(a.creditLimit > 0) || String(a.name).localeCompare(String(b.name), "es"))
+        .slice(0, 6);
+    });
+    const creditCustomer = computed(() => creditCustomers.value.find((c) => c.id === creditCustomerId.value) || null);
+    const creditAvailable = computed(() => {
+      const c = creditCustomer.value;
+      return c ? Math.max(0, round2(Number(c.creditLimit || 0) - Number(c.balance || 0))) : 0;
+    });
+    const creditToOwe = computed(() => Math.max(0, round2(total.value - Number(creditDown.value || 0))));
+    // Por qué no se puede fiar todavía (vacío = todo bien)
+    const creditProblem = computed(() => {
+      if (payMethod.value !== "credit") return "";
+      const c = creditCustomer.value;
+      if (!c) return "Elige al cliente al que se le fía.";
+      if (!(Number(c.creditLimit) > 0)) return `${c.name} no tiene fiado autorizado. El administrador puede darle un límite en Clientes.`;
+      const down = Number(creditDown.value || 0);
+      if (down < 0) return "El anticipo no puede ser negativo.";
+      if (down >= total.value) return "Si paga todo ahora, cóbralo como efectivo, no como fiado.";
+      if (creditToOwe.value > creditAvailable.value + 0.004) {
+        return `${c.name} solo puede llevar ${money(creditAvailable.value)} más a fiado (debe ${money(c.balance || 0)} de ${money(c.creditLimit)}).`;
+      }
+      return "";
+    });
+    const creditBlocked = computed(() => payMethod.value === "credit" && Boolean(creditProblem.value));
+    watch(payMethod, (m) => {
+      if (m === "credit" && !creditCustomers.value.length) loadCreditCustomers();
+    });
+    // Si se va el internet con el fiado elegido, se vuelve a efectivo
+    watch(
+      () => offlineStore.online,
+      (on) => {
+        if (!on && payMethod.value === "credit") payMethod.value = "cash";
+      }
+    );
     const payReference = ref("");
     const payCashReceived = ref("");
     const payCardAmount = ref("");
@@ -3515,6 +3631,9 @@ export default {
       payCashReceived.value = "";
       payCardAmount.value = "";
       payReference.value = "";
+      creditCustomerId.value = "";
+      creditDown.value = "";
+      creditQuery.value = "";
       payError.value = "";
       openingFloat.value = "";
       showMobileCart.value = false;
@@ -3563,6 +3682,11 @@ export default {
         return;
       }
 
+      if (creditBlocked.value) {
+        payError.value = creditProblem.value;
+        return;
+      }
+
       if (pointActive.value && !point.ok) {
         payError.value = point.message || "La terminal no está lista. Reconéctala o cobra manualmente.";
         return;
@@ -3589,6 +3713,8 @@ export default {
         taxRate: TAX_RATE.value,
         items,
         paymentMethod: payMethod.value,
+        customerId: payMethod.value === "credit" ? creditCustomerId.value : undefined,
+        downPayment: payMethod.value === "credit" && Number(creditDown.value) > 0 ? Number(creditDown.value) : undefined,
         cashReceived: takesCash.value ? Number(payCashReceived.value || 0) : undefined,
         cardAmount: payMethod.value === "split" ? Number(payCardAmount.value || 0) : undefined,
         paymentReference:
@@ -3664,6 +3790,7 @@ export default {
           cashSale
         );
         if (!offline) flushOfflineSales();
+        if (payload.paymentMethod === "credit") loadCreditCustomers();
       } catch (error) {
         payError.value =
           (typeof error.response?.data === "string" && error.response.data) ||
@@ -4431,6 +4558,15 @@ export default {
       payMethods,
       payMethod,
       payReference,
+      creditQuery,
+      creditCustomerId,
+      creditDown,
+      creditMatches,
+      creditCustomer,
+      creditLoading,
+      creditToOwe,
+      creditProblem,
+      creditBlocked,
       cardFeeOn,
       cardFee,
       cardFeeAmount,
@@ -6012,6 +6148,24 @@ html[data-theme="dark"] .avatar {
 .fee-row span { display: grid; gap: 0.1rem; }
 .fee-row strong { font-size: 0.95rem; }
 .fee-row small { font-size: 0.8rem; color: var(--timber-muted); }
+.credit-pick { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.4rem; }
+.credit-opt {
+  width: 100%;
+  display: grid;
+  gap: 0.1rem;
+  min-height: 3rem;
+  padding: 0.55rem 0.8rem;
+  border: 1px solid var(--timber-line);
+  border-radius: 0.8rem;
+  background: var(--timber-panel);
+  color: var(--timber-ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.credit-opt small { color: var(--timber-muted); font-weight: 600; }
+.credit-opt .credit-none, .credit-none { color: var(--timber-danger); }
+.credit-opt.on { border-color: var(--timber-primary); background: color-mix(in srgb, var(--timber-primary) 12%, var(--timber-panel)); }
 .pay-note {
   margin: 0;
   padding: 0.8rem 0.95rem;

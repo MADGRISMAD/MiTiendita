@@ -23,6 +23,7 @@ const PAYMENT_FORMS = {
   cash: '01',
   transfer: '03',
   card: '04',
+  credit: '99', // fiado: por definir
   other: '99',
 };
 

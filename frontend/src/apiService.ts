@@ -634,6 +634,19 @@ export const apiService = {
   updateCustomer(id: string, data: Record<string, unknown>) {
     return axios.put(`/customers/${id}`, data).then((r) => r.data);
   },
+  // Fiado y abonos
+  getCreditSummary() {
+    return axios.get('/customers/credit/summary').then((r) => r.data);
+  },
+  getCustomerCredit(id: string) {
+    return axios.get(`/customers/${id}/credit`).then((r) => r.data);
+  },
+  addCreditPayment(id: string, data: { amount: number; method: string; note?: string }) {
+    return axios.post(`/customers/${id}/payments`, data).then((r) => r.data);
+  },
+  setCustomerCreditLimit(id: string, creditLimit: number) {
+    return axios.put(`/customers/${id}/credit-limit`, { creditLimit }).then((r) => r.data);
+  },
   deleteCustomer(id: string) {
     return axios.delete(`/customers/${id}`).then((r) => r.status === 200);
   },

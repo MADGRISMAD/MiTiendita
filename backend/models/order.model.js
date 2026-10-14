@@ -3,7 +3,7 @@ const { cartTotals, rateOf } = require('../utils/tax');
 const { roundQty, saleUnitOf } = require('../utils/units');
 
 const orderStatuses = ['pending', 'preparing', 'ready', 'served', 'cancelled'];
-const paymentMethods = ['cash', 'card', 'transfer', 'split', 'other'];
+const paymentMethods = ['cash', 'card', 'transfer', 'split', 'credit', 'other'];
 
 function normalizeOrder(body = {}) {
   const items = Array.isArray(body.items)

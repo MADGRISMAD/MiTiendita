@@ -6,7 +6,7 @@ import { venueStore } from "./venueStore";
 import { folioOf } from "./ticketShell";
 import { printCashCloseDirect } from "./thermalPrinter";
 
-const SHORT = { cash: "EFEC", card: "TARJ", transfer: "TRANSF", split: "MIXTO", other: "OTRO" };
+const SHORT = { cash: "EFEC", card: "TARJ", transfer: "TRANSF", split: "MIXTO", credit: "FIADO", other: "OTRO" };
 const MONTHS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
 const nf = new Intl.NumberFormat("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -49,7 +49,7 @@ export function buildCashCloseData(session, orders, printedAt = new Date(), hint
   const voided = orders.filter(isVoid);
 
   // Reparto local (corte parcial): en pago mixto la parte de tarjeta va a tarjeta y el resto a efectivo
-  const local = { cash: 0, card: 0, transfer: 0, other: 0, total: 0 };
+  const local = { cash: 0, card: 0, transfer: 0, other: 0, credit: 0, total: 0 };
   for (const o of paid) {
     const amount = Number(o.total || 0);
     const method = o.paymentMethod || "other";
@@ -57,6 +57,11 @@ export function buildCashCloseData(session, orders, printedAt = new Date(), hint
       const cardPart = Math.min(amount, Math.max(0, Number(o.cardAmount || 0)));
       local.card += cardPart;
       local.cash += amount - cardPart;
+    } else if (method === "credit") {
+      // Fiado: el anticipo es efectivo; lo demás queda por cobrar
+      const down = Math.min(amount, Math.max(0, Number(o.downPayment || 0)));
+      local.cash += down;
+      local.credit += amount - down;
     } else if (local[method] != null && method !== "total") {
       local[method] += amount;
     } else {
@@ -65,15 +70,18 @@ export function buildCashCloseData(session, orders, printedAt = new Date(), hint
     local.total += amount;
   }
 
+  // Abonos de clientes recibidos en este turno (el servidor los manda al consultar el turno)
+  const ab = { cash: 0, card: 0, transfer: 0, total: 0, count: 0, ...(s.abonos || hint.abonos || {}) };
   const cashRefunds = Number(s.cashRefunds || 0);
   let opening = pickOpening(s, hint.openingFloat);
   // Último recurso: Debe haber (del servidor) - ventas en efectivo + devoluciones
   if (!opening && closed && s.expectedCash != null) {
-    opening = Math.max(0, Math.round((Number(s.expectedCash) - local.cash + cashRefunds) * 100) / 100);
+    opening = Math.max(0, Math.round((Number(s.expectedCash) - local.cash - ab.cash + cashRefunds) * 100) / 100);
   }
   const expectedCash =
-    closed && s.expectedCash != null ? Number(s.expectedCash) : opening + local.cash - cashRefunds;
-  const cashSales = expectedCash - opening + cashRefunds;
+    closed && s.expectedCash != null ? Number(s.expectedCash) : opening + local.cash + ab.cash - cashRefunds;
+  const cashSales = expectedCash - opening + cashRefunds - ab.cash;
+  const creditSales = closed && s.expectedCredit != null ? Number(s.expectedCredit) : local.credit;
   const cardSales = closed ? Number(s.expectedCard || 0) : local.card;
   const transferSales = closed ? Number(s.expectedTransfer || 0) : local.transfer;
   const otherSales = closed ? Number(s.expectedOther || 0) : local.other;
@@ -84,6 +92,7 @@ export function buildCashCloseData(session, orders, printedAt = new Date(), hint
     { label: "Tarjeta", amount: cardSales },
     { label: "Transferencia", amount: transferSales },
     { label: "Otros", amount: otherSales },
+    { label: "Fiado (por cobrar)", amount: creditSales },
   ]
     .filter((m) => m.always || m.amount > 0)
     .map(({ label, amount }) => ({ label, amount }));
@@ -145,6 +154,8 @@ export function buildCashCloseData(session, orders, printedAt = new Date(), hint
     voidedTotal: voided.reduce((sum, o) => sum + Number(o.total || 0), 0),
     opening,
     cashSales,
+    abonosCash: ab.cash,
+    abonos: ab,
     cashRefunds,
     expectedCash,
     countedCash: Number(s.countedCash || 0),
@@ -167,7 +178,9 @@ export async function printCashCloseById(id, hint = {}) {
   const sid = String(id);
   // El backend responde { session, totals, orders }; por si apiService ya la desenvuelve, se aceptan ambas formas
   const raw = await apiService.getCashSessionById(sid);
-  const session = raw?.session || raw;
+  const base = raw?.session || raw;
+  // Los abonos de clientes vienen en los totales del servidor
+  const session = { ...base, abonos: base?.abonos || raw?.totals?.abonos };
   let orders = Array.isArray(raw?.orders) ? raw.orders : null;
   if (!orders) {
     const all = await apiService.getOrders().catch(() => []);

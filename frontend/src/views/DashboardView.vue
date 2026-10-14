@@ -852,6 +852,7 @@ const PAY = [
   { id: "cash", label: "Efectivo", icon: "cash" },
   { id: "card", label: "Tarjeta", icon: "card" },
   { id: "transfer", label: "Transferencia", icon: "transfer" },
+  { id: "credit", label: "Fiado", icon: "users" },
   { id: "other", label: "Otro", icon: "tag" },
 ];
 // En pago mixto la parte de tarjeta va a tarjeta y el resto a efectivo (igual que el corte)
@@ -869,6 +870,15 @@ const pay = computed(() => {
       acc.card.count += 1;
       acc.cash.count += 1;
       splitCount += 1;
+    } else if (m === "credit") {
+      // Fiado: el anticipo es efectivo; lo demás queda por cobrar
+      const down = Math.min(amount, Math.max(0, Number(o.downPayment || 0)));
+      if (down > 0) {
+        acc.cash.amount += down;
+        acc.cash.count += 1;
+      }
+      acc.credit.amount += amount - down;
+      acc.credit.count += 1;
     } else {
       const k = acc[m] ? m : "other";
       acc[k].amount += amount;
@@ -1101,12 +1111,12 @@ function dateOf(o) {
   const t = stampOf(o);
   return t ? fmtDay(t) : "";
 }
-const METHOD = { cash: "Efectivo", card: "Tarjeta", transfer: "Transferencia", split: "Mixto", other: "Otro" };
+const METHOD = { cash: "Efectivo", card: "Tarjeta", transfer: "Transferencia", split: "Mixto", credit: "Fiado", other: "Otro" };
 function methodText(m) {
   return METHOD[m] || "Sin cobrar";
 }
 function payIcon(m) {
-  return { cash: "cash", card: "card", transfer: "transfer", split: "split" }[m] || "clock";
+  return { cash: "cash", card: "card", transfer: "transfer", split: "split", credit: "users" }[m] || "clock";
 }
 function statusText(o) {
   if (o.paymentStatus === "refunded") return "Devuelta";
@@ -1206,7 +1216,7 @@ function exportSales() {
 }
 // Un renglón por día del rango (también los días sin ventas) y un total al final
 function exportDaily() {
-  const blank = () => ({ tickets: 0, gross: 0, discount: 0, tax: 0, net: 0, cost: 0, costNet: 0, cash: 0, card: 0, transfer: 0, other: 0 });
+  const blank = () => ({ tickets: 0, gross: 0, discount: 0, tax: 0, net: 0, cost: 0, costNet: 0, cash: 0, card: 0, transfer: 0, credit: 0, other: 0 });
   const byDay = new Map();
   for (const o of orders.value) {
     const t = isPaid(o) && stampOf(o);
@@ -1231,6 +1241,10 @@ function exportDaily() {
       const card = Math.min(total, Math.max(0, Number(o.cardAmount || 0)));
       d.card += card;
       d.cash += total - card;
+    } else if (o.paymentMethod === "credit") {
+      const down = Math.min(total, Math.max(0, Number(o.downPayment || 0)));
+      d.cash += down;
+      d.credit += total - down;
     } else {
       d[["cash", "card", "transfer"].includes(o.paymentMethod) ? o.paymentMethod : "other"] += total;
     }
@@ -1239,7 +1253,7 @@ function exportDaily() {
   const row = (label, d) => {
     const base = [label, d.tickets, f(d.gross), f(d.discount), f(d.tax), f(d.net)];
     const costs = d.cost > 0 ? [f(d.cost), f(d.costNet - d.cost), d.costNet > 0 ? Math.round(((d.costNet - d.cost) / d.costNet) * 100) : ""] : ["", "", ""];
-    return [...base, ...(isAdmin.value ? costs : []), f(d.cash), f(d.card), f(d.transfer), f(d.other)];
+    return [...base, ...(isAdmin.value ? costs : []), f(d.cash), f(d.card), f(d.transfer), f(d.credit), f(d.other)];
   };
   const rows = [];
   const all = blank();
@@ -1253,7 +1267,7 @@ function exportDaily() {
   const head = ["Fecha", "Tickets", "Ventas brutas", "Descuentos", "IVA", "Ventas netas"];
   download(
     `resumen_diario_${fileRange.value}.csv`,
-    [...head, ...(isAdmin.value ? ["Costo", "Utilidad bruta", "Margen %"] : []), "Efectivo", "Tarjeta", "Transferencia", "Otro"],
+    [...head, ...(isAdmin.value ? ["Costo", "Utilidad bruta", "Margen %"] : []), "Efectivo", "Tarjeta", "Transferencia", "Fiado", "Otro"],
     rows
   );
 }

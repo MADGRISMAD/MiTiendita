@@ -115,6 +115,7 @@
             <div class="cc-sum">
               <div class="cc-row"><i></i><span>Fondo inicial</span><b>{{ money(opening) }}</b></div>
               <div class="cc-row"><i>+</i><span>Ventas en efectivo</span><b>{{ money(cashSales) }}</b></div>
+              <div v-if="abonos.cash" class="cc-row"><i>+</i><span>Abonos en efectivo</span><b>{{ money(abonos.cash) }}</b></div>
               <div v-if="cashRefunds" class="cc-row"><i>−</i><span>Devoluciones en efectivo</span><b>{{ money(cashRefunds) }}</b></div>
               <div class="cc-row eq"><i>=</i><span>Debe haber</span><b>{{ money(expectedCash) }}</b></div>
               <div v-if="closed" class="cc-row counted"><i></i><span>Se contó</span><b>{{ money(session.countedCash) }}</b></div>
@@ -207,7 +208,7 @@ const voidedTotal = computed(() => voided.value.reduce((s, o) => s + Number(o.to
 
 // Mismo reparto que el servidor: en pago mixto la parte de tarjeta va a tarjeta y el resto a efectivo
 const local = computed(() => {
-  const t = { cash: 0, card: 0, transfer: 0, other: 0, total: 0 };
+  const t = { cash: 0, card: 0, transfer: 0, other: 0, credit: 0, total: 0 };
   for (const o of paidOrders.value) {
     const amount = Number(o.total || 0);
     const method = o.paymentMethod || "other";
@@ -215,6 +216,11 @@ const local = computed(() => {
       const cardPart = Math.min(amount, Math.max(0, Number(o.cardAmount || 0)));
       t.card += cardPart;
       t.cash += amount - cardPart;
+    } else if (method === "credit") {
+      // Fiado: el anticipo es efectivo; lo demás queda por cobrar
+      const down = Math.min(amount, Math.max(0, Number(o.downPayment || 0)));
+      t.cash += down;
+      t.credit += amount - down;
     } else if (t[method] != null && method !== "total") {
       t[method] += amount;
     } else {
@@ -227,12 +233,16 @@ const local = computed(() => {
 
 const cashRefunds = computed(() => Number(session.value?.cashRefunds || 0));
 const opening = computed(() => Number(session.value?.openingFloat || 0));
+const abonos = computed(() => ({ cash: 0, card: 0, transfer: 0, total: 0, count: 0, ...(session.value?.abonos || {}) }));
 const expectedCash = computed(() =>
   closed.value && session.value?.expectedCash != null
     ? Number(session.value.expectedCash)
-    : opening.value + local.value.cash - cashRefunds.value
+    : opening.value + local.value.cash + abonos.value.cash - cashRefunds.value
 );
-const cashSales = computed(() => expectedCash.value - opening.value + cashRefunds.value);
+const cashSales = computed(() => expectedCash.value - opening.value + cashRefunds.value - abonos.value.cash);
+const creditSales = computed(() =>
+  closed.value && session.value?.expectedCredit != null ? Number(session.value.expectedCredit) : local.value.credit
+);
 const cardSales = computed(() => (closed.value ? Number(session.value?.expectedCard || 0) : local.value.card));
 const transferSales = computed(() =>
   closed.value ? Number(session.value?.expectedTransfer || 0) : local.value.transfer
@@ -248,6 +258,7 @@ const methods = computed(() => {
     { key: "card", label: "Tarjeta", amount: cardSales.value },
     { key: "transfer", label: "Transferencia", amount: transferSales.value },
     { key: "other", label: "Otros", amount: otherSales.value },
+    { key: "credit", label: "Fiado (por cobrar)", amount: creditSales.value },
   ].filter((m) => m.key === "cash" || m.amount > 0);
   const max = Math.max(...list.map((m) => m.amount), 0);
   return list.map((m) => ({ ...m, share: max > 0 ? Math.max(2, Math.round((m.amount / max) * 100)) : 0 }));
@@ -288,7 +299,7 @@ const duration = computed(() => {
   return h ? `${h} h ${String(m).padStart(2, "0")} min` : `${m} min`;
 });
 
-const SHORT = { cash: "EFEC", card: "TARJ", transfer: "TRANSF", split: "MIXTO", other: "OTRO" };
+const SHORT = { cash: "EFEC", card: "TARJ", transfer: "TRANSF", split: "MIXTO", credit: "FIADO", other: "OTRO" };
 function methodShort(m) {
   return SHORT[m] || "—";
 }
@@ -367,7 +378,8 @@ onMounted(async () => {
 
     // El servidor responde { session, totals, orders }; se aceptan también las formas ya desenvueltas
     const raw = await apiService.getCashSessionById(id);
-    session.value = raw?.session || raw;
+    const base = raw?.session || raw;
+    session.value = { ...base, abonos: base?.abonos || raw?.totals?.abonos };
     let list = Array.isArray(raw?.orders) ? raw.orders : null;
     if (!list) {
       const all = await apiService.getOrders().catch(() => []);

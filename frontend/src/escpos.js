@@ -262,11 +262,19 @@ export function buildCashClose(t, { cols = 48 } = {}) {
   p.lr("IVA incluido", money(t.taxCollected));
   if (Number(t.cardExtraTotal)) p.lr("Comisiones por tarjeta", money(t.cardExtraTotal));
   if (t.voidedCount) p.lr(`Devueltas o canceladas (${t.voidedCount})`, money(t.voidedTotal));
+  if (t.abonos && Number(t.abonos.total)) {
+    section("Abonos de clientes");
+    if (Number(t.abonos.cash)) p.lr("Efectivo", money(t.abonos.cash));
+    if (Number(t.abonos.card)) p.lr("Tarjeta", money(t.abonos.card));
+    if (Number(t.abonos.transfer)) p.lr("Transferencia", money(t.abonos.transfer));
+    p.lr(`Total (${t.abonos.count})`, money(t.abonos.total));
+  }
 
   // Cuadre del cajón
   section("Cuadre del cajón");
   p.lr("  Fondo inicial", money(t.opening));
   p.lr("+ Ventas en efectivo", money(t.cashSales));
+  if (Number(t.abonosCash)) p.lr("+ Abonos en efectivo", money(t.abonosCash));
   if (Number(t.cashRefunds)) p.lr("- Devoluciones en efectivo", `-${money(t.cashRefunds)}`);
   p.rule();
   p.bold().lr("= Debe haber", money(t.expectedCash)).bold(false);

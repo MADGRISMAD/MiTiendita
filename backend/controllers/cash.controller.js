@@ -1,8 +1,10 @@
 const db = require('../database/mongodb');
 const { normalizeCashSession } = require('../models/cashSession.model');
+const creditDb = require('../database/credit.db');
+const { paymentTotals } = require('../services/credit.service');
 
 function summarizeOrders(orders) {
-  const totals = { cash: 0, card: 0, transfer: 0, other: 0, total: 0, count: orders.length };
+  const totals = { cash: 0, card: 0, transfer: 0, other: 0, credit: 0, total: 0, count: orders.length };
   for (const o of orders) {
     if (o.paymentStatus !== 'paid') continue;
     const method = o.paymentMethod || 'other';
@@ -13,6 +15,11 @@ function summarizeOrders(orders) {
       const cardPart = Math.min(amount, Math.max(0, Number(o.cardAmount || 0)));
       totals.card += cardPart;
       totals.cash += Number((amount - cardPart).toFixed(2));
+    } else if (method === 'credit') {
+      // Fiado: lo que quedó a deber no es dinero en caja; el anticipo sí es efectivo
+      const down = Math.min(amount, Math.max(0, Number(o.downPayment || 0)));
+      totals.cash += down;
+      totals.credit += Number((amount - down).toFixed(2));
     } else if (totals[method] != null) {
       totals[method] += amount;
     } else {
@@ -22,8 +29,14 @@ function summarizeOrders(orders) {
   }
   totals.cash = Number(totals.cash.toFixed(2));
   totals.card = Number(totals.card.toFixed(2));
+  totals.credit = Number(totals.credit.toFixed(2));
   totals.total = Number(totals.total.toFixed(2));
   return totals;
+}
+
+/** Abonos de clientes recibidos en esta caja (entran al corte como dinero cobrado). */
+async function abonosOf(tenantId, sessionId) {
+  return paymentTotals(await creditDb.paymentsBySession(tenantId, sessionId));
 }
 
 async function current(req, res) {
@@ -34,7 +47,7 @@ async function current(req, res) {
     return res.status(200).json({
       open: true,
       session,
-      totals: summarizeOrders(orders),
+      totals: { ...summarizeOrders(orders), abonos: await abonosOf(req.tenantId, session.id) },
       orders,
     });
   } catch (err) {
@@ -65,9 +78,11 @@ async function close(req, res) {
     if (!session) return res.status(400).send('No hay caja abierta');
 
     const orders = await db.GetOrdersByCashSession(session.id, req.tenantId);
-    const totals = summarizeOrders(orders);
+    const abonos = await abonosOf(req.tenantId, session.id);
+    const totals = { ...summarizeOrders(orders), abonos };
     const countedCash = Number(req.body?.countedCash ?? 0);
-    const expectedCash = Number(session.openingFloat || 0) + totals.cash - Number(session.cashRefunds || 0);
+    // El efectivo esperado incluye los abonos de clientes recibidos en efectivo
+    const expectedCash = Number((Number(session.openingFloat || 0) + totals.cash + abonos.cash - Number(session.cashRefunds || 0)).toFixed(2));
     const difference = Number((countedCash - expectedCash).toFixed(2));
 
     const closed = await db.UpdateCashSession(
@@ -80,6 +95,8 @@ async function close(req, res) {
         expectedCash,
         expectedCard: totals.card,
         expectedTransfer: totals.transfer,
+        expectedCredit: totals.credit,
+        abonos,
         expectedOther: totals.other,
         expectedTotal: totals.total,
         difference,
@@ -101,7 +118,11 @@ async function getById(req, res) {
     const session = await db.GetCashSessionById(req.params.id, req.tenantId);
     if (!session) return res.status(404).send('Sesión no encontrada');
     const orders = await db.GetOrdersByCashSession(session.id, req.tenantId);
-    return res.status(200).json({ session, totals: summarizeOrders(orders), orders });
+    return res.status(200).json({
+      session,
+      totals: { ...summarizeOrders(orders), abonos: await abonosOf(req.tenantId, session.id) },
+      orders,
+    });
   } catch (err) {
     console.error(err);
     return res.status(500).send(err.message || 'Error al obtener sesión');

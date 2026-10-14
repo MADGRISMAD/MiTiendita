@@ -343,7 +343,7 @@ export function printTestPage({ prompt = false } = {}) {
 // —— Datos del ticket (los mismos que PrintOrderView) ——
 const MONTHS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
 const DAYS = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
-const METHOD = { cash: "Efectivo", card: "Tarjeta", transfer: "Transferencia", split: "Tarjeta y efectivo", other: "Otro medio" };
+const METHOD = { cash: "Efectivo", card: "Tarjeta", transfer: "Transferencia", split: "Tarjeta y efectivo", credit: "Fiado", other: "Otro medio" };
 
 function qtyText(q) {
   const n = Number(q || 0);
@@ -378,6 +378,10 @@ export function receiptData(order) {
   const methodDetail = [];
   if (method === "split") {
     methodDetail.push(["Tarjeta", money(o.cardAmount)], ["Efectivo", money(o.cashReceived)]);
+  } else if (method === "credit") {
+    if (o.creditCustomerName) methodDetail.push(["Cliente", String(o.creditCustomerName)]);
+    if (Number(o.downPayment)) methodDetail.push(["Anticipo", money(o.downPayment)]);
+    methodDetail.push(["A deber", money(o.creditAmount)]);
   } else if (Number(o.cashReceived)) {
     methodDetail.push(["Recibido", money(o.cashReceived)]);
   }

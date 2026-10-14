@@ -140,11 +140,22 @@
           <span>Otro</span>
           <strong>{{ money(totals.other) }}</strong>
         </div>
+        <div v-if="totals.credit" class="kpi">
+          <span><PosIcon name="users" :size="16" /> Fiado</span>
+          <strong>{{ money(totals.credit) }}</strong>
+          <small>por cobrar, no es dinero en caja</small>
+        </div>
+        <div v-if="abonos.total" class="kpi">
+          <span><PosIcon name="cash" :size="16" /> Abonos recibidos</span>
+          <strong>{{ money(abonos.total) }}</strong>
+          <small>{{ abonos.count }} {{ abonos.count === 1 ? 'abono' : 'abonos' }} de clientes</small>
+        </div>
         <div class="kpi drawer">
           <span>Debe haber en el cajón</span>
           <strong>{{ money(expectedCash) }}</strong>
           <small>
             Fondo {{ money(session?.openingFloat) }} + efectivo
+            <template v-if="abonos.cash"> + abonos {{ money(abonos.cash) }}</template>
             <template v-if="Number(session?.cashRefunds)"> − devoluciones {{ money(session.cashRefunds) }}</template>
           </small>
         </div>
@@ -271,6 +282,7 @@
             <dl class="sum">
               <div><dt>Fondo inicial</dt><dd>{{ money(session?.openingFloat) }}</dd></div>
               <div><dt>Ventas en efectivo</dt><dd>+ {{ money(totals.cash) }}</dd></div>
+              <div v-if="abonos.cash"><dt>Abonos en efectivo</dt><dd>+ {{ money(abonos.cash) }}</dd></div>
               <div v-if="Number(session?.cashRefunds)"><dt>Devoluciones en efectivo</dt><dd>− {{ money(session.cashRefunds) }}</dd></div>
               <div class="sum-total"><dt>Debe haber</dt><dd>{{ money(expectedCash) }}</dd></div>
               <div class="sum-info"><dt>Tarjeta · transferencia · otro</dt><dd>{{ money(totals.card) }} · {{ money(totals.transfer) }} · {{ money(totals.other) }}</dd></div>
@@ -449,7 +461,8 @@ let clock = null;
 const cashOpen = ref(false);
 const session = ref(null);
 const sessionOrders = ref([]);
-const totals = ref({ cash: 0, card: 0, transfer: 0, other: 0, total: 0 });
+const totals = ref({ cash: 0, card: 0, transfer: 0, other: 0, credit: 0, total: 0, abonos: { cash: 0, card: 0, transfer: 0, total: 0, count: 0 } });
+const abonos = computed(() => ({ cash: 0, card: 0, transfer: 0, total: 0, count: 0, ...(totals.value.abonos || {}) }));
 const openingFloat = ref("");
 const cashBusy = ref(false);
 const cashMsg = ref("");
@@ -514,7 +527,7 @@ const headline = computed(() => {
 const shiftPaid = computed(() => sessionOrders.value.filter((o) => o.paymentStatus === "paid"));
 const avgTicket = computed(() => (shiftPaid.value.length ? Number(totals.value.total || 0) / shiftPaid.value.length : 0));
 const expectedCash = computed(() =>
-  round2(Number(session.value?.openingFloat || 0) + Number(totals.value.cash || 0) - Number(session.value?.cashRefunds || 0))
+  round2(Number(session.value?.openingFloat || 0) + Number(totals.value.cash || 0) + Number(abonos.value.cash || 0) - Number(session.value?.cashRefunds || 0))
 );
 
 // —— Corte ——
@@ -623,7 +636,7 @@ function lineGross(o, item) {
   return lineBreakdown(item.price, item.quantity, item.priceIncludesTax, rateOf(o.taxRate, TAX_RATE.value)).gross;
 }
 function methodLabel(m) {
-  return { cash: "Efectivo", card: "Tarjeta", transfer: "Transferencia", split: "Mixto", other: "Otro" }[m] || "—";
+  return { cash: "Efectivo", card: "Tarjeta", transfer: "Transferencia", split: "Mixto", credit: "Fiado", other: "Otro" }[m] || "—";
 }
 function isVoid(o) {
   return o.paymentStatus === "refunded" || o.status === "cancelled";
@@ -669,7 +682,7 @@ async function loadCash() {
     cashOpen.value = Boolean(data.open);
     session.value = data.session || null;
     sessionOrders.value = Array.isArray(data.orders) ? data.orders : [];
-    totals.value = data.totals || { cash: 0, card: 0, transfer: 0, other: 0, total: 0 };
+    totals.value = data.totals || { cash: 0, card: 0, transfer: 0, other: 0, credit: 0, total: 0, abonos: {} };
   } catch (e) {
     cashErr.value = isNetworkError(e)
       ? "Sin internet: aquí solo ves las ventas de este dispositivo. El turno y el corte necesitan conexión."

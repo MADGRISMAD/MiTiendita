@@ -1,5 +1,8 @@
 const router = require('express').Router();
 const db = require('../database/mongodb');
+const creditDb = require('../database/credit.db');
+const credit = require('../services/credit.service');
+const { rateLimit } = require('../services/rate-limit.service');
 const { requireAuth, requireActiveSubscription, requireRoles } = require('../middleware/auth.middleware');
 
 // Listar clientes (con búsqueda opcional por query ?q=)
@@ -19,6 +22,90 @@ router.get(
     }
   }
 );
+
+const staff = [requireAuth, requireActiveSubscription, requireRoles('admin', 'cashier')];
+const failCredit = (res, err) => {
+  if (!err.status) console.error(err);
+  return res.status(err.status || 500).json({ message: err.message || 'Error en cuentas por cobrar', code: err.code });
+};
+const paymentLimit = rateLimit({ name: 'credit-payment', windowMs: 10 * 60 * 1000, max: 120, key: (req) => req.user?.username || req.ip });
+
+// Cuentas por cobrar: quién debe, cuánto y desde cuándo. (Va antes de '/:id' para no confundirse con un id.)
+router.get('/credit/summary', ...staff, async (req, res) => {
+  try {
+    const owing = await creditDb.customersWithBalance(req.tenantId);
+    const entries = await creditDb.allEntriesForCustomers(req.tenantId, owing.map((c) => c.id));
+    const byCustomer = new Map();
+    for (const e of entries) {
+      if (!byCustomer.has(e.customerId)) byCustomer.set(e.customerId, []);
+      byCustomer.get(e.customerId).push(e);
+    }
+    const rows = owing.map((c) => {
+      const aging = credit.agingOf(byCustomer.get(c.id) || []);
+      return { id: c.id, name: c.name, phone: c.phone || '', balance: c.balance, creditLimit: c.creditLimit || 0, since: aging.since, days: aging.days };
+    });
+    rows.sort((a, b) => b.days - a.days || b.balance - a.balance);
+    const total = Math.round(rows.reduce((s, r) => s + r.balance, 0) * 100) / 100;
+    return res.status(200).json({ total, count: rows.length, customers: rows });
+  } catch (err) {
+    return failCredit(res, err);
+  }
+});
+
+// Estado de cuenta de un cliente
+router.get('/:id/credit', ...staff, async (req, res) => {
+  try {
+    const customer = await creditDb.getCustomer(req.tenantId, req.params.id);
+    if (!customer) return res.status(404).json({ message: 'Cliente no encontrado' });
+    const entries = await creditDb.listEntries(req.tenantId, customer.id);
+    const aging = credit.agingOf([...entries].reverse());
+    return res.status(200).json({
+      customer: { id: customer.id, name: customer.name, phone: customer.phone || '' },
+      balance: Number(customer.balance) || 0,
+      creditLimit: Number(customer.creditLimit) || 0,
+      available: Math.max(0, (Number(customer.creditLimit) || 0) - (Number(customer.balance) || 0)),
+      since: aging.since,
+      days: aging.days,
+      entries,
+    });
+  } catch (err) {
+    return failCredit(res, err);
+  }
+});
+
+// Recibir un abono (entra a la caja abierta)
+router.post('/:id/payments', ...staff, paymentLimit, async (req, res) => {
+  try {
+    const session = await db.GetOpenCashSession(req.tenantId);
+    const result = await credit.registerPayment(creditDb, {
+      tenantId: req.tenantId,
+      customerId: req.params.id,
+      amount: req.body?.amount,
+      method: String(req.body?.method || 'cash'),
+      note: req.body?.note,
+      user: req.user?.username || '',
+      cashSessionId: session?.id || null,
+    });
+    return res.status(201).json(result);
+  } catch (err) {
+    return failCredit(res, err);
+  }
+});
+
+// Fijar el límite de fiado (solo administrador)
+router.put('/:id/credit-limit', requireAuth, requireActiveSubscription, requireRoles('admin'), async (req, res) => {
+  try {
+    const limit = Number(req.body?.creditLimit);
+    if (!Number.isFinite(limit) || limit < 0 || limit > 1_000_000) {
+      return res.status(400).json({ message: 'El límite debe ser un monto de 0 a 1,000,000 (0 = sin fiado).' });
+    }
+    const updated = await creditDb.setLimit(req.tenantId, req.params.id, limit);
+    if (!updated) return res.status(404).json({ message: 'Cliente no encontrado' });
+    return res.status(200).json(updated);
+  } catch (err) {
+    return failCredit(res, err);
+  }
+});
 
 // Obtener cliente por id
 router.get(
@@ -92,6 +179,10 @@ router.delete(
   requireAuth, requireActiveSubscription, requireRoles('admin', 'cashier'),
   async (req, res) => {
     try {
+      const customer = await creditDb.getCustomer(req.tenantId, req.params.id);
+      if (customer && Math.abs(Number(customer.balance) || 0) > 0.004) {
+        return res.status(409).send('Este cliente tiene saldo en fiado. Cóbrale o ajústalo antes de eliminarlo.');
+      }
       const result = await db.DeleteCustomer(req.params.id, req.tenantId);
       if (!result.deletedCount) return res.status(404).send('Cliente no encontrado');
       return res.status(200).json({ ok: true });

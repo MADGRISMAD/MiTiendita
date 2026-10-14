@@ -22,6 +22,12 @@
         <button type="button" class="adm-x" aria-label="Cerrar aviso" @click="error = ''"><PosIcon name="x" :size="16" /></button>
       </p>
 
+      <button v-if="owing.count" type="button" class="adm-kpi bad cus-owed" :class="{ on: onlyOwing }" @click="onlyOwing = !onlyOwing">
+        <span><PosIcon name="receipt" :size="16" /> Por cobrar</span>
+        <strong>{{ money(owing.total) }}</strong>
+        <small>{{ owing.count }} {{ owing.count === 1 ? "cliente debe" : "clientes deben" }} · toca para {{ onlyOwing ? "ver todos" : "filtrar" }}</small>
+      </button>
+
       <div v-if="customers.length" class="adm-tools">
         <label class="adm-search">
           <PosIcon name="search" :size="17" />
@@ -54,6 +60,14 @@
                   <li v-if="c.email"><PosIcon name="mail" :size="15" /> {{ c.email }}</li>
                 </ul>
                 <p v-if="c.notes" class="cus-notes">{{ c.notes }}</p>
+                <button v-if="c.balance > 0 || c.creditLimit > 0" type="button" class="cus-credit" :class="{ owes: c.balance > 0 }" @click="openAccount(c)">
+                  <PosIcon name="receipt" :size="15" />
+                  <span v-if="c.balance > 0">Debe {{ money(c.balance) }}</span>
+                  <span v-else>Fiado hasta {{ money(c.creditLimit) }}</span>
+                </button>
+                <div class="cus-acts">
+                  <button type="button" class="adm-btn sm" @click="openAccount(c)"><PosIcon name="receipt" :size="16" /> Cuenta</button>
+                </div>
                 <div v-if="c.phone || c.email" class="cus-acts">
                   <a v-if="waLink(c.phone)" class="adm-btn wa sm" :href="waLink(c.phone)" target="_blank" rel="noopener">
                     <PosIcon name="chat" :size="16" /> WhatsApp
@@ -75,6 +89,15 @@
           </button>
         </div>
       </div>
+
+      <CreditAccountDialog
+        v-if="account"
+        :customer="account"
+        :is-admin="isAdmin"
+        :business-name="venueStore.businessName"
+        @close="account = null"
+        @changed="reloadCredit"
+      />
 
       <!-- Alta / edición -->
       <Teleport to="body">
@@ -130,6 +153,9 @@ import AppShell from "../components/AppShell.vue";
 import PosIcon from "../components/PosIcon.js";
 import { apiService } from "../apiService";
 import { prettyPhone } from "../phone";
+import CreditAccountDialog from "../components/CreditAccountDialog.vue";
+import { venueStore } from "../venueStore";
+import { hasRole } from "../authStore";
 
 const SORT_KEY = "timber_customers_sort";
 
@@ -196,10 +222,32 @@ const headline = computed(() => {
   return `${n} ${n === 1 ? "cliente" : "clientes"} · ${withPhone} con WhatsApp`;
 });
 
+// ---------- Fiado ----------
+const isAdmin = computed(() => hasRole("admin"));
+const owing = ref({ total: 0, count: 0, customers: [] });
+const onlyOwing = ref(false);
+const account = ref(null);
+const money = (n) => new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(Number(n) || 0);
+function openAccount(c) {
+  account.value = c;
+}
+async function reloadCredit() {
+  // Saldo y límite viven en el cliente: se recarga la lista y el total por cobrar
+  try {
+    const [list, summary] = await Promise.all([apiService.getCustomers(), apiService.getCreditSummary()]);
+    customers.value = Array.isArray(list) ? list : customers.value;
+    owing.value = summary || owing.value;
+    if (account.value) account.value = customers.value.find((c) => c.id === account.value.id) || account.value;
+  } catch {
+    /* el diálogo ya muestra su propio error */
+  }
+}
+
 const filtered = computed(() => {
   const term = fold(q.value.trim());
   const termDigits = digits(q.value);
   const list = customers.value.filter((c) => {
+    if (onlyOwing.value && !(c.balance > 0)) return false;
     if (!term) return true;
     return (
       fold(c.name).includes(term) ||
@@ -344,6 +392,7 @@ async function load() {
   try {
     const list = await apiService.getCustomers();
     customers.value = Array.isArray(list) ? list : [];
+    apiService.getCreditSummary().then((s) => (owing.value = s || owing.value)).catch(() => {});
   } catch {
     error.value = "No se pudieron cargar los clientes.";
     customers.value = [];
@@ -431,4 +480,22 @@ watch(sort, (v) => {
 @media (max-width: 767.98px) {
   .cus-letter { top: -0.75rem; }
 }
+.cus-owed { width: 100%; text-align: left; margin-bottom: 0.25rem; }
+.cus-credit {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  align-self: flex-start;
+  min-height: 2rem;
+  padding: 0 0.7rem;
+  border: 1px solid var(--timber-line);
+  border-radius: 999px;
+  background: var(--timber-panel-elevated);
+  color: var(--timber-muted);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+.cus-credit.owes { border-color: color-mix(in srgb, var(--timber-danger) 40%, transparent); color: var(--timber-danger); background: color-mix(in srgb, var(--timber-danger) 8%, transparent); }
 </style>
