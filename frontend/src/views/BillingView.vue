@@ -15,7 +15,7 @@
             </template>
           </p>
         </div>
-        <div v-if="!loading && !err && !isPerpetual" class="head-tools">
+        <div v-if="!loading && !err && !isPerpetual && !status.billedByMatrix" class="head-tools">
           <div class="switch" role="group" aria-label="Periodo">
             <button type="button" :class="{ on: interval === 'month' }" @click="interval = 'month'">
               Mensual
@@ -36,6 +36,12 @@
           </button>
         </div>
       </header>
+      <p v-if="status.billedByMatrix" class="adm-banner ok" role="status" style="margin:0 0 1rem">
+        <span>
+          Esta sucursal se paga desde la <b>matriz</b>: la suscripción es una sola para toda la organización. Cámbiate a la matriz
+          (<router-link to="/sucursales">Sucursales</router-link>) para ver o cambiar el plan.
+        </span>
+      </p>
 
       <div class="wa-strip">
         <p><strong>¿Dudas con tu plan o tu pago?</strong> Escríbenos y lo resolvemos contigo.</p>

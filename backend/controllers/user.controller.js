@@ -212,6 +212,8 @@ const LoginUsuario = async (req, res) => {
     const user = await service.LoginUsuario(String(req.body?.data || '').trim());
     // Misma respuesta si el usuario no existe, para no revelar qué correos hay
     if (!user) return res.status(401).send(BAD_LOGIN);
+    // Cuenta técnica de una sucursal: no se entra por aquí, solo con «cambiar de sucursal»
+    if (user.linkedOwner) return res.status(401).send(BAD_LOGIN);
     if (isLocked(user)) return res.status(423).send(lockedMessage(user));
     if (user.disabled) return res.status(403).send('Esta cuenta está desactivada. Pide acceso al dueño de la tienda.');
 

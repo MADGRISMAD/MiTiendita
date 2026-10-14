@@ -147,7 +147,7 @@ async function sweepTenant(tenant) {
 }
 
 async function sweepAll() {
-  const tenants = await db.ListTenants();
+  const tenants = await db.ListTenants({ includeBranches: false }); // las sucursales no pagan: la promoción es de la matriz
   let ended = 0;
   for (const t of tenants) if (await sweepTenant(t)) ended += 1;
   return ended;

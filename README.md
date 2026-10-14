@@ -79,6 +79,15 @@ Cada tienda recibe **181 productos de abarrotes, frescos y conveniencia (Tijuana
 - Los códigos de barras son de **referencia**: solo 1 de 161 pasa la validación EAN-13, así que el lector no reconoce el empaque real. La primera vez que se escanea uno, la caja avisa «No está en el catálogo» y ofrece **buscarlo en el catálogo por nombre**: al elegirlo se le asigna el código real (y se le pide el precio si no lo tiene). Desde entonces la caja lo reconoce sola y no se duplica nada.
 - Los datos están en `backend/data/catalogo-maestro.json`; para actualizarlos se edita ese archivo y se publica (si hay que volver a cargarlo en todas las tiendas, se sube `VERSION` en `services/master-catalog.service.js`). La lista de giros está ahí y en `frontend/src/masterCatalog.js` (una prueba comprueba que coincidan).
 
+## Fiado y abonos
+Venta a crédito por cliente. En **Clientes** el administrador le da un **límite de fiado** (0 = no se le fía); en la caja, **Fiado** pide el cliente y un anticipo opcional en efectivo. El saldo se mueve con operaciones atómicas y cada cargo/abono queda en un libro (`credit_entries`): el tope se valida en la base, así dos cajas no pueden rebasarlo, y reenviar una venta no fía dos veces. **Abonos** (`POST /customers/:id/payments`) entran a la caja abierta y suman al efectivo esperado del corte; lo fiado no cuenta como dinero en caja. Anular una venta fiada cancela lo que quedó a deber y devuelve solo el anticipo. **Por cobrar** lista quién debe, cuánto y desde cuándo, con recordatorio por WhatsApp. Solo con internet. Lógica en `services/credit.service.js`.
+
+## Conteo de inventario
+En **Inventario → Conteo**: se cuenta lo que hay en el estante (todo o una categoría) **sin ver** lo que dice el sistema; al terminar se revisan las diferencias (faltantes y sobrantes, al costo) y el administrador decide aplicarlas. La diferencia se mide contra lo que decía el sistema **en el momento de contar cada producto**, así las ventas hechas durante el conteo no se pierden ni se restan dos veces. Aplicar es atómico, ajusta los lotes de productos con caducidad y deja cada ajuste en la bitácora. Lógica en `services/stocktake.service.js`.
+
+## Sucursales
+Varias tiendas bajo un dueño, con cambio de sucursal sin volver a iniciar sesión y reporte consolidado. Solo en plan Pro (hasta 5). Ver [docs/SUCURSALES.md](docs/SUCURSALES.md).
+
 ## Colores de la marca (desde el logo)
 Al subir el logo (en el asistente de configuración o en Ajustes → Mi negocio), la app **saca la paleta de la propia imagen**, muestra unos segundos el aviso «Preparando tu experiencia» y aplica los colores a toda la app. Se guardan en `primaryColor` y `accentColor` de los ajustes de la tienda.
 

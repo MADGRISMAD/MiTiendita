@@ -283,6 +283,7 @@ const allMore = [
   { to: "/inventory", name: "inventory", label: "Inventario / Proveedores" },
   { to: "/customers", name: "customers", label: "Clientes" },
   { to: "/staff", name: "staff", label: "Empleados" },
+  { to: "/sucursales", name: "branches", label: "Sucursales" },
   { to: "/billing", name: "billing", label: "Facturación / Planes" },
   { to: "/settings", name: "settings", label: "Configuración" },
   { to: "/ayuda", name: "help", label: "Ayuda" },

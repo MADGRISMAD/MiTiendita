@@ -22,8 +22,15 @@ async function col(name) {
   const c = mongo.getCollection(name);
   if (name === ENTRIES && !indexed) {
     indexed = true;
-    // Un solo cargo (y una sola anulación) por pedido: hace idempotente el reintento de una venta
-    c.createIndex({ tenantId: 1, orderId: 1, type: 1 }, { unique: true, partialFilterExpression: { orderId: { $type: 'string' }, type: { $in: ['charge', 'void'] } } }).catch(() => {});
+    // `uniqueKey` = "charge:<pedido>" o "void:<pedido>": un solo cargo y una sola anulación por pedido. Eso hace
+    // idempotente el reintento de una venta. El índice parcial solo usa $type (soportado en todas las versiones).
+    // Si no se pudiera crear, se avisa fuerte: sin él, una venta reenviada podría fiar dos veces.
+    try {
+      await c.createIndex({ tenantId: 1, uniqueKey: 1 }, { unique: true, partialFilterExpression: { uniqueKey: { $type: 'string' } } });
+    } catch (err) {
+      indexed = false;
+      console.error('[fiado] NO se pudo crear el índice único de cargos; revisa la base de datos:', err.message);
+    }
     c.createIndex({ tenantId: 1, customerId: 1, createdAt: -1 }).catch(() => {});
     c.createIndex({ tenantId: 1, cashSessionId: 1, type: 1 }).catch(() => {});
   }
@@ -39,6 +46,7 @@ async function getCustomer(tenantId, id) {
 async function addEntry(entry) {
   const c = await col(ENTRIES);
   const doc = { ...entry, tenantId: String(entry.tenantId), customerId: String(entry.customerId), createdAt: new Date() };
+  if ((entry.type === 'charge' || entry.type === 'void') && entry.orderId) doc.uniqueKey = `${entry.type}:${entry.orderId}`;
   const r = await c.insertOne(doc);
   return out({ ...doc, _id: r.insertedId });
 }

@@ -26,7 +26,7 @@ const nameOf = (u) => `${u.name || ''} ${u.lastName || ''}`.trim() || u.username
 
 async function loadTarget(tenantId, id) {
   const target = await db.FindUserInTenant(id, tenantId);
-  if (!target || isPlatformStaff(target.role)) throw new TeamError(404, 'Cuenta no encontrada');
+  if (!target || isPlatformStaff(target.role) || target.linkedOwner) throw new TeamError(404, 'Cuenta no encontrada');
   return target;
 }
 

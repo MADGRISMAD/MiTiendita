@@ -23,6 +23,7 @@ async function requireAuth(req, res, next) {
   let role = payload.userRole;
   const isPlatform = isPlatformStaff(role);
   let partnerId = null;
+  let linkedOwner = null;
 
   if (!isOutsideTenant(role) && !payload.tenantId) {
     return res.status(401).send('No autorizado');
@@ -42,6 +43,22 @@ async function requireAuth(req, res, next) {
     } else if (!isPlatformStaff(role) && !payload.tenantId) {
       return res.status(401).send('No autorizado');
     }
+    // Cuenta técnica de una sucursal: vale solo mientras el dueño siga siendo administrador activo y su
+    // sesión sea la misma con la que se emitió este token (si cambia contraseña o rol, todo cae al instante).
+    linkedOwner = state.linkedOwner || null;
+    if (state.linkedOwner) {
+      const owner = await sessions.currentUserState(state.linkedOwner);
+      const ok =
+        owner.exists &&
+        !owner.disabled &&
+        owner.role === 'admin' &&
+        payload.owner === state.linkedOwner &&
+        (Number(payload.otv) || 0) === owner.tokenVersion;
+      if (!ok) return res.status(401).send('Tu sesión terminó. Vuelve a entrar.');
+    } else if (payload.owner || payload.otv !== undefined) {
+      // Una cuenta normal nunca lleva datos de dueño: token fabricado
+      return res.status(401).send('Tu sesión terminó. Vuelve a entrar.');
+    }
     if (isOutsideTenant(role) && !state.mfaEnabled) {
       return res.status(403).json({
         code: 'MFA_SETUP_REQUIRED',
@@ -59,6 +76,7 @@ async function requireAuth(req, res, next) {
     tenantId: isOutsideTenant(role) ? null : payload.tenantId || null,
     partnerId,
     email: String(payload.email || '').trim().toLowerCase() || null,
+    linkedOwner,
   };
   // Las cuentas de socio nunca operan dentro de una tienda
   req.tenantId = isOutsideTenant(role) ? null : payload.tenantId || null;

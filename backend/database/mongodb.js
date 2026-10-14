@@ -138,9 +138,35 @@ async function CreateTenant(data) {
   const result = await dbConnection.collection('tenants').insertOne(data);
   return withId(await dbConnection.collection('tenants').findOne({ _id: result.insertedId }));
 }
+/**
+ * Sucursales: una sucursal es una tienda más (todo se aísla por tenantId) que cuelga de una organización.
+ * No paga por su cuenta: plan, estado y periodo salen SIEMPRE de la matriz. Se resuelve al leer, así lo que
+ * escriba la plataforma, Mercado Pago o un pago manual en la matriz se refleja solo en sus sucursales.
+ */
+const MATRIX_BILLING_FIELDS = [
+  'plan', 'billingStatus', 'billingInterval', 'trialEndsAt', 'mpPreapprovalId', 'mpPayerEmail',
+  'currentPeriodEnd', 'cancelAtPeriodEnd', 'suspendedAt', 'suspendedReason', 'promoEligible',
+];
+function overlayMatrix(branch, matrix) {
+  if (!branch || !branch.isBranch || !matrix) return branch;
+  const patch = {};
+  for (const f of MATRIX_BILLING_FIELDS) if (matrix[f] !== undefined) patch[f] = matrix[f];
+  // Una sucursal dada de baja se bloquea como una tienda sin suscripción
+  if (branch.branchSuspendedAt && !patch.suspendedAt) {
+    patch.billingStatus = 'suspended';
+    patch.suspendedAt = branch.branchSuspendedAt;
+    patch.suspendedReason = 'Sucursal dada de baja por el dueño';
+  }
+  return { ...branch, ...patch, billedByMatrix: true };
+}
 async function GetTenantById(id) {
   if (!ObjectId.isValid(id)) return null;
-  return withId(await dbConnection.collection('tenants').findOne({ _id: new ObjectId(id) }));
+  const col = dbConnection.collection('tenants');
+  const doc = await col.findOne({ _id: new ObjectId(id) });
+  if (doc && doc.isBranch && doc.matrixTenantId && ObjectId.isValid(String(doc.matrixTenantId))) {
+    return withId(overlayMatrix(doc, await col.findOne({ _id: new ObjectId(String(doc.matrixTenantId)) })));
+  }
+  return withId(doc);
 }
 async function UpdateTenant(id, data) {
   if (!ObjectId.isValid(id)) return null;
@@ -153,18 +179,22 @@ async function UpdateTenant(id, data) {
   );
   return GetTenantById(id);
 }
-async function ListTenants() {
+/** `includeBranches: false` deja fuera las sucursales: no pagan ni son clientes aparte (las cuenta la matriz). */
+async function ListTenants({ includeBranches = true } = {}) {
   const list = await dbConnection.collection('tenants').find({}).sort({ createdAt: -1 }).toArray();
-  return list.map(withId);
+  const byId = new Map(list.map((t) => [String(t._id), t]));
+  return list
+    .filter((t) => includeBranches || !t.isBranch)
+    .map((t) => withId(t.isBranch ? overlayMatrix(t, byId.get(String(t.matrixTenantId))) : t));
 }
 /** Cuentas que ocupan un lugar del plan: las desactivadas lo liberan. */
 async function CountUsersByTenant(tenantId) {
-  return dbConnection.collection('users').countDocuments({ tenantId: String(tenantId), disabled: { $ne: true } });
+  return dbConnection.collection('users').countDocuments({ tenantId: String(tenantId), disabled: { $ne: true }, linkedOwner: { $exists: false } });
 }
 async function CountActiveAdmins(tenantId) {
   return dbConnection
     .collection('users')
-    .countDocuments({ tenantId: String(tenantId), role: 'admin', disabled: { $ne: true } });
+    .countDocuments({ tenantId: String(tenantId), role: 'admin', disabled: { $ne: true }, linkedOwner: { $exists: false } });
 }
 /** Una cuenta de la tienda por id (nunca de otra tienda). */
 async function FindUserInTenant(id, tenantId) {
@@ -180,7 +210,7 @@ async function CountPendingInvites(tenantId) {
 async function ListUsersByTenant(tenantId) {
   const users = await dbConnection
     .collection('users')
-    .find({ tenantId: String(tenantId) })
+    .find({ tenantId: String(tenantId), linkedOwner: { $exists: false } })
     .project({ password: 0, resetToken: 0, resetExpires: 0 })
     .toArray();
   return users.map((user) => ({
@@ -204,7 +234,7 @@ async function ListUsersByTenants(tenantIds) {
   if (!ids.length) return out;
   const users = await dbConnection
     .collection('users')
-    .find({ tenantId: { $in: ids } })
+    .find({ tenantId: { $in: ids }, linkedOwner: { $exists: false } })
     .project({ password: 0, resetToken: 0, resetExpires: 0, mfaSecretEnc: 0, mfaPendingEnc: 0, mfaRecovery: 0 })
     .toArray();
   for (const user of users) {

@@ -118,6 +118,7 @@ export const routeRoles = {
   pos: ["admin", "cashier"],
   products: ["admin"],
   staff: ["admin"],
+  branches: ["admin"],
   orders: ["admin", "cashier"],
   settings: ["admin"],
   setup: ["admin"],

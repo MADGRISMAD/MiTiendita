@@ -120,7 +120,7 @@ async function clientCard(tenant, { withUsers = false, pre = null } = {}) {
 async function listTenants(req, res) {
   try {
     const staffEmail = await currentStaffEmail(req);
-    const [tenants, inbox] = await Promise.all([db.ListTenants(), supportMail.waitingInbox(staffEmail)]);
+    const [tenants, inbox] = await Promise.all([db.ListTenants({ includeBranches: false }), supportMail.waitingInbox(staffEmail)]);
     const waiting = new Map();
     for (const item of inbox.items || []) {
       const current = waiting.get(item.tenantId) || { count: 0, at: null };
@@ -426,8 +426,9 @@ function dayInMonth(value) {
 async function buildBooks() {
     const month = db.aiMonthKey();
     const costPerUse = Number(process.env.AI_COST_MXN_PER_USE || 0.15);
+    // Las sucursales no pagan ni cuentan como clientes aparte: sus ingresos son los de la matriz
     const [tenants, usage, expenses, usageAll, expensesAll, snapshots] = await Promise.all([
-      db.ListTenants(),
+      db.ListTenants({ includeBranches: false }),
       db.ListAiUsage(month),
       db.ListPlatformExpenses(month),
       db.ListAiUsageAll(),

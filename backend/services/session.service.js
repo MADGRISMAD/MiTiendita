@@ -74,13 +74,28 @@ function accessTokenFor(user) {
       partnerId: user.partnerId || null,
       email: String(user.email || '').trim().toLowerCase(),
       tv: Number(user.tokenVersion) || 0,
+      // Cuenta técnica de una sucursal: lleva al dueño y SU versión de sesión (ver requireAuth)
+      ...(user.linkedOwner ? { owner: user.linkedOwner, otv: Number(user.ownerTv) || 0 } : {}),
     },
     ACCESS_TTL
   );
 }
 
+/**
+ * La cuenta técnica de una sucursal solo vale mientras su dueño siga siendo administrador activo.
+ * Devuelve la versión de sesión del dueño (va en el token) o lanza si el dueño ya no puede.
+ */
+async function bindOwner(user) {
+  if (!user.linkedOwner) return user;
+  const owner = await db.FindUserByUsername(user.linkedOwner);
+  if (!owner || owner.disabled || normalizeRole(owner.role) !== 'admin') throw sessionError();
+  user.ownerTv = Number(owner.tokenVersion) || 0;
+  return user;
+}
+
 /** Abre una sesión: guarda el refresh, pone la cookie y devuelve el cuerpo de la respuesta. */
 async function startSession(req, res, user) {
+  await bindOwner(user);
   const refresh = crypto.randomBytes(32).toString('base64url');
   await db.CreateSession({
     userId: String(user._id),
@@ -130,6 +145,13 @@ async function refreshSession(req, res) {
     throw sessionError();
   }
 
+  await bindOwner(user).catch(async (err) => {
+    // El dueño ya no es administrador activo: la cuenta de la sucursal no puede seguir
+    await db.RevokeUserSessions(session.userId, 'owner_lost');
+    clearRefreshCookie(req, res);
+    throw err;
+  });
+
   if (session.revokedAt) {
     // Dentro de la gracia: la otra pestaña ya rotó y su cookie nueva es la del navegador
     return { token: accessTokenFor(user), ...profileOf(user) };
@@ -153,6 +175,15 @@ async function revokeAll(user, reason) {
   await db.RevokeUserSessions(String(user._id), reason);
   const updated = await db.BumpUserTokenVersion(String(user._id));
   forgetUser(user.username);
+  // Si es dueño de sucursales, también caen las sesiones de las cuentas técnicas de sus sucursales
+  try {
+    for (const linked of await require('../database/org.db').listLinkedUsers(user.username)) {
+      await db.RevokeUserSessions(String(linked._id), `owner_${reason}`);
+      forgetUser(linked.username);
+    }
+  } catch (err) {
+    console.error('[sucursales] no se pudieron cerrar las sesiones de las sucursales:', err.message);
+  }
   return updated || user;
 }
 
@@ -175,6 +206,7 @@ async function currentUserState(username) {
         disabled: Boolean(user.disabled),
         mfaEnabled: Boolean(user.mfaEnabled),
         partnerId: user.partnerId || null,
+        linkedOwner: user.linkedOwner || null,
       }
     : { exists: false };
   cache.set(key, { at: Date.now(), state });

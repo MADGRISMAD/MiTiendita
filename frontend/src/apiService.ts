@@ -634,6 +634,29 @@ export const apiService = {
   updateCustomer(id: string, data: Record<string, unknown>) {
     return axios.put(`/customers/${id}`, data).then((r) => r.data);
   },
+  // Sucursales
+  getOrganization() {
+    return axios.get('/org').then((r) => r.data);
+  },
+  createBranch(name: string) {
+    return axios.post('/org/branches', { name }).then((r) => r.data);
+  },
+  suspendBranch(id: string) {
+    return axios.post(`/org/branches/${id}/suspend`).then((r) => r.data);
+  },
+  reactivateBranch(id: string) {
+    return axios.post(`/org/branches/${id}/reactivate`).then((r) => r.data);
+  },
+  /** Abre una sesión como la cuenta de esa sucursal; la respuesta es la misma que la del login. */
+  switchBranch(branchId: string) {
+    return axios.post('/org/switch', { branchId }).then((r) => r.data);
+  },
+  getOrgSummary(range: { from: string; to: string }) {
+    return axios.get('/org/reports/summary', { params: range }).then((r) => r.data);
+  },
+  getOrgSummaryCsv(range: { from: string; to: string }) {
+    return axios.get('/org/reports/summary.csv', { params: range, responseType: 'blob' }).then((r) => r.data as Blob);
+  },
   // Fiado y abonos
   getCreditSummary() {
     return axios.get('/customers/credit/summary').then((r) => r.data);

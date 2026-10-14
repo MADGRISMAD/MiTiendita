@@ -32,10 +32,10 @@ const AI_QUOTAS = {
 
 /** null = ilimitado */
 const PLAN_LIMITS = {
-  basic: { users: 2, products: 250 },
-  growth: { users: 6, products: 1500 },
-  pro: { users: 20, products: null },
-  perpetual: { users: 20, products: null },
+  basic: { users: 2, products: 250, branches: 1 },
+  growth: { users: 6, products: 1500, branches: 1 },
+  pro: { users: 20, products: null, branches: 5 },
+  perpetual: { users: 20, products: null, branches: 1 },
 };
 
 const PLAN_CATALOG = {
@@ -94,6 +94,7 @@ const PLAN_CATALOG = {
     features: [
       'Todo lo de Crecimiento',
       '20 usuarios',
+      'Hasta 5 sucursales con reporte consolidado',
       'Productos ilimitados',
       'Inventario Mágico: lista o foto al catálogo',
       'Precio Mágico: la IA ajusta costos y el precio al público',
@@ -165,6 +166,11 @@ function planLimits(planId) {
   return p?.limits || PLAN_LIMITS.basic;
 }
 
+/** Sucursales que permite un plan, contando la matriz (1 = una sola tienda). */
+function branchLimitOf(planId) {
+  return planLimits(planId).branches || 1;
+}
+
 function formatCap(n) {
   return n == null ? 'Ilimitado' : String(n);
 }
@@ -213,6 +219,7 @@ module.exports = {
   isPerpetual,
   hasAiFeatures,
   planLimits,
+  branchLimitOf,
   planPrice,
   planLabel,
   formatAiQuota,

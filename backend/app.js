@@ -42,6 +42,7 @@ app.use('/settings', require('./routers/settings.router'));
 app.use('/orders', require('./routers/orders.router'));
 app.use('/customers', require('./routers/customers.router'));
 app.use('/inventory', require('./routers/inventory.router'));
+app.use('/org', require('./routers/org.router'));
 app.use('/invoices', require('./routers/invoices.router'));
 app.use('/invites', require('./routers/invites.router'));
 app.use('/cash', require('./routers/cash.router'));

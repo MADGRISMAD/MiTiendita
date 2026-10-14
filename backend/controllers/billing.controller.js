@@ -194,6 +194,7 @@ async function getStatus(req, res) {
     const aiOn = hasAiFeatures(plan);
     return res.status(200).json({
       plan,
+      billedByMatrix: Boolean(tenant.billedByMatrix),
       planName: limits.planName(plan),
       isPerpetual: isPerpetual(plan),
       aiEnabled: aiOn,
