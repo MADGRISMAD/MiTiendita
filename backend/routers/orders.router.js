@@ -27,6 +27,7 @@ router.get(
   orders.getById
 );
 router.post('/', requireAuth, requireActiveSubscription, requireRoles('admin', 'cashier'), orders.create);
+router.post('/removed-lines', requireAuth, requireActiveSubscription, requireRoles('admin', 'cashier'), orders.removedLines);
 router.post('/sale', requireAuth, requireActiveSubscription, requireRoles('admin', 'cashier'), orders.sale);
 router.put(
   '/:id/status',

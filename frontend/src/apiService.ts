@@ -297,8 +297,12 @@ export const apiService = {
       })
       .then((r) => r.data);
   },
-  voidOrder(orderId: string) {
-    return axios.put(`/orders/${orderId}/void`).then((r) => r.data);
+  voidOrder(orderId: string, reason = "") {
+    return axios.put(`/orders/${orderId}/void`, { reason }).then((r) => r.data);
+  },
+  /** Bitácora: productos que el cajero quitó del ticket (no se cobran, pero queda constancia). */
+  reportRemovedLines(lines: unknown[]) {
+    return axios.post("/orders/removed-lines", { lines }).then((r) => r.data);
   },
   markInvoiceIssued(orderId: string) {
     return axios.put(`/orders/${orderId}/invoice`).then((r) => r.data);

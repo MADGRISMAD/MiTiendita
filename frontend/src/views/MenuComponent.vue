@@ -3286,8 +3286,24 @@ export default {
       focusScan();
     }
 
+    // Productos quitados del ticket: se avisan al servidor al momento; si no hay red, viajan con la siguiente venta.
+    let pendingRemoved = [];
+    function reportRemoved(gone, reason) {
+      if (!gone || !(Number(gone.quantity) > 0)) return;
+      const row = {
+        name: gone.name,
+        foodId: gone.isMisc ? null : gone.id,
+        quantity: gone.quantity,
+        price: gone.price,
+        reason,
+        at: new Date().toISOString(),
+      };
+      apiSvc.reportRemovedLines([row]).catch(() => pendingRemoved.push(row));
+    }
+
     function removeAt(i) {
       const [gone] = store.platillosSeleccionados.splice(i, 1);
+      reportRemoved(gone, "removed");
       if (gone && lastAdded.value && lastAdded.value.id === gone.id) lastAdded.value = null;
       if (!store.platillosSeleccionados.length) selectedIdx.value = -1;
       else selectedIdx.value = Math.min(i, store.platillosSeleccionados.length - 1);
@@ -3311,6 +3327,7 @@ export default {
 
     function clearCart() {
       if (lines.value.length && !window.confirm("¿Vaciar el ticket? Se quitarán todos los productos agregados.")) return;
+      lines.value.forEach((l) => reportRemoved(l, "cleared"));
       resetTicket();
       focusScan();
     }
@@ -3703,8 +3720,11 @@ export default {
         saleUnit: unitOf(p),
         priceIncludesTax: Boolean(p.priceIncludesTax),
       }));
+      const removedLines = pendingRemoved;
+      pendingRemoved = [];
       const payload = {
         clientSaleId,
+        removedLines: removedLines.length ? removedLines : undefined,
         tableId: null,
         tableName: "Mostrador",
         modality: "retail",

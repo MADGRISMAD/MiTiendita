@@ -1362,7 +1362,13 @@ async function GetPaidItemQtySince(tenantId, since) {
   return map;
 }
 
+/** Para /health/ready: responde si la base contesta (lanza si no). */
+async function Ping() {
+  await dbConnection.command({ ping: 1 });
+}
+
 module.exports = {
+  Ping,
   ensureConnection,
   CreateTenant, GetTenantById, UpdateTenant, ListTenants, CountUsersByTenant, CountPendingInvites, ListUsersByTenant, GetTenantByMpPreapprovalId,
   CreateUser, FindUserByEmail, LoginUsuario, FindUserByUsername, UpdateUserById, FindUserByResetToken,

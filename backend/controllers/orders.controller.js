@@ -1,4 +1,5 @@
 const db = require('../database/mongodb');
+const saleAudit = require('../services/sale-audit.service');
 const { normalizeOrder, orderStatuses, paymentMethods, newToken } = require('../models/order.model');
 const { storeDayRange } = require('../utils/store-time');
 const pointCharges = require('../services/point.charges.service');
@@ -363,6 +364,12 @@ async function sale(req, res) {
       if (createdHere && err.status) await db.DeleteOrder(existing.id, req.tenantId).catch(() => {});
       throw err;
     }
+    if (createdHere) {
+      const user = req.user?.username || '';
+      for (const line of saleAudit.sanitizeRemovedLines(body.removedLines)) {
+        await audit(saleAudit.removedLineEntry({ tenantId: req.tenantId, user, line, orderId: updated?.id || existing.id }));
+      }
+    }
     return res.status(200).json(updated);
   } catch (err) {
     if (err.status) return res.status(err.status).send(err.message);
@@ -397,6 +404,25 @@ async function markInvoiceIssued(req, res) {
   }
 }
 
+/** Bitácora: nunca debe tumbar la venta ni la anulación. */
+function audit(entry) {
+  return Promise.resolve()
+    .then(() => db.CreateActivityLog(entry))
+    .catch((e) => console.error('[bitácora]', e.message));
+}
+
+async function removedLines(req, res) {
+  try {
+    const lines = saleAudit.sanitizeRemovedLines(req.body?.lines);
+    const user = req.user?.username || '';
+    await Promise.all(lines.map((line) => audit(saleAudit.removedLineEntry({ tenantId: req.tenantId, user, line }))));
+    return res.status(200).json({ logged: lines.length });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).send(err.message || 'Error al registrar los productos quitados');
+  }
+}
+
 async function voidSale(req, res) {
   try {
     const existing = await db.GetOrderById(req.params.id, req.tenantId);
@@ -411,6 +437,7 @@ async function voidSale(req, res) {
         { status: 'cancelled', updatedAt: new Date() },
         req.tenantId
       );
+      await audit(saleAudit.voidEntry({ tenantId: req.tenantId, user: req.user?.username, order: existing, reason: req.body?.reason, refunded: false }));
       return res.status(200).json(updated);
     }
 
@@ -486,6 +513,7 @@ async function voidSale(req, res) {
       },
       req.tenantId
     );
+    await audit(saleAudit.voidEntry({ tenantId: req.tenantId, user: req.user?.username, order: existing, reason: req.body?.reason, refunded: true }));
     return res.status(200).json(updated);
   } catch (err) {
     console.error(err);
@@ -493,7 +521,7 @@ async function voidSale(req, res) {
   }
 }
 
-module.exports = { list, getById, create, updateStatus, pay, sale, markInvoiceIssued, voidSale, report, reportSummary };
+module.exports = { removedLines, list, getById, create, updateStatus, pay, sale, markInvoiceIssued, voidSale, report, reportSummary };
 
 async function report(req, res) {
   try {

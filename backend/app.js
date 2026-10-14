@@ -23,6 +23,9 @@ app.use(bodyParser.json({ limit: '10mb' }));
 app.use(bodyParser.urlencoded({ limit: '10mb', extended: true }));
 app.use(compression());
 
+// Salud (antes de conectar a la base y del límite global: un monitor externo no debe gastar cuota)
+app.use('/health', require('./routers/health.router')());
+
 const { ensureConnection } = require('./database/mongodb');
 app.use(async (_req, _res, next) => {
   try { await ensureConnection(); } catch (err) {

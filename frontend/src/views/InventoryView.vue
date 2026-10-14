@@ -1201,6 +1201,7 @@ const activityGroups = computed(() => {
 function iconOf(type) {
   if (type === "purchase_confirmed") return { name: "truck", tone: "good" };
   if (type === "stock_adjusted") return { name: "sliders", tone: "warn" };
+  if (type === "sale_voided" || type === "order_line_removed") return { name: "sliders", tone: "warn" };
   if (String(type).startsWith("supplier_")) return { name: "users", tone: "info" };
   return { name: "history", tone: "" };
 }
