@@ -26,6 +26,12 @@ jobs:
       - name: Instalar dependencias
         run: npm ci
 
+      # Avisa de vulnerabilidades graves en dependencias de producción; no bloquea el deploy
+      # (una alerta nueva no debe impedir publicar una corrección urgente).
+      - name: Auditoría de dependencias
+        continue-on-error: true
+        run: npm audit --omit=dev --audit-level=high
+
       - name: Lint del backend
         run: npm run lint --workspace backend
 
