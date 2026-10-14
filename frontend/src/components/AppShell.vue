@@ -71,15 +71,44 @@
           <button type="button" class="more-link theme-btn hide-pc" @click="toggleUiTheme">
             Tema: {{ isDark ? 'Oscuro' : 'Claro' }}
           </button>
-          <router-link
-            v-for="item in moreItems"
-            :key="item.to"
-            :to="item.to"
-            class="more-link"
-            @click="moreOpen = false"
-          >
-            {{ item.label }}
-          </router-link>
+          <template v-for="item in moreItems" :key="item.to">
+            <!-- Sucursales: si ya hay organización, cada sucursal es un renglón del submenú -->
+            <div v-if="item.name === 'branches' && branchMenu" class="more-group">
+              <button
+                type="button"
+                class="more-link more-group-head"
+                :class="{ 'router-link-active': route.name === 'branches' }"
+                :aria-expanded="branchesOpen"
+                aria-controls="more-branches"
+                @click="branchesOpen = !branchesOpen"
+              >
+                <span>Sucursales <small class="more-count">{{ branchMenu.length }}</small></span>
+                <span class="more-chev" :class="{ open: branchesOpen }" aria-hidden="true">›</span>
+              </button>
+              <div v-show="branchesOpen" id="more-branches" class="more-sub" role="group" aria-label="Sucursales">
+                <button
+                  v-for="b in branchMenu"
+                  :key="b.id"
+                  type="button"
+                  class="more-sub-link"
+                  :class="{ current: b.current, off: b.suspended }"
+                  :disabled="b.current || b.suspended || branchBusy"
+                  :aria-current="b.current ? 'true' : undefined"
+                  @click="goBranch(b)"
+                >
+                  <span class="more-sub-name">{{ b.name }}</span>
+                  <small>{{ b.current ? (b.isMatrix ? 'Matriz · estás aquí' : 'Estás aquí') : b.suspended ? 'De baja' : b.isMatrix ? 'Matriz' : 'Entrar' }}</small>
+                </button>
+                <p v-if="branchError" class="more-sub-err" role="alert">{{ branchError }}</p>
+                <router-link to="/sucursales" class="more-sub-link all" @click="moreOpen = false">
+                  <span class="more-sub-name">Administrar y ver reporte de todas</span>
+                </router-link>
+              </div>
+            </div>
+            <router-link v-else :to="item.to" class="more-link" @click="moreOpen = false">
+              {{ item.label }}
+            </router-link>
+          </template>
           <WhatsAppHelp compact class="more-wa" @open="moreOpen = false" />
           <button type="button" class="more-link danger hide-pc" @click="logout">
             Cerrar sesión
@@ -134,6 +163,7 @@ import { applyBillingStatus } from "../billingStore";
 import { offlineStore } from "../offlineFlags";
 import { platformStore } from "../platform/platformStore";
 import { flushOfflineSales } from "../offlineSync";
+import { orgStore, loadOrg, enterBranch } from "../orgStore";
 
 const route = useRoute();
 const router = useRouter();
@@ -297,6 +327,27 @@ const dock = computed(() => {
   return items.map((i) => (i.name === "platformSupport" ? { ...i, badge: platformStore.waiting || 0 } : i));
 });
 const moreItems = computed(() => allMore.filter((i) => canAccessRoute(i.name)));
+
+// Submenú de sucursales: solo el dueño y solo cuando ya existe la organización (hay al menos una sucursal además de la matriz)
+const branchMenu = computed(() => {
+  if (!orgStore.isOwner || !orgStore.organization || orgStore.branches.length < 2) return null;
+  // La matriz primero y luego las sucursales por orden de alta
+  return [...orgStore.branches].sort((a, b) => Number(b.isMatrix) - Number(a.isMatrix));
+});
+const branchesOpen = ref(true);
+const branchBusy = ref(false);
+const branchError = ref("");
+async function goBranch(b) {
+  branchBusy.value = true;
+  branchError.value = "";
+  try {
+    await enterBranch(b);
+  } catch (e) {
+    branchError.value = e?.response?.data?.message || "No se pudo cambiar de sucursal.";
+  } finally {
+    branchBusy.value = false;
+  }
+}
 // "Más" vive con las demás pestañas cuando caben (celular y tablet)
 const moreInDock = computed(() => (moreItems.value.length > 0 || ownerMode.value) && dock.value.length <= 4);
 const dockCount = computed(() => dock.value.length + (moreInDock.value ? 1 : 0));
@@ -323,6 +374,7 @@ onMounted(() => {
   }, 30000);
   loadBilling();
   flushOfflineSales();
+  loadOrg();
 });
 onUnmounted(() => clearInterval(timer));
 </script>
@@ -664,6 +716,49 @@ onUnmounted(() => clearInterval(timer));
   cursor: pointer;
   font-family: inherit;
 }
+.more-group { display: grid; }
+.more-group-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; width: 100%; text-align: left; }
+.more-count {
+  display: inline-block;
+  min-width: 1.3rem;
+  margin-left: 0.35rem;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 14%, transparent);
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-align: center;
+}
+.more-chev { display: inline-block; transition: transform 0.2s ease; font-size: 1.2rem; line-height: 1; }
+.more-chev.open { transform: rotate(90deg); }
+.more-sub { display: grid; gap: 0.15rem; margin: 0.1rem 0 0.35rem 0.7rem; padding-left: 0.6rem; border-left: 2px solid color-mix(in srgb, currentColor 16%, transparent); }
+.more-sub-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  width: 100%;
+  min-height: 2.6rem;
+  padding: 0 0.7rem;
+  border: 0;
+  border-radius: 0.65rem;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.92rem;
+  font-weight: 600;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+.more-sub-link:hover:not(:disabled) { background: color-mix(in srgb, currentColor 8%, transparent); }
+.more-sub-link:disabled { cursor: default; }
+.more-sub-link.current { font-weight: 800; background: color-mix(in srgb, var(--timber-primary) 12%, transparent); }
+.more-sub-link.off { opacity: 0.55; }
+.more-sub-link small { flex: none; font-size: 0.74rem; font-weight: 700; opacity: 0.7; }
+.more-sub-name { min-width: 0; overflow-wrap: anywhere; }
+.more-sub-link.all { opacity: 0.85; font-size: 0.85rem; }
+.more-sub-err { margin: 0.2rem 0.7rem; font-size: 0.8rem; font-weight: 700; color: var(--timber-danger); }
 .more-link.danger {
   background: var(--timber-danger-soft);
   color: var(--timber-danger);

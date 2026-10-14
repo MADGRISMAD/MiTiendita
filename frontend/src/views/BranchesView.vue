@@ -172,9 +172,7 @@ import "../admin.css";
 import AppShell from "../components/AppShell.vue";
 import PosIcon from "../components/PosIcon.js";
 import { apiService } from "../apiService";
-import { setSession } from "../authStore";
-import { clearBillingStatus } from "../billingStore";
-import { offlineStore } from "../offlineFlags";
+import { applyOrg, enterBranch } from "../orgStore";
 
 const proLimit = 5;
 const loading = ref(true);
@@ -230,6 +228,7 @@ async function load() {
   loading.value = true;
   try {
     ov.value = await apiService.getOrganization();
+    applyOrg(ov.value);
     if (ov.value?.organization) await loadReport();
   } catch (e) {
     error.value = msgOf(e, "No se pudieron cargar las sucursales.");
@@ -258,6 +257,7 @@ async function create() {
   try {
     const r = await apiService.createBranch(newName.value);
     ov.value = r.overview;
+    applyOrg(ov.value);
     flash.value = `Sucursal «${r.branch.name}» creada. Entra a ella para cargar su inventario.`;
     newName.value = "";
     await loadReport();
@@ -275,6 +275,7 @@ async function suspend() {
   busy.value = true;
   try {
     ov.value = await apiService.suspendBranch(toSuspend.value.id);
+    applyOrg(ov.value);
     flash.value = `«${toSuspend.value.name}» quedó de baja.`;
     toSuspend.value = null;
     await loadReport();
@@ -290,6 +291,7 @@ async function reactivate(b) {
   error.value = "";
   try {
     ov.value = await apiService.reactivateBranch(b.id);
+    applyOrg(ov.value);
     flash.value = `«${b.name}» está activa otra vez.`;
     await loadReport();
   } catch (e) {
@@ -301,19 +303,10 @@ async function reactivate(b) {
 
 /** Abre sesión en la sucursal y recarga todo: nada de la tienda anterior se queda en pantalla. */
 async function enter(b) {
-  if (offlineStore.pending > 0 && !window.confirm(`Hay ${offlineStore.pending} ventas de esta tienda sin subir en este equipo. Se subirán cuando vuelvas a ella. ¿Cambiar de sucursal de todos modos?`)) return;
   busy.value = true;
   error.value = "";
   try {
-    const session = await apiService.switchBranch(b.id);
-    setSession(session);
-    clearBillingStatus();
-    try {
-      localStorage.removeItem("timber_venue_settings");
-    } catch {
-      /* sin almacenamiento: se vuelve a pedir al servidor */
-    }
-    window.location.assign("/pos");
+    if (!(await enterBranch(b))) busy.value = false;
   } catch (e) {
     error.value = msgOf(e, "No se pudo cambiar de sucursal.");
     busy.value = false;
