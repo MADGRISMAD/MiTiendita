@@ -28,7 +28,7 @@ jobs:
       HOST: ubuntu@15.235.62.27
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
 
