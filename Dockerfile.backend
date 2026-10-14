@@ -1,8 +1,15 @@
 FROM node:20-alpine
 WORKDIR /app
 ENV NODE_ENV=production
-COPY backend/package.json ./
-RUN npm install --omit=dev
-COPY backend/ ./
+
+# Dependencias exactas del package-lock.json de la raíz (las mismas que se probaron en CI).
+# Los package.json de los workspaces hacen falta para que npm resuelva el lock.
+COPY package.json package-lock.json ./
+COPY backend/package.json backend/
+COPY frontend/package.json frontend/
+RUN npm ci --omit=dev --workspace backend
+
+COPY backend/ backend/
+WORKDIR /app/backend
 EXPOSE 8081
 CMD ["node", "app.js"]

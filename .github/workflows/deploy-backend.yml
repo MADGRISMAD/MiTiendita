@@ -37,10 +37,11 @@ jobs:
           node-version: "20.x"
           cache: npm
 
-      # Si las pruebas fallan no se publica nada.
-      - name: Pruebas del backend
+      # Si el lint o las pruebas fallan no se publica nada.
+      - name: Lint y pruebas del backend
         run: |
-          npm install
+          npm ci
+          npm run lint --workspace backend
           npm test --workspace backend
 
       - name: Llave SSH
@@ -70,3 +71,13 @@ jobs:
             sleep 3
           done
           echo "La API respondió $code"; exit 1
+
+      # La API además debe poder hablar con la base de datos (503 si MongoDB no contesta).
+      - name: Comprobar la base de datos
+        run: |
+          for i in $(seq 10); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' https://api.mitiendita.software/health/ready)
+            [ "$code" = 200 ] && exit 0
+            sleep 3
+          done
+          echo "/health/ready respondió $code"; exit 1

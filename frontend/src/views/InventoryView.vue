@@ -662,16 +662,15 @@ const ADJUST_REASONS = [
   { id: "other", label: "Otro" },
 ];
 const TAB_IDS = ["existencias", "sugerido", "caducidad", "conteo", "compras", "proveedores", "bitacora"];
+// Compras (con costos), pedido sugerido y bitácora son del dueño: la API tampoco las entrega al cajero
+const ADMIN_ONLY_TABS = ["sugerido", "compras", "bitacora"];
 
 const route = useRoute();
 const router = useRouter();
 const isAdmin = computed(() => hasRole("admin"));
 
-const tab = ref(
-  TAB_IDS.includes(String(route.query.tab)) && (String(route.query.tab) !== "bitacora" || isAdmin.value)
-    ? String(route.query.tab)
-    : "existencias"
-);
+const tabAllowed = (id) => TAB_IDS.includes(String(id)) && (isAdmin.value || !ADMIN_ONLY_TABS.includes(String(id)));
+const tab = ref(tabAllowed(route.query.tab) ? String(route.query.tab) : "existencias");
 function setTab(id) {
   tab.value = id;
   router.replace({ query: { ...route.query, tab: id } }).catch(() => {});
@@ -680,7 +679,7 @@ function setTab(id) {
 watch(
   () => route.query.tab,
   (t) => {
-    if (TAB_IDS.includes(String(t)) && (String(t) !== "bitacora" || isAdmin.value)) tab.value = String(t);
+    if (tabAllowed(t)) tab.value = String(t);
   }
 );
 
@@ -1183,14 +1182,15 @@ function iconOf(type) {
 }
 
 // ---------- Carga ----------
-const tabs = computed(() => [
+const tabs = computed(() => ALL_TABS.value.filter((t) => isAdmin.value || !ADMIN_ONLY_TABS.includes(t.id)));
+const ALL_TABS = computed(() => [
   { id: "existencias", label: "Existencias", count: stockCounts.value.out + stockCounts.value.low, alert: stockCounts.value.out > 0 },
   { id: "sugerido", label: "Pedido sugerido", short: "Sugerido", count: suggestionCount.value },
   { id: "caducidad", label: "Caducidad", count: expiryAlert.value, alert: Number(expiry.value?.summary?.expired || 0) > 0 },
   { id: "conteo", label: "Conteo" },
   { id: "compras", label: "Compras" },
   { id: "proveedores", label: "Proveedores", count: suppliers.value.length },
-  ...(isAdmin.value ? [{ id: "bitacora", label: "Bitácora" }] : []),
+  { id: "bitacora", label: "Bitácora" },
 ]);
 const headline = computed(() => {
   if (loading.foods) return "Cargando…";
@@ -1227,6 +1227,10 @@ function loadSuppliers() {
   });
 }
 function loadPurchases() {
+  if (!isAdmin.value) {
+    loading.purchases = false;
+    return Promise.resolve();
+  }
   return track("purchases", async () => {
     try {
       purchases.value = asList(await apiService.getPurchases());
@@ -1246,6 +1250,10 @@ function loadExpiry() {
   });
 }
 function loadSuggestions() {
+  if (!isAdmin.value) {
+    loading.suggestions = false;
+    return Promise.resolve();
+  }
   return track("suggestions", async () => {
     try {
       suggestions.value = (await apiService.getPurchaseSuggestions()) || { groups: [] };

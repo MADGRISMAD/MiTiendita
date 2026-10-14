@@ -1,6 +1,10 @@
 const router = require('express').Router();
+const { hideCostsFromCashiers } = require('../middleware/cost-guard');
 const orders = require('../controllers/orders.controller');
 const { requireAuth, requireActiveSubscription, requireRoles } = require('../middleware/auth.middleware');
+
+// El cajero nunca recibe costos (ver middleware/cost-guard.js)
+router.use(hideCostsFromCashiers);
 
 router.get(
   '/',
