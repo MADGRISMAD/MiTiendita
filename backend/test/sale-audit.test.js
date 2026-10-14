@@ -35,3 +35,23 @@ test('bitácora de una anulación: devolución vs cancelación, con motivo', () 
   const can = voidEntry({ tenantId: 't1', user: 'caja1', order, refunded: false });
   assert.match(can.message, /Cancelación/);
 });
+
+test('cambio de precio y costo: solo lo que cambió, con antes y después', () => {
+  const before = { id: 'f1', name: 'Coca 600', price: 18, cost: 12 };
+  const e = require('../services/sale-audit.service').priceChangeEntries({ tenantId: 't1', user: 'dueño', before, after: { price: 20, cost: 12 } });
+  assert.equal(e.length, 1);
+  assert.equal(e[0].type, 'price_changed');
+  assert.match(e[0].message, /Coca 600: \$18\.00 → \$20\.00/);
+  assert.equal(e[0].meta.to, 20);
+  const none = require('../services/sale-audit.service').priceChangeEntries({ tenantId: 't1', before, after: { name: 'otro', price: 18 } });
+  assert.equal(none.length, 0);
+});
+
+test('bitácora de caja: apertura y corte con faltante/sobrante', () => {
+  const { cashOpenEntry, cashCloseEntry } = require('../services/sale-audit.service');
+  assert.match(cashOpenEntry({ tenantId: 't1', user: 'u', session: { id: 's1', openingFloat: 500 } }).message, /\$500\.00/);
+  const falta = cashCloseEntry({ tenantId: 't1', user: 'u', session: { id: 's1', expectedCash: 1000, countedCash: 940, difference: -60 } });
+  assert.match(falta.message, /faltante de \$60\.00/);
+  assert.match(cashCloseEntry({ tenantId: 't1', user: 'u', session: { difference: 25 } }).message, /sobrante de \$25\.00/);
+  assert.match(cashCloseEntry({ tenantId: 't1', user: 'u', session: { difference: 0 } }).message, /cuadró/);
+});

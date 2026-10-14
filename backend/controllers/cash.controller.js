@@ -1,6 +1,7 @@
 const db = require('../database/mongodb');
 const { normalizeCashSession } = require('../models/cashSession.model');
 const creditDb = require('../database/credit.db');
+const saleAudit = require('../services/sale-audit.service');
 const { paymentTotals } = require('../services/credit.service');
 
 function summarizeOrders(orders) {
@@ -56,6 +57,11 @@ async function current(req, res) {
   }
 }
 
+/** Bitácora: nunca debe tumbar la apertura ni el corte. */
+async function logCash(entry) {
+  try { await db.CreateActivityLog(entry); } catch (e) { console.error('[bitácora]', e.message); }
+}
+
 async function open(req, res) {
   try {
     const existing = await db.GetOpenCashSession(req.tenantId);
@@ -65,6 +71,7 @@ async function open(req, res) {
     const session = await db.CreateCashSession(
       normalizeCashSession(req.body || {}, req.tenantId, req.user.username)
     );
+    await logCash(saleAudit.cashOpenEntry({ tenantId: req.tenantId, user: req.user.username, session }));
     return res.status(201).json(session);
   } catch (err) {
     console.error(err);
@@ -106,6 +113,7 @@ async function close(req, res) {
       req.tenantId
     );
 
+    await logCash(saleAudit.cashCloseEntry({ tenantId: req.tenantId, user: req.user.username, session: closed }));
     return res.status(200).json({ session: closed, totals });
   } catch (err) {
     console.error(err);

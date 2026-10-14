@@ -2,6 +2,7 @@ const db = require('../database/mongodb');
 const { roundQty, saleUnitOf } = require('../utils/units');
 const limits = require('../services/plan-limits.service');
 const { ObjectId } = require('mongodb');
+const saleAudit = require('../services/sale-audit.service');
 
 function sanitizeSupplierIds(raw) {
   if (!Array.isArray(raw)) return [];
@@ -181,8 +182,16 @@ async function updateFood(req, res) {
     if (body.tracksExpiry != null) body.tracksExpiry = Boolean(body.tracksExpiry);
     if (body.saleUnit != null) body.saleUnit = saleUnitOf(body.saleUnit);
     if (body.supplierIds != null) body.supplierIds = sanitizeSupplierIds(body.supplierIds);
+    const before = await db.GetFoodById(req.params.id, req.tenantId).catch(() => null);
     const updated = await db.UpdateFood(req.params.id, body, req.tenantId);
     if (!updated) return res.status(404).send('Producto no encontrado');
+    // Bitácora (no debe tumbar el guardado)
+    try {
+      const entries = saleAudit.priceChangeEntries({ tenantId: req.tenantId, user: req.user?.username, before, after: body });
+      await Promise.all(entries.map((e) => db.CreateActivityLog(e)));
+    } catch (e) {
+      console.error('[bitácora]', e.message);
+    }
     return res.status(200).json(updated);
   } catch (err) {
     console.error(err);

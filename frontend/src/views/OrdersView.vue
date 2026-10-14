@@ -412,6 +412,7 @@
                 <p v-else>Esta venta no se cobró; solo se quita de la lista.</p>
               </div>
             </header>
+            <input v-model="voidReason" class="inp" maxlength="200" placeholder="Motivo (opcional). Ej. El cliente se arrepintió" @keyup.enter="confirmVoid" />
             <div class="dlg-acts">
               <button type="button" class="btn" :disabled="voidBusy" @click="voidOrder = null">Volver</button>
               <button type="button" class="btn danger" :disabled="voidBusy" @click="confirmVoid">
@@ -492,6 +493,7 @@ const payMethods = [
 
 const voidOrder = ref(null);
 const voidBusy = ref(false);
+const voidReason = ref("");
 
 const TAX_RATE = computed(() => rateOf(venueStore.taxRate));
 
@@ -868,6 +870,7 @@ async function confirmPay() {
 
 function askVoid(o) {
   cashErr.value = "";
+  voidReason.value = "";
   voidOrder.value = o;
 }
 
@@ -878,7 +881,8 @@ async function confirmVoid() {
   cashMsg.value = "";
   const wasPaid = voidOrder.value.paymentStatus === "paid";
   try {
-    const updated = await apiService.voidOrder(voidOrder.value.id);
+    const updated = await apiService.voidOrder(voidOrder.value.id, voidReason.value.trim());
+    voidReason.value = "";
     replaceOrder(updated);
     cashMsg.value = wasPaid ? `Venta #${folio(updated)} devuelta.` : `Venta #${folio(updated)} cancelada.`;
     voidOrder.value = null;

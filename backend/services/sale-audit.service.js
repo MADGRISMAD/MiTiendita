@@ -68,4 +68,54 @@ function voidEntry({ tenantId, user, order, reason = '', refunded, now = new Dat
   };
 }
 
-module.exports = { sanitizeRemovedLines, removedLineEntry, voidEntry, MAX_LINES };
+/** Cambio de precio o costo de un producto: una entrada por campo que cambió de verdad. */
+function priceChangeEntries({ tenantId, user, before, after, now = new Date() }) {
+  const out = [];
+  for (const [field, label] of [['price', 'Precio'], ['cost', 'Costo']]) {
+    if (after[field] == null || after[field] === '') continue;
+    const from = Number(before?.[field] || 0);
+    const to = Number(after[field]);
+    if (!Number.isFinite(to) || Math.abs(from - to) < 0.005) continue;
+    out.push({
+      tenantId: String(tenantId),
+      type: field === 'price' ? 'price_changed' : 'cost_changed',
+      message: `${label} de ${before?.name || after.name || 'producto'}: ${money(from)} → ${money(to)}`,
+      meta: { foodId: String(before?.id || ''), name: before?.name || '', field, from, to },
+      user: user || '',
+      createdAt: now,
+    });
+  }
+  return out;
+}
+
+function cashOpenEntry({ tenantId, user, session, now = new Date() }) {
+  return {
+    tenantId: String(tenantId),
+    type: 'cash_opened',
+    message: `Apertura de caja con ${money(session?.openingFloat)}`,
+    meta: { sessionId: String(session?.id || ''), openingFloat: Number(session?.openingFloat || 0) },
+    user: user || '',
+    createdAt: now,
+  };
+}
+
+function cashCloseEntry({ tenantId, user, session, now = new Date() }) {
+  const diff = Number(session?.difference || 0);
+  const tag = Math.abs(diff) < 0.005 ? 'cuadró' : diff < 0 ? `faltante de ${money(-diff)}` : `sobrante de ${money(diff)}`;
+  return {
+    tenantId: String(tenantId),
+    type: 'cash_closed',
+    message: `Corte de caja: ${tag}`,
+    meta: {
+      sessionId: String(session?.id || ''),
+      expectedCash: Number(session?.expectedCash || 0),
+      countedCash: Number(session?.countedCash || 0),
+      difference: diff,
+      notes: clean(session?.notes, 200),
+    },
+    user: user || '',
+    createdAt: now,
+  };
+}
+
+module.exports = { sanitizeRemovedLines, removedLineEntry, voidEntry, priceChangeEntries, cashOpenEntry, cashCloseEntry, MAX_LINES };
