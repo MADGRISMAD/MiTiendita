@@ -791,6 +791,35 @@ async function GetClosedCashSessionsBetween(tenantId, from, to) {
     .find({ tenantId, status: 'closed', closedAt: { $gte: new Date(from), $lte: new Date(to) } })
     .toArray()).map(withId);
 }
+/**
+ * Candado de una tarea programada: solo quien lo toma la ejecuta (útil con varias instancias).
+ * El candado vence solo (`ttlMs`) por si la instancia que lo tenía se cae a medio trabajo.
+ */
+async function AcquireJobLock(name, ttlMs) {
+  const now = new Date();
+  try {
+    await dbConnection.collection('job_runs').findOneAndUpdate(
+      { _id: name, $or: [{ lockedUntil: null }, { lockedUntil: { $lt: now } }] },
+      { $set: { lockedUntil: new Date(now.getTime() + ttlMs), startedAt: now } },
+      { upsert: true }
+    );
+    return true;
+  } catch (err) {
+    if (err.code === 11000) return false; // el documento existe y alguien más tiene el candado
+    throw err;
+  }
+}
+/** Libera el candado y deja constancia de la última corrida (para saber si una tarea dejó de correr). */
+async function FinishJob(name, { ok, error = null, ms = 0 }) {
+  await dbConnection
+    .collection('job_runs')
+    .updateOne({ _id: name }, { $set: { lockedUntil: null, lastRunAt: new Date(), lastOk: Boolean(ok), lastError: error, lastMs: ms } });
+}
+/** Estado de las tareas programadas (para /health/jobs). */
+async function ListJobRuns() {
+  return (await dbConnection.collection('job_runs').find({}).toArray()).map((j) => ({ name: j._id, lastRunAt: j.lastRunAt || null, lastOk: j.lastOk ?? null, lastError: j.lastError || null, lastMs: j.lastMs || 0 }));
+}
+
 /** Reserva el aviso de pago fallido del día N de forma atómica: solo una instancia lo consigue. */
 async function ClaimDunningNotice(tenantId, day) {
   if (!ObjectId.isValid(tenantId)) return false;
@@ -1466,7 +1495,7 @@ async function Ping() {
 }
 
 module.exports = {
-  Ping, ClaimDunningNotice, ReleaseDunningNotice, CustomerOrderStats, GetOrdersByCustomer, ApplyOrderReturn, GetClosedCashSessionsBetween, ListSettingsWithDailySummary, ClaimDailySummary, ReleaseDailySummary,
+  Ping, AcquireJobLock, FinishJob, ListJobRuns, ClaimDunningNotice, ReleaseDunningNotice, CustomerOrderStats, GetOrdersByCustomer, ApplyOrderReturn, GetClosedCashSessionsBetween, ListSettingsWithDailySummary, ClaimDailySummary, ReleaseDailySummary,
   ensureConnection,
   CreateTenant, GetTenantById, UpdateTenant, ListTenants, CountUsersByTenant, CountPendingInvites, ListUsersByTenant, GetTenantByMpPreapprovalId,
   CreateUser, FindUserByEmail, LoginUsuario, FindUserByUsername, UpdateUserById, FindUserByResetToken,

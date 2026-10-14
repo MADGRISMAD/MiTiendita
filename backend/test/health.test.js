@@ -40,3 +40,11 @@ test('/health/ready: 200 si la base contesta y 503 si no', async () => {
     assert.deepEqual(r.body, { ok: false, db: 'down' });
   });
 });
+
+test('/health/jobs: 200 con las tareas al día y 503 si una dejó de correr', async () => {
+  const fresh = new Date();
+  const ok = { ensureConnection: async () => {}, Ping: async () => {}, ListJobRuns: async () => [{ name: 'resumen-diario', lastRunAt: fresh, lastOk: true }] };
+  await withServer(ok, async (s) => assert.equal((await get(s, '/health/jobs')).status, 200));
+  const old = { ...ok, ListJobRuns: async () => [{ name: 'resumen-diario', lastRunAt: new Date(Date.now() - 5 * 3600 * 1000), lastOk: true }] };
+  await withServer(old, async (s) => assert.equal((await get(s, '/health/jobs')).status, 503));
+});
