@@ -302,6 +302,29 @@ function dailySummaryEmail({ storeName, dayLabel, summary, appUrl }) {
   };
 }
 
+function paymentFailedEmail({ businessName, daysLeft, graceEndsAt, appUrl }) {
+  const last = daysLeft <= 1;
+  return {
+    subject: last ? 'Último aviso: tu tienda se bloquea mañana' : 'No pudimos cobrar tu suscripción de Mi Tiendita',
+    html: renderMachote({
+      eyebrow: 'Facturación',
+      title: last ? 'Último aviso antes del bloqueo' : 'No pudimos cobrar tu plan',
+      body: [
+        paragraph(
+          `Mercado Pago rechazó el cobro de la suscripción de <strong>${escapeHtml(businessName || 'tu tienda')}</strong>. Probablemente la tarjeta venció, no tiene saldo o el banco la bloqueó.`
+        ),
+        dataBox([
+          { label: 'Tu tienda sigue funcionando hasta', value: graceEndsAt },
+          { label: 'Días restantes', value: String(Math.max(0, daysLeft)) },
+        ]),
+        paragraph('Actualiza tu método de pago en Facturación para no perder el acceso a la caja. Tus ventas y tu inventario no se borran.'),
+        cta(`${appUrl}/billing`, 'Actualizar mi método de pago'),
+      ].join(''),
+      footerNote: 'Si ya regularizaste tu pago, ignora este aviso.',
+    }),
+  };
+}
+
 function subscriptionCancelledEmail({ businessName, planName, periodEnd, appUrl }) {
   return {
     subject: `Suscripción cancelada — ${planName}`,
@@ -527,6 +550,7 @@ module.exports = {
   invoiceStoreEmail,
   welcomeEmail,
   paymentConfirmedEmail,
+  paymentFailedEmail,
   subscriptionCancelledEmail,
   dailySummaryEmail,
   supportReceivedEmail,

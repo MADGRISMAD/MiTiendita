@@ -61,10 +61,26 @@ function createTenantDoc(name = 'Mi negocio') {
   };
 }
 
+/** Días que la tienda sigue operando después de un cobro rechazado, con avisos, antes de bloquearse. */
+const GRACE_DAYS = 7;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Fin del periodo de gracia de una tienda con pago atrasado (null si no aplica). */
+function graceEndsAt(tenant) {
+  if ((tenant?.billingStatus || 'trialing') !== 'past_due' || !tenant.pastDueSince) return null;
+  const since = new Date(tenant.pastDueSince).getTime();
+  return Number.isNaN(since) ? null : new Date(since + GRACE_DAYS * DAY_MS);
+}
+
 function isSubscriptionActive(tenant) {
   if (!tenant) return false;
   const status = tenant.billingStatus || 'trialing';
-  if (status === 'suspended' || status === 'past_due') return false;
+  if (status === 'suspended') return false;
+  if (status === 'past_due') {
+    // Un cobro rechazado no corta de golpe: hay días de gracia (sin fecha de atraso, bloquea como antes)
+    const ends = graceEndsAt(tenant);
+    return Boolean(ends && ends.getTime() > Date.now());
+  }
   if (tenant.plan === 'perpetual') return true;
   if (tenant.cancelAtPeriodEnd && tenant.currentPeriodEnd) {
     if (new Date(tenant.currentPeriodEnd).getTime() <= Date.now()) return false;
@@ -98,6 +114,8 @@ module.exports = {
   createTenantDoc,
   trialEndsFrom,
   isSubscriptionActive,
+  graceEndsAt,
+  GRACE_DAYS,
   newResetToken,
   ObjectId,
 };

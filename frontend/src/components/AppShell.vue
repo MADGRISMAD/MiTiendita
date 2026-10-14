@@ -199,6 +199,11 @@ const billingBanner = computed(() => {
   if (!s || !hasRole("admin", "cashier")) return null;
   if (s.plan === "perpetual" || s.isPerpetual) return null;
   if (s.billingStatus === "past_due") {
+    // Periodo de gracia: la tienda sigue vendiendo, pero hay que actualizar la tarjeta antes de la fecha
+    if (s.active && s.graceEndsAt) {
+      const end = new Date(s.graceEndsAt).toLocaleDateString("es-MX", { day: "numeric", month: "long" });
+      return { tone: "warn", text: `No pudimos cobrar tu plan. Actualiza tu tarjeta en Facturación antes del ${end} para no perder el acceso.` };
+    }
     return { tone: "danger", text: "Pago pendiente — regulariza tu suscripción." };
   }
   if (s.billingStatus === "suspended") {

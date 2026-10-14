@@ -1,6 +1,6 @@
 const db = require('../database/mongodb');
 const { passwordProblem } = require('../utils/password-policy');
-const { PLANS, BILLING_STATUSES, trialEndsFrom } = require('../models/tenant.model');
+const { PLANS, BILLING_STATUSES, trialEndsFrom, graceEndsAt } = require('../models/tenant.model');
 const { planAiQuota, planPrice, PLAN_CATALOG, isPerpetual, hasAiFeatures } = require('../services/plans.catalog');
 const mp = require('../services/mercadopago.service');
 const supportMail = require('../services/support-mail.service');
@@ -94,6 +94,7 @@ async function clientCard(tenant, { withUsers = false, pre = null } = {}) {
     trialEndsAt: tenant.trialEndsAt || null,
     trialEndsOn: dateInput(tenant.trialEndsAt),
     currentPeriodEnd: tenant.currentPeriodEnd || null,
+    graceEndsAt: graceEndsAt(tenant),
     suspendedReason: tenant.suspendedReason || '',
     mpPayerEmail: tenant.mpPayerEmail || '',
     createdAt: tenant.createdAt || null,
@@ -187,6 +188,13 @@ async function updateTenant(req, res) {
       plan,
       billingStatus,
     };
+    // Pago atrasado puesto a mano también abre el periodo de gracia; salir de ahí lo limpia
+    if (billingStatus === 'past_due' && tenant.billingStatus !== 'past_due') {
+      patch.pastDueSince = new Date();
+      patch.dunningSent = [];
+    } else if (billingStatus !== 'past_due') {
+      patch.pastDueSince = null;
+    }
     if (isPerpetual(plan)) {
       stampPerpetual(patch, billingStatus);
       if (!isPerpetual(tenant.plan)) await dropMercadoPago(tenant, patch);

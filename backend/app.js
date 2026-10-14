@@ -90,6 +90,19 @@ if (!process.env.VERCEL) {
       .then((n) => n && console.log(`[resumen diario] ${n} correo(s) enviados`))
       .catch((err) => console.warn('[resumen diario] revisión falló:', err.message));
   };
+  // Dunning: avisos por correo (día 0, 3 y 6) cuando falló el cobro de la suscripción
+  const dunning = require('./services/dunning.service');
+  const sendDunning = () => {
+    if (!mailUtils.hasSmtpConfig()) return Promise.resolve();
+    const dbm = require('./database/mongodb');
+    const emailFor = async (t) => t.mpPayerEmail || (await dbm.ListTenantAdminEmails(t.id))[0] || null;
+    return ensureConnection()
+      .then(() => dunning.sendDue(dbm, mailUtils, { emailFor }))
+      .then((n) => n && console.log(`[dunning] ${n} aviso(s) de pago enviados`))
+      .catch((err) => console.warn('[dunning] revisión falló:', err.message));
+  };
+  setTimeout(sendDunning, 3 * 60 * 1000).unref();
+  setInterval(sendDunning, 60 * 60 * 1000).unref();
   setTimeout(sendSummaries, 2 * 60 * 1000).unref();
   setInterval(sendSummaries, 15 * 60 * 1000).unref();
 }

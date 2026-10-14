@@ -17,6 +17,14 @@ function at(value) {
  * @returns {{ items: Array, counts: object }}
  *   item: { key, kind, tone, tenantId, businessName, title, detail, since, ticketId? }
  */
+/** « · gracia: quedan N días» (o «· gracia terminada») para un pago atrasado; vacío si no hay fecha. */
+function graceText(graceEndsAt, now) {
+  const end = graceEndsAt ? new Date(graceEndsAt).getTime() : NaN;
+  if (Number.isNaN(end)) return "";
+  const days = Math.ceil((end - now) / DAY);
+  return days > 0 ? ` · gracia: quedan ${days} día${days === 1 ? "" : "s"}` : " · gracia terminada";
+}
+
 export function buildAttention({ tenants = [], tickets = [], now = Date.now() } = {}) {
   const items = [];
 
@@ -47,7 +55,7 @@ export function buildAttention({ tenants = [], tickets = [], now = Date.now() } 
         kind: "past_due",
         tone: "warn",
         title: "Pago atrasado",
-        detail: `${c.planName || "Plan"}${c.ownerName ? ` · ${c.ownerName}` : ""}`,
+        detail: `${c.planName || "Plan"}${c.ownerName ? ` · ${c.ownerName}` : ""}${graceText(c.graceEndsAt, now)}`,
         since: at(c.currentPeriodEnd),
       });
     } else if (status === "trialing" && !c.isPerpetual) {

@@ -1,7 +1,7 @@
 const db = require('../database/mongodb');
 const mp = require('../services/mercadopago.service');
 const limits = require('../services/plan-limits.service');
-const { PUBLIC_PLANS, isSubscriptionActive, trialEndsFrom } = require('../models/tenant.model');
+const { PUBLIC_PLANS, isSubscriptionActive, graceEndsAt, trialEndsFrom } = require('../models/tenant.model');
 const { hasAiFeatures, isPerpetual, formatAiQuota, planAiQuota, PROMO, promoPrice } = require('../services/plans.catalog');
 const {
   safeSend,
@@ -42,6 +42,13 @@ async function applyPreapprovalToTenant(tenant, pre, dataId) {
     billingStatus,
     mpPreapprovalId: String(dataId || pre.id || tenant.mpPreapprovalId || ''),
   };
+  // Cobro rechazado: empieza el periodo de gracia (solo la primera vez); si se recupera, se limpia
+  if (billingStatus === 'past_due' && tenant.billingStatus !== 'past_due') {
+    patch.pastDueSince = new Date();
+    patch.dunningSent = [];
+  } else if (billingStatus !== 'past_due') {
+    patch.pastDueSince = null;
+  }
 
   // Se suscribió durante la prueba: la prueba se respeta completa y el primer cobro llega al terminar
   const waitingTrial = billingStatus === 'active' && Boolean(tenant.subscribedInTrial) && trialDaysLeftNow(tenant) > 0;
@@ -205,6 +212,8 @@ async function getStatus(req, res) {
       currentPeriodEnd: tenant.currentPeriodEnd || null,
       cancelAtPeriodEnd: Boolean(tenant.cancelAtPeriodEnd),
       active: isSubscriptionActive(tenant),
+      pastDueSince: tenant.pastDueSince || null,
+      graceEndsAt: graceEndsAt(tenant),
       mpConfigured: mp.hasMpConfig(),
       mpSandbox: mp.hasMpConfig() ? mp.isMpSandbox() : false,
       mpPreapprovalId: tenant.mpPreapprovalId || null,
@@ -500,6 +509,7 @@ async function webhook(req, res) {
               subscribedInTrial: false,
               suspendedAt: null,
               suspendedReason: null,
+              pastDueSince: null,
             });
             if (tenant.billingStatus === 'trialing') notifyPayment({ ...(activated || tenant), promo: tenant.promo }).catch(() => {});
           }
