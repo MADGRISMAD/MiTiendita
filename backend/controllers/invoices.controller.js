@@ -44,7 +44,7 @@ function money(n) {
   return Number(n || 0).toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
 }
 
-async function notifyInvoiceEmails({ order, settings, invoice, publicView }) {
+async function notifyInvoiceEmails({ order, invoice, publicView }) {
   const mail = { customer: null, store: [] };
   try {
     mail.customer = await sendInvoiceRequestCustomerEmail({

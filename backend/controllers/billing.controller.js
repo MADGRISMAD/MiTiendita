@@ -514,7 +514,7 @@ async function webhook(req, res) {
             if (tenant.billingStatus === 'trialing') notifyPayment({ ...(activated || tenant), promo: tenant.promo }).catch(() => {});
           }
           const paymentKey = `ap:${payment.id || dataId}`;
-          const afterPromo = await promo.onPayment(tenant, { key: paymentKey, source: 'authorized_payment' }).catch(() => null);
+          await promo.onPayment(tenant, { key: paymentKey, source: 'authorized_payment' }).catch(() => null);
           await creditReferral(tenant, {
             amount,
             source: 'authorized_payment',

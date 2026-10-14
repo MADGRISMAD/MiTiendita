@@ -72,7 +72,7 @@ function parseDocDate(value) {
   if (!raw) return '';
   const iso = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
   if (iso) return ymd(iso[1], iso[2], iso[3]);
-  const dmy = raw.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/);
+  const dmy = raw.match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})/);
   if (dmy) {
     const year = dmy[3].length === 2 ? `20${dmy[3]}` : dmy[3];
     return ymd(year, dmy[2], dmy[1]);
@@ -498,7 +498,7 @@ async function extractPrices({ text, imageBase64, mimeType }) {
   let payload = { items: [], supplier: emptySupplier() };
   try {
     payload = parsePayload(reply);
-  } catch (err) {
+  } catch {
     if (loose.items.length) {
       return { items: loose.items.map(publicItem), supplier: emptySupplier() };
     }

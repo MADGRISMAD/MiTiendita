@@ -64,7 +64,7 @@ function inferPackSize(name, aiPackSize) {
 
   const n = String(name || '');
   const patterns = [
-    /(?:pack|paq\.?|paquete|caja|cjs?|bulto|display)\s*[\/\s-]*(\d{1,3})\b/i,
+    /(?:pack|paq\.?|paquete|caja|cjs?|bulto|display)\s*[/\s-]*(\d{1,3})\b/i,
     /\b(\d{1,3})\s*(?:pzas?|piezas|unidades|uds?)\b/i,
     /\bx\s*(\d{1,3})\b/i,
     /\bc\/\s*(\d{1,3})\b/i,

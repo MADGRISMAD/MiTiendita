@@ -11,7 +11,8 @@
     "test": "node --test",
     "seed:menu": "node scripts/seed-menu.js",
     "seed:platform-admin": "node scripts/create-platform-admin.js",
-    "mail:preview": "node scripts/send-mail-previews.js"
+    "mail:preview": "node scripts/send-mail-previews.js",
+    "lint": "eslint ."
   },
   "author": "",
   "license": "ISC",

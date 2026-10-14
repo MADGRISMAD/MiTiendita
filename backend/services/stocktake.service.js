@@ -28,14 +28,6 @@ function isCountable(food) {
   return food && typeof food.stock === 'number' && Number.isFinite(food.stock);
 }
 
-function normalize(text) {
-  return String(text || '')
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .toLowerCase()
-    .trim();
-}
-
 /**
  * Renglones de un conteo nuevo. En MiTiendita las categorías son los menús: `menuId` limita el conteo
  * a una categoría (conteo por pasillo) y `menuNames` ({ menuId: nombre }) pone el nombre en cada renglón.

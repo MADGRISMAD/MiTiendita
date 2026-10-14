@@ -26,6 +26,9 @@ jobs:
       - name: Instalar dependencias
         run: npm ci
 
+      - name: Lint del backend
+        run: npm run lint --workspace backend
+
       - name: Tests del backend
         run: npm test --workspace backend
 
