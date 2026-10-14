@@ -18,7 +18,8 @@ router.post('/purchases', requireAuth, requireActiveSubscription, writeRoles, in
 
 router.get('/lots/expiring', requireAuth, requireActiveSubscription, readRoles, inventory.expiringLots);
 router.get('/suggestions', requireAuth, requireActiveSubscription, readRoles, inventory.suggestions);
-router.get('/activity', requireAuth, requireActiveSubscription, readRoles, inventory.activity);
+// La bitácora es del dueño: el cajero no la lee
+router.get('/activity', requireAuth, requireActiveSubscription, requireRoles('admin'), inventory.activity);
 router.post('/adjust', requireAuth, requireActiveSubscription, writeRoles, inventory.adjustStock);
 
 // Conteo de inventario: cualquiera de caja puede contar; aplicar y cancelar es del administrador

@@ -751,8 +751,8 @@ export const apiService = {
   adjustStock(data: { foodId: string; stock: number; reason: string; note?: string }) {
     return axios.post('/inventory/adjust', data).then((r) => r.data);
   },
-  getInventoryActivity(limit = 80) {
-    return axios.get('/inventory/activity', { params: { limit } }).then((r) => r.data);
+  getInventoryActivity(limit = 80, filters: { from?: string; to?: string; user?: string; types?: string } = {}) {
+    return axios.get('/inventory/activity', { params: { limit, ...filters } }).then((r) => r.data);
   },
 
   // ── Reportes de ventas ──

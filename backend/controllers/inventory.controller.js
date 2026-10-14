@@ -1,3 +1,4 @@
+const { storeDayRange } = require('../utils/store-time');
 const db = require('../database/mongodb');
 const { supplierSchema } = require('../models/supplier.model');
 const { purchaseSchema } = require('../models/purchase.model');
@@ -188,8 +189,14 @@ async function suggestions(req, res) {
 
 async function activity(req, res) {
   try {
-    const limit = Math.min(200, Math.max(1, Number(req.query.limit) || 80));
-    return res.status(200).json(await db.GetActivityLog(req.tenantId, limit));
+    const limit = Math.min(500, Math.max(1, Number(req.query.limit) || 80));
+    const day = /^\d{4}-\d{2}-\d{2}$/;
+    const tz = (await db.GetSettings(req.tenantId))?.timezone;
+    const from = day.test(req.query.from || '') ? storeDayRange(req.query.from, tz).from : undefined;
+    const to = day.test(req.query.to || '') ? storeDayRange(req.query.to, tz).to : undefined;
+    const types = String(req.query.types || '').split(',').map((t) => t.trim()).filter(Boolean);
+    const user = String(req.query.user || '').trim();
+    return res.status(200).json(await db.GetActivityLog(req.tenantId, limit, { from, to, user, types }));
   } catch (err) {
     console.error(err);
     return res.status(500).send(err.message || 'Error al leer la bitácora');

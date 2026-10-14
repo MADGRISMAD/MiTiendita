@@ -316,7 +316,20 @@
       </section>
 
       <!-- ============ Bitácora ============ -->
-      <section v-else class="sec" :class="{ 'adm-loading': loading.activity }">
+      <section v-else-if="tab === 'bitacora' && isAdmin" class="sec" :class="{ 'adm-loading': loading.activity }">
+        <form class="log-filters" @submit.prevent="loadActivity">
+          <label>Desde <input v-model="logFilters.from" type="date" class="inp" /></label>
+          <label>Hasta <input v-model="logFilters.to" type="date" class="inp" /></label>
+          <label>
+            Tipo
+            <select v-model="logFilters.group" class="inp">
+              <option v-for="g in LOG_GROUPS" :key="g.id" :value="g.id">{{ g.label }}</option>
+            </select>
+          </label>
+          <label>Usuario <input v-model.trim="logFilters.user" type="text" class="inp" placeholder="Todos" /></label>
+          <button type="submit" class="adm-btn primary">Filtrar</button>
+          <button type="button" class="adm-btn" :disabled="!activity.length" @click="exportActivity">CSV</button>
+        </form>
         <div v-if="activityGroups.length" class="log">
           <div v-for="g in activityGroups" :key="g.key" class="log-day">
             <h3>{{ g.label }}</h3>
@@ -651,7 +664,11 @@ const route = useRoute();
 const router = useRouter();
 const isAdmin = computed(() => hasRole("admin"));
 
-const tab = ref(TAB_IDS.includes(String(route.query.tab)) ? String(route.query.tab) : "existencias");
+const tab = ref(
+  TAB_IDS.includes(String(route.query.tab)) && (String(route.query.tab) !== "bitacora" || isAdmin.value)
+    ? String(route.query.tab)
+    : "existencias"
+);
 function setTab(id) {
   tab.value = id;
   router.replace({ query: { ...route.query, tab: id } }).catch(() => {});
@@ -660,7 +677,7 @@ function setTab(id) {
 watch(
   () => route.query.tab,
   (t) => {
-    if (TAB_IDS.includes(String(t))) tab.value = String(t);
+    if (TAB_IDS.includes(String(t)) && (String(t) !== "bitacora" || isAdmin.value)) tab.value = String(t);
   }
 );
 
@@ -1215,7 +1232,7 @@ const tabs = computed(() => [
   { id: "conteo", label: "Conteo" },
   { id: "compras", label: "Compras" },
   { id: "proveedores", label: "Proveedores", count: suppliers.value.length },
-  { id: "bitacora", label: "Bitácora" },
+  ...(isAdmin.value ? [{ id: "bitacora", label: "Bitácora" }] : []),
 ]);
 const headline = computed(() => {
   if (loading.foods) return "Cargando…";
@@ -1279,14 +1296,49 @@ function loadSuggestions() {
     }
   });
 }
+const LOG_GROUPS = [
+  { id: "", label: "Todo", types: [] },
+  { id: "ventas", label: "Anulaciones y productos quitados", types: ["sale_voided", "order_line_removed"] },
+  { id: "precios", label: "Precios y costos", types: ["price_changed", "cost_changed"] },
+  { id: "caja", label: "Caja (apertura y corte)", types: ["cash_opened", "cash_closed"] },
+  { id: "inventario", label: "Inventario", types: ["stock_adjusted", "purchase_confirmed", "supplier_created", "supplier_deleted"] },
+];
+const logFilters = reactive({ from: "", to: "", group: "", user: "" });
 function loadActivity() {
+  if (!isAdmin.value) {
+    loading.activity = false;
+    return Promise.resolve();
+  }
   return track("activity", async () => {
     try {
-      activity.value = asList(await apiService.getInventoryActivity(120));
+      const types = LOG_GROUPS.find((g) => g.id === logFilters.group)?.types || [];
+      activity.value = asList(
+        await apiService.getInventoryActivity(500, {
+          from: logFilters.from || undefined,
+          to: logFilters.to || undefined,
+          user: logFilters.user || undefined,
+          types: types.length ? types.join(",") : undefined,
+        })
+      );
     } catch {
       activity.value = [];
     }
   });
+}
+
+function exportActivity() {
+  const cell = (v) => {
+    const t = String(v ?? "");
+    return /[",\n;]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
+  };
+  const rows = activity.value.map((r) => [toDate(r.createdAt)?.toLocaleString("es-MX") || "", r.user || "", r.type, r.message]);
+  const body = [["Fecha", "Usuario", "Tipo", "Detalle"], ...rows].map((r) => r.map(cell).join(",")).join("\n");
+  const url = URL.createObjectURL(new Blob(["\uFEFF" + body], { type: "text/csv;charset=utf-8;" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "bitacora.csv";
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 onMounted(() => {
@@ -1518,6 +1570,8 @@ onMounted(() => {
 
 /* Bitácora */
 .log { display: grid; gap: 1rem; }
+.log-filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.6rem; margin-bottom: 1rem; }
+.log-filters label { display: grid; gap: 0.2rem; font-size: 0.78rem; font-weight: 600; opacity: 0.8; }
 .log-day h3 {
   margin: 0 0 0.4rem;
   font-size: 0.78rem;

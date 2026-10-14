@@ -1331,13 +1331,20 @@ async function ListPlatformAudit({ tenantId = null, limit = 60 } = {}) {
     .toArray();
   return rows.map(({ _id, ...rest }) => ({ id: String(_id), ...rest }));
 }
-async function GetActivityLog(tenantId, limit = 80) {
+async function GetActivityLog(tenantId, limit = 80, { from, to, user, types } = {}) {
   const filter = tenantId ? { tenantId } : {};
+  if (from || to) {
+    filter.createdAt = {};
+    if (from) filter.createdAt.$gte = from;
+    if (to) filter.createdAt.$lte = to;
+  }
+  if (user) filter.user = String(user);
+  if (Array.isArray(types) && types.length) filter.type = { $in: types.map(String) };
   return (await dbConnection
     .collection('activity_log')
     .find(filter)
     .sort({ createdAt: -1 })
-    .limit(Math.min(200, Math.max(1, Number(limit) || 80)))
+    .limit(Math.min(500, Math.max(1, Number(limit) || 80)))
     .toArray()).map(withId);
 }
 
