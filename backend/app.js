@@ -79,6 +79,19 @@ if (!process.env.VERCEL) {
       .catch((err) => console.warn('[promo] revisión diaria falló:', err.message));
   setTimeout(sweepPromos, 60 * 1000).unref();
   setInterval(sweepPromos, 24 * 60 * 60 * 1000).unref();
+
+  // Resumen diario por correo al dueño: cada 15 min revisa qué tiendas ya pasaron su hora de cierre.
+  const mailUtils = require('./utils/mail.utils');
+  const dailySummary = require('./services/daily-summary.service');
+  const sendSummaries = () => {
+    if (!mailUtils.hasSmtpConfig()) return Promise.resolve();
+    return ensureConnection()
+      .then(() => dailySummary.sendDue(require('./database/mongodb'), mailUtils))
+      .then((n) => n && console.log(`[resumen diario] ${n} correo(s) enviados`))
+      .catch((err) => console.warn('[resumen diario] revisión falló:', err.message));
+  };
+  setTimeout(sendSummaries, 2 * 60 * 1000).unref();
+  setInterval(sendSummaries, 15 * 60 * 1000).unref();
 }
 
 module.exports = app;

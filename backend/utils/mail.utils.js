@@ -121,6 +121,10 @@ async function sendPaymentConfirmedEmail(opts) {
   return sendTemplated(opts.to, templates.paymentConfirmedEmail(opts));
 }
 
+async function sendDailySummaryEmail(opts) {
+  return sendTemplated(opts.to, templates.dailySummaryEmail(opts));
+}
+
 async function sendSubscriptionCancelledEmail(opts) {
   return sendTemplated(opts.to, templates.subscriptionCancelledEmail(opts));
 }
@@ -194,6 +198,7 @@ module.exports = {
   sendWelcomeEmail,
   sendPaymentConfirmedEmail,
   sendSubscriptionCancelledEmail,
+  sendDailySummaryEmail,
   sendSupportReceivedEmail,
   sendInvoiceRequestCustomerEmail,
   sendInvoiceRequestStoreEmail,

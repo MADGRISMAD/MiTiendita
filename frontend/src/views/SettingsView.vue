@@ -231,6 +231,29 @@
               <p v-else class="state-line off"><i></i>Apagada: con tarjeta se cobra lo mismo que en efectivo.</p>
             </section>
             <section class="adm-card cfg-card">
+              <div class="switch-head">
+                <div>
+                  <h3>Resumen diario por correo</h3>
+                  <p class="adm-hint">
+                    Cada noche, después de las 9 pm, te mandamos las ventas del día, cómo cerró la caja, las anulaciones y lo que hay
+                    que resurtir. Si ese día no hubo movimiento, no te escribimos.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  class="adm-switch"
+                  :aria-checked="form.dailySummaryEnabled"
+                  aria-label="Resumen diario por correo"
+                  @click="form.dailySummaryEnabled = !form.dailySummaryEnabled"
+                ></button>
+              </div>
+              <label v-if="form.dailySummaryEnabled" class="adm-field">
+                Correo donde lo recibes
+                <input v-model.trim="form.dailySummaryEmail" type="email" class="adm-inp" maxlength="120" placeholder="tu@correo.com" autocomplete="email" />
+              </label>
+            </section>
+            <section class="adm-card cfg-card">
               <h3>Etiquetas de báscula</h3>
               <p class="adm-hint">
                 Si tu báscula imprime etiquetas con código de barras (empiezan con 20 a 29), da de alta el producto a granel con la
@@ -809,13 +832,15 @@ function fromStore() {
     cardFeeEnabled: Boolean(s.cardFeeEnabled),
     cardFeePercent: Number(s.cardFeePercent ?? 4),
     scaleBarcodeMode: s.scaleBarcodeMode === "price" ? "price" : "weight",
+    dailySummaryEnabled: Boolean(s.dailySummaryEnabled),
+    dailySummaryEmail: s.dailySummaryEmail || authStore.email || "",
   };
 }
 const form = reactive(fromStore());
 const snapshot = ref(JSON.stringify(fromStore()));
 const FIELDS_BY_SECTION = {
   negocio: ["businessName", "businessType", "address", "phone", "logoUrl", "primaryColor", "accentColor", "timezone"],
-  ventas: ["taxPercent", "cardFeeEnabled", "cardFeePercent", "scaleBarcodeMode"],
+  ventas: ["taxPercent", "cardFeeEnabled", "cardFeePercent", "scaleBarcodeMode", "dailySummaryEnabled", "dailySummaryEmail"],
   inventario: ["inventoryEnabled", "allowNegativeStock", "costMethod"],
 };
 const dirty = computed(() => JSON.stringify({ ...form }) !== snapshot.value);
@@ -903,6 +928,10 @@ async function save() {
     saveErr.value = nameError.value || taxError.value || feeError.value;
     return;
   }
+  if (form.dailySummaryEnabled && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(form.dailySummaryEmail || "").trim())) {
+    saveErr.value = "Escribe un correo válido para recibir el resumen diario.";
+    return;
+  }
   saving.value = true;
   saveErr.value = "";
   const wasInventory = JSON.parse(snapshot.value).inventoryEnabled;
@@ -925,6 +954,8 @@ async function save() {
         cardFeeEnabled: Boolean(form.cardFeeEnabled),
         cardFeePercent: Math.min(30, Math.max(0, Number(form.cardFeePercent) || 0)),
         scaleBarcodeMode: form.scaleBarcodeMode === "price" ? "price" : "weight",
+        dailySummaryEnabled: Boolean(form.dailySummaryEnabled),
+        dailySummaryEmail: String(form.dailySummaryEmail || "").trim(),
       },
       { strict: true }
     );

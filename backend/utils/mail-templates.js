@@ -261,6 +261,47 @@ function paymentConfirmedEmail({ businessName, planName, interval, amount, perio
   };
 }
 
+function dailySummaryEmail({ storeName, dayLabel, summary, appUrl }) {
+  const s = summary;
+  const mx = (n) => `$${(Number(n) || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const cash =
+    s.cash == null
+      ? 'No se hizo corte de caja hoy'
+      : Math.abs(s.cash.difference) < 0.005
+        ? 'El corte cuadró'
+        : s.cash.difference < 0
+          ? `Faltante de ${mx(-s.cash.difference)}`
+          : `Sobrante de ${mx(s.cash.difference)}`;
+  const low = (s.lowStock || [])
+    .map((f) => `<li style="margin:0 0 4px">${escapeHtml(f.name)} — ${escapeHtml(String(f.stock))} pza</li>`)
+    .join('');
+  return {
+    subject: `Resumen de ${storeName || 'tu tienda'} · ${dayLabel} · ${mx(s.total)}`,
+    html: renderMachote({
+      eyebrow: 'Resumen del día',
+      title: `${storeName || 'Tu tienda'} · ${dayLabel}`,
+      body: [
+        dataBox([
+          { label: 'Ventas', value: `${mx(s.total)} (${s.count} ${s.count === 1 ? 'ticket' : 'tickets'})` },
+          { label: 'Ticket promedio', value: mx(s.avgTicket) },
+          { label: 'Utilidad aprox.', value: s.profit == null ? null : mx(s.profit) },
+          { label: 'Efectivo', value: mx(s.byMethod.cash) },
+          { label: 'Tarjeta', value: mx(s.byMethod.card) },
+          { label: 'Transferencia', value: mx(s.byMethod.transfer) },
+          { label: 'Fiado nuevo', value: s.credit > 0 ? mx(s.credit) : null },
+          { label: 'Anulaciones', value: s.voids.count ? `${s.voids.count} por ${mx(s.voids.total)}` : null },
+          { label: 'Caja', value: cash },
+        ]),
+        low
+          ? `<p style="margin:16px 0 6px;font-size:14px;font-weight:800;color:${BRAND.ink}">Por resurtir</p><ul style="margin:0 0 12px;padding-left:18px;font-size:14px;color:${BRAND.ink}">${low}</ul>`
+          : '',
+        cta(`${appUrl}/dashboard`, 'Abrir mi tienda'),
+      ].join(''),
+      footerNote: 'Recibes este correo porque activaste el resumen diario. Puedes apagarlo en Configuración.',
+    }),
+  };
+}
+
 function subscriptionCancelledEmail({ businessName, planName, periodEnd, appUrl }) {
   return {
     subject: `Suscripción cancelada — ${planName}`,
@@ -487,6 +528,7 @@ module.exports = {
   welcomeEmail,
   paymentConfirmedEmail,
   subscriptionCancelledEmail,
+  dailySummaryEmail,
   supportReceivedEmail,
   supportReplyEmail,
   ownerMonthlyReport,

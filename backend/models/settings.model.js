@@ -29,6 +29,9 @@ const settingsSchema = Joi.object({
   cardFeePercent: Joi.number().min(0).max(30).default(4),
   /** Códigos de báscula (EAN-13 que empieza con 20–29): el número trae el peso en gramos o el importe en centavos */
   scaleBarcodeMode: Joi.string().valid('weight', 'price').default('weight'),
+  /** Resumen diario por correo al dueño (sin default: guardar otros ajustes no lo apaga) */
+  dailySummaryEnabled: Joi.boolean().optional(),
+  dailySummaryEmail: Joi.string().trim().email().allow('').max(120).optional(),
   setupCompleted: Joi.boolean().default(true),
   updatedAt: Joi.date().optional(),
   createdAt: Joi.date().optional(),

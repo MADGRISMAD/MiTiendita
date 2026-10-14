@@ -757,6 +757,31 @@ async function DeleteInvite(id, tenantId) {
   return await dbConnection.collection('invites').deleteOne(filter);
 }
 
+/** Cortes de caja hechos en un rango (para el resumen diario). */
+async function GetClosedCashSessionsBetween(tenantId, from, to) {
+  return (await dbConnection
+    .collection('cash_sessions')
+    .find({ tenantId, status: 'closed', closedAt: { $gte: new Date(from), $lte: new Date(to) } })
+    .toArray()).map(withId);
+}
+/** Tiendas con el resumen diario activado y correo destino. */
+async function ListSettingsWithDailySummary() {
+  return dbConnection
+    .collection('settings')
+    .find({ dailySummaryEnabled: true, dailySummaryEmail: { $type: 'string', $ne: '' } })
+    .toArray();
+}
+/** Reserva el envío de hoy de forma atómica: solo una instancia lo consigue. */
+async function ClaimDailySummary(tenantId, dayKey) {
+  const r = await dbConnection
+    .collection('settings')
+    .updateOne({ tenantId, lastDailySummary: { $ne: dayKey } }, { $set: { lastDailySummary: dayKey } });
+  return r.modifiedCount === 1;
+}
+async function ReleaseDailySummary(tenantId, dayKey) {
+  await dbConnection.collection('settings').updateOne({ tenantId, lastDailySummary: dayKey }, { $unset: { lastDailySummary: '' } });
+}
+
 async function GetOpenCashSession(tenantId) {
   return withId(await dbConnection.collection('cash_sessions').findOne({ tenantId, status: 'open' }));
 }
@@ -1375,7 +1400,7 @@ async function Ping() {
 }
 
 module.exports = {
-  Ping,
+  Ping, GetClosedCashSessionsBetween, ListSettingsWithDailySummary, ClaimDailySummary, ReleaseDailySummary,
   ensureConnection,
   CreateTenant, GetTenantById, UpdateTenant, ListTenants, CountUsersByTenant, CountPendingInvites, ListUsersByTenant, GetTenantByMpPreapprovalId,
   CreateUser, FindUserByEmail, LoginUsuario, FindUserByUsername, UpdateUserById, FindUserByResetToken,

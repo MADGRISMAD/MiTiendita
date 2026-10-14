@@ -21,6 +21,8 @@ const defaultSettings = {
   cardFeeEnabled: false,
   cardFeePercent: 4,
   scaleBarcodeMode: "weight",
+  dailySummaryEnabled: false,
+  dailySummaryEmail: "",
   setupCompleted: false,
 };
 
