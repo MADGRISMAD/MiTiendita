@@ -218,6 +218,9 @@
         </div>
       </section>
 
+      <!-- ============ Conteo ============ -->
+      <StocktakePanel v-else-if="tab === 'conteo'" :is-admin="isAdmin" :menus="menus" @applied="loadFoods(); loadActivity()" />
+
       <!-- ============ Compras ============ -->
       <section v-else-if="tab === 'compras'" class="sec" :class="{ 'adm-loading': loading.purchases }">
         <div class="adm-kpis">
@@ -614,6 +617,7 @@ import { computed, nextTick, onMounted, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import "../admin.css";
 import AppShell from "../components/AppShell.vue";
+import StocktakePanel from "../components/StocktakePanel.vue";
 import PosIcon from "../components/PosIcon.js";
 import { apiService } from "../apiService";
 import { venueStore, fetchVenueSettings } from "../venueStore";
@@ -641,7 +645,7 @@ const ADJUST_REASONS = [
   { id: "internal", label: "Consumo o regalo" },
   { id: "other", label: "Otro" },
 ];
-const TAB_IDS = ["existencias", "sugerido", "caducidad", "compras", "proveedores", "bitacora"];
+const TAB_IDS = ["existencias", "sugerido", "caducidad", "conteo", "compras", "proveedores", "bitacora"];
 
 const route = useRoute();
 const router = useRouter();
@@ -1206,6 +1210,7 @@ const tabs = computed(() => [
   { id: "existencias", label: "Existencias", count: stockCounts.value.out + stockCounts.value.low, alert: stockCounts.value.out > 0 },
   { id: "sugerido", label: "Pedido sugerido", short: "Sugerido", count: suggestionCount.value },
   { id: "caducidad", label: "Caducidad", count: expiryAlert.value, alert: Number(expiry.value?.summary?.expired || 0) > 0 },
+  { id: "conteo", label: "Conteo" },
   { id: "compras", label: "Compras" },
   { id: "proveedores", label: "Proveedores", count: suppliers.value.length },
   { id: "bitacora", label: "Bitácora" },

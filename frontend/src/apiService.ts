@@ -689,6 +689,25 @@ export const apiService = {
     return axios.get('/inventory/suggestions').then((r) => r.data);
   },
   /** Ajuste manual de existencia (conteo, merma); queda en la bitácora. */
+  // Conteo de inventario
+  getStocktakes() {
+    return axios.get('/inventory/counts').then((r) => r.data);
+  },
+  createStocktake(data: { menuId?: string; name?: string }) {
+    return axios.post('/inventory/counts', data).then((r) => r.data);
+  },
+  getStocktake(id: string) {
+    return axios.get(`/inventory/counts/${id}`).then((r) => r.data);
+  },
+  saveStocktakeCounts(id: string, counts: { foodId: string; counted: number | null; note?: string }[]) {
+    return axios.put(`/inventory/counts/${id}/lines`, { counts }).then((r) => r.data);
+  },
+  applyStocktake(id: string) {
+    return axios.post(`/inventory/counts/${id}/apply`).then((r) => r.data);
+  },
+  cancelStocktake(id: string) {
+    return axios.post(`/inventory/counts/${id}/cancel`).then((r) => r.data);
+  },
   adjustStock(data: { foodId: string; stock: number; reason: string; note?: string }) {
     return axios.post('/inventory/adjust', data).then((r) => r.data);
   },

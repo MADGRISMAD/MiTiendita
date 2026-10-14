@@ -569,6 +569,15 @@ async function RestoreSaleStock(id, quantity, allocations, tenantId) {
   }
   return IncrementFoodStock(id, qty, tenantId);
 }
+/** Suma o resta (delta con signo) a la existencia, de forma atómica y a 3 decimales. Lo usa el conteo de inventario. */
+async function AdjustFoodStock(id, delta, tenantId) {
+  const filter = oidFilter(id, tenantId);
+  if (!filter) return null;
+  const d = Math.round((Number(delta) || 0) * 1000) / 1000;
+  if (!d) return GetFoodById(id, tenantId);
+  await dbConnection.collection('foods').updateOne(filter, { $inc: { stock: d }, $set: { updatedAt: new Date() } });
+  return GetFoodById(id, tenantId);
+}
 /** Suma piezas al inventario (entrada por compra / pack). */
 async function IncrementFoodStock(id, quantity, tenantId) {
   const filter = oidFilter(id, tenantId);
@@ -1333,7 +1342,7 @@ module.exports = {
   GetSettings, CreateSettings, UpdateSettings,
   GetMenus, GetMenuById, CreateMenu, UpdateMenu, DeleteMenu,
   GetFoods, CountPlanFoods, CreateFoods, DeleteUnpricedCatalogFoods, DeleteEmptyCatalogMenus, ListSettingsNeedingCatalog, CountPaidOrders, CountCashSessions, GetFoodById, GetFoodByBarcode, CreateFood, UpdateFood, ReserveSaleStock, ConsumeSaleLots, RestoreSaleStock, IncrementFoodStock, DeleteFood, GetLowStockFoods, SearchFoods,
-  CreateBillingEvent, ListBillingEvents, getCollection, ListUsersByTenants, GetSettingsMany, appState,
+  AdjustFoodStock, CreateBillingEvent, ListBillingEvents, getCollection, ListUsersByTenants, GetSettingsMany, appState,
   RecordLoginFailure, ClearLoginFailures, FindUserById, BumpUserTokenVersion, CountActiveAdmins, FindUserInTenant,
   CreateSession, FindSessionByHash, RevokeSession, RevokeUserSessions,
   GetOrders, GetOrderById, GetOrderByInvoiceToken, GetOrderByClientSaleId, CreateOrder, UpdateOrder, DeleteOrder, GetOrdersByCashSession,
