@@ -1591,6 +1591,7 @@ import {
   unitOf,
 } from "../bulk";
 import { apiService as apiSvc } from "../apiService";
+import { matchCustomers, quickCustomerPayload } from "../saleCustomer";
 import { authStore } from "../authStore";
 import { isNetworkError, newClientSaleId } from "../net";
 import {
@@ -1825,21 +1826,13 @@ export default {
     const creatingCustomer = ref(false);
     const customersReady = computed(() => offlineStore.online);
     const saleCustomer = computed(() => creditCustomers.value.find((c) => c.id === saleCustomerId.value) || null);
-    const saleCustomerMatches = computed(() => {
-      const term = fold(saleCustomerQuery.value.trim());
-      if (!term) return [];
-      const digits = saleCustomerQuery.value.replace(/\D/g, "");
-      return creditCustomers.value
-        .filter((c) => fold(c.name).includes(term) || (digits.length >= 3 && String(c.phone || "").replace(/\D/g, "").includes(digits)))
-        .slice(0, 5);
-    });
+    const saleCustomerMatches = computed(() => matchCustomers(creditCustomers.value, saleCustomerQuery.value));
     async function createSaleCustomer() {
       const raw = saleCustomerQuery.value.trim();
       if (!raw || creatingCustomer.value) return;
       creatingCustomer.value = true;
       try {
-        const isPhone = /^[\d\s()+-]{7,}$/.test(raw);
-        const created = await apiService.createCustomer(isPhone ? { name: "Cliente " + raw.replace(/\D/g, "").slice(-4), phone: raw } : { name: raw });
+        const created = await apiService.createCustomer(quickCustomerPayload(raw));
         creditCustomers.value.push(created);
         saleCustomerId.value = created.id;
         saleCustomerQuery.value = "";

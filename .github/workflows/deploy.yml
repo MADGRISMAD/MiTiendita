@@ -32,6 +32,9 @@ jobs:
       - name: Tests del backend
         run: npm test --workspace backend
 
+      - name: Tests del frontend
+        run: npm test --workspace frontend
+
       - name: Compilar el frontend (incluye la revisión de SEO)
         run: npm run front:prod
 
