@@ -6325,8 +6325,10 @@ html[data-theme="dark"] .avatar {
     background: var(--timber-panel);
   }
   .tile:hover:not(:disabled) { transform: none; box-shadow: none; }
-  .tile-name { font-size: 0.93rem; }
+  /* El nombre se encoge (hasta 2 renglones) para que el precio no se salga de la pantalla */
+  .tile-name { flex: 1 1 auto; min-width: 0; font-size: 0.93rem; }
   .tile-foot {
+    flex-shrink: 0;
     flex-direction: column;
     align-items: flex-end;
     flex-wrap: nowrap;

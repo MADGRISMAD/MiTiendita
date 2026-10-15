@@ -1,10 +1,5 @@
 <template>
   <section id="proveedores" ref="root" class="pt" :class="{ live: inView, still: reduced }" aria-labelledby="pt-title">
-    <div class="pt-glow" aria-hidden="true">
-      <span class="g1"></span>
-      <span class="g2"></span>
-    </div>
-
     <!-- ═══ Encabezado + portal animado ═══ -->
     <div class="pt-wrap pt-hero">
       <div class="pt-copy" :class="{ in: seen.hero }" data-pt="hero">
@@ -364,13 +359,6 @@ onBeforeUnmount(() => {
   padding: 1.5rem 0 3rem;
   overflow: clip;
 }
-.pt-glow { position: absolute; inset: 0; pointer-events: none; z-index: -1; }
-.pt-glow span { position: absolute; border-radius: 50%; filter: blur(60px); opacity: 0.35; }
-.pt-glow .g1 { width: 26rem; height: 26rem; top: 2rem; right: -6rem; background: color-mix(in srgb, var(--timber-primary) 55%, transparent); }
-.pt-glow .g2 { width: 22rem; height: 22rem; top: 40%; left: -8rem; background: color-mix(in srgb, var(--pt-accent) 45%, transparent); }
-.pt.live:not(.still) .pt-glow .g1 { animation: pt-float 14s ease-in-out infinite alternate; }
-.pt.live:not(.still) .pt-glow .g2 { animation: pt-float 18s ease-in-out infinite alternate-reverse; }
-@keyframes pt-float { to { transform: translate(-3rem, 2rem) scale(1.15); } }
 
 .pt-wrap { max-width: 64rem; margin: 0 auto; padding: 2rem 1.15rem; }
 .pt-kicker {
@@ -384,7 +372,7 @@ onBeforeUnmount(() => {
 
 h2, h3 { font-family: var(--font-display); letter-spacing: -0.035em; line-height: 1.12; margin: 0.35rem 0 0; }
 h2 { font-size: clamp(1.7rem, 3.6vw, 2.6rem); font-weight: 800; }
-h2 em { font-style: normal; background: linear-gradient(100deg, var(--timber-primary), var(--pt-accent)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+h2 em { font-style: normal; color: var(--timber-primary); }
 h3 { font-size: clamp(1.3rem, 2.6vw, 1.85rem); font-weight: 800; }
 
 /* Aparecer: cada bloque entra al verlo (sin animación si el usuario lo pidió) */
@@ -413,8 +401,6 @@ h3 { font-size: clamp(1.3rem, 2.6vw, 1.85rem); font-weight: 800; }
   border: 1px solid var(--timber-line);
   box-shadow: 0 30px 60px -20px rgba(8, 20, 40, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.04) inset;
 }
-.pt.live:not(.still) .pt-device.in { animation: pt-bob 6s ease-in-out infinite; }
-@keyframes pt-bob { 50% { transform: translateY(-8px); } }
 .dev-top { display: flex; align-items: center; gap: 0.6rem; padding: 0.65rem 0.9rem; background: var(--timber-topbar, #12305a); color: #fff; font-weight: 800; font-size: 0.82rem; }
 .dev-dots { display: inline-flex; gap: 0.3rem; }
 .dev-dots i { width: 0.55rem; height: 0.55rem; border-radius: 50%; background: rgba(255, 255, 255, 0.35); }
@@ -473,8 +459,7 @@ h3 { font-size: clamp(1.3rem, 2.6vw, 1.85rem); font-weight: 800; }
 
 .sim-result {
   display: grid; gap: 1rem; padding: 1.3rem; border-radius: 1.2rem; color: #fff;
-  background: linear-gradient(140deg, var(--timber-primary), color-mix(in srgb, var(--timber-primary) 55%, #071426));
-  box-shadow: 0 24px 50px -24px color-mix(in srgb, var(--timber-primary) 70%, transparent);
+  background: var(--timber-primary);
 }
 .res-main { display: grid; gap: 0.1rem; }
 .res-main small, .res-row small { font-size: 0.74rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; opacity: 0.8; }
