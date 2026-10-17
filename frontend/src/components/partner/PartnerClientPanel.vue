@@ -18,108 +18,110 @@
         </div>
       </div>
 
-      <p v-if="detail.attention" class="adm-banner" :class="detail.attention.tone === 'bad' ? 'err' : 'warn'" role="status">
-        {{ detail.attention.label }}
-      </p>
+      <div class="pf-tab-body pf-card-stack">
+        <p v-if="detail.attention" class="adm-banner" :class="detail.attention.tone === 'bad' ? 'err' : 'warn'" role="status">
+          {{ detail.attention.label }}
+        </p>
 
-      <dl class="pf-facts">
-        <div class="pf-fact">
-          <dt>Dueño</dt>
-          <dd>{{ detail.ownerName || "Sin dueño" }}</dd>
-          <small v-if="detail.ownerEmail"><a :href="`mailto:${detail.ownerEmail}`">{{ detail.ownerEmail }}</a></small>
-          <small v-if="phone">
-            <a :href="`tel:${phone}`">{{ phone }}</a> ·
-            <a :href="whatsapp" target="_blank" rel="noopener">WhatsApp</a>
-          </small>
-        </div>
-        <div class="pf-fact">
-          <dt>Plan</dt>
-          <dd>{{ detail.planName }}</dd>
-          <small>{{ planNote }}</small>
-        </div>
-        <div class="pf-fact">
-          <dt>Llegó contigo</dt>
-          <dd>{{ shortDate(detail.referredAt) }}</dd>
-          <small>{{ ago(detail.referredAt) }}</small>
-        </div>
-        <div class="pf-fact">
-          <dt>Quién la atiende</dt>
-          <dd v-if="!canManage">{{ detail.assigneeName || "Sin asignar" }}</dd>
-          <select v-else v-model="assignee" class="adm-inp" :disabled="busy" aria-label="Quién la atiende" @change="saveAssignee">
-            <option value="">Sin asignar</option>
-            <option v-for="m in activeTeam" :key="m.username" :value="m.username">{{ m.fullName }}</option>
-          </select>
-        </div>
-      </dl>
-      <p v-if="ok" class="pf-ok" role="status">{{ ok }}</p>
-
-      <section v-if="detail.usage" class="pf-card-stack" aria-labelledby="pu-title">
-        <h3 id="pu-title" class="pf-section-title">Cómo usa Mi Tiendita</h3>
-        <div class="pf-two even">
+        <dl class="pf-facts">
           <div class="pf-fact">
-            <dt>Cuentas</dt>
-            <dd class="pf-num">{{ detail.usage.users.used }}{{ cap(detail.usage.users.max) }}</dd>
+            <dt>Dueño</dt>
+            <dd>{{ detail.ownerName || "Sin dueño" }}</dd>
+            <small v-if="detail.ownerEmail"><a :href="`mailto:${detail.ownerEmail}`">{{ detail.ownerEmail }}</a></small>
+            <small v-if="phone">
+              <a :href="`tel:${phone}`">{{ phone }}</a> ·
+              <a :href="whatsapp" target="_blank" rel="noopener">WhatsApp</a>
+            </small>
           </div>
           <div class="pf-fact">
-            <dt>Productos</dt>
-            <dd class="pf-num">{{ detail.usage.products.used }}{{ cap(detail.usage.products.max) }}</dd>
+            <dt>Plan</dt>
+            <dd>{{ detail.planName }}</dd>
+            <small>{{ planNote }}</small>
           </div>
           <div class="pf-fact">
-            <dt>Configuración</dt>
-            <dd>{{ detail.setupCompleted ? "Terminada" : "Pendiente" }}</dd>
+            <dt>Llegó contigo</dt>
+            <dd>{{ shortDate(detail.referredAt) }}</dd>
+            <small>{{ ago(detail.referredAt) }}</small>
           </div>
-        </div>
-      </section>
+          <div class="pf-fact">
+            <dt>Quién la atiende</dt>
+            <dd v-if="!canManage">{{ detail.assigneeName || "Sin asignar" }}</dd>
+            <select v-else v-model="assignee" class="adm-inp" :disabled="busy" aria-label="Quién la atiende" @change="saveAssignee">
+              <option value="">Sin asignar</option>
+              <option v-for="m in activeTeam" :key="m.username" :value="m.username">{{ m.fullName }}</option>
+            </select>
+          </div>
+        </dl>
+        <p v-if="ok" class="pf-ok" role="status">{{ ok }}</p>
 
-      <ClientNotes :tenant-id="detail.id" :notes="detail.notes" />
-
-      <section class="pf-card-stack" aria-labelledby="pp-title">
-        <h3 id="pp-title" class="pf-section-title">Personas de la tienda</h3>
-        <ul class="pf-list">
-          <li v-for="p in detail.people" :key="p.id" class="pf-row static">
-            <ClientAvatar :name="p.name" size="2.2rem" />
-            <span class="body">
-              <span class="top"><strong>{{ p.name }}</strong><span class="pf-chip">{{ p.role }}</span></span>
-              <span class="sub">{{ p.email }} · {{ p.lastLoginAt ? `entró ${ago(p.lastLoginAt)}` : "nunca ha entrado" }}<template v-if="p.disabled"> · desactivada</template></span>
-            </span>
-          </li>
-        </ul>
-      </section>
-
-      <section v-if="detail.commissions" class="pf-card-stack" aria-labelledby="pc-title">
-        <h3 id="pc-title" class="pf-section-title">Lo que te ha dejado esta tienda</h3>
-        <p v-if="!detail.commissions.length" class="pf-muted">Todavía no paga: la comisión llega con su primer cobro.</p>
-        <div v-else class="pf-table-wrap">
-          <table class="pf-table">
-            <thead>
-              <tr><th scope="col">Fecha</th><th scope="col" class="num">Cobro</th><th scope="col" class="num">Tu comisión</th><th scope="col">Estado</th></tr>
-            </thead>
-            <tbody>
-              <tr v-for="c in detail.commissions" :key="c.id" :class="{ void: c.status === 'void' }">
-                <td>{{ shortDate(c.createdAt) }}</td>
-                <td class="num">{{ money(c.amount) }}</td>
-                <td class="num"><strong>{{ money(c.commission) }}</strong> <small class="pf-muted">({{ Math.round(c.rate * 100) }}%)</small></td>
-                <td><span class="adm-pill" :class="COMMISSION[c.status].tone">{{ COMMISSION[c.status].label }}</span></td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section class="pf-card-stack" aria-labelledby="ph-title">
-        <h3 id="ph-title" class="pf-section-title">Historia de su cuenta</h3>
-        <ul v-if="detail.history.length" class="pf-timeline">
-          <li v-for="h in detail.history" :key="h.id">
-            <span class="dot" aria-hidden="true"></span>
-            <div>
-              <p>{{ h.note || h.type }}</p>
-              <small v-if="h.amount != null">{{ money(h.amount) }}</small>
+        <section v-if="detail.usage" class="pf-card-stack" aria-labelledby="pu-title">
+          <h3 id="pu-title" class="pf-section-title">Cómo usa Mi Tiendita</h3>
+          <div class="pf-two even">
+            <div class="pf-fact">
+              <dt>Cuentas</dt>
+              <dd class="pf-num">{{ detail.usage.users.used }}{{ cap(detail.usage.users.max) }}</dd>
             </div>
-            <time :datetime="h.at">{{ ago(h.at) }}</time>
-          </li>
-        </ul>
-        <p v-else class="pf-muted">Sin movimientos todavía.</p>
-      </section>
+            <div class="pf-fact">
+              <dt>Productos</dt>
+              <dd class="pf-num">{{ detail.usage.products.used }}{{ cap(detail.usage.products.max) }}</dd>
+            </div>
+            <div class="pf-fact">
+              <dt>Configuración</dt>
+              <dd>{{ detail.setupCompleted ? "Terminada" : "Pendiente" }}</dd>
+            </div>
+          </div>
+        </section>
+
+        <ClientNotes :tenant-id="detail.id" :notes="detail.notes" />
+
+        <section class="pf-card-stack" aria-labelledby="pp-title">
+          <h3 id="pp-title" class="pf-section-title">Personas de la tienda</h3>
+          <ul class="pf-list">
+            <li v-for="p in detail.people" :key="p.id" class="pf-row static">
+              <ClientAvatar :name="p.name" size="2.2rem" />
+              <span class="body">
+                <span class="top"><strong>{{ p.name }}</strong><span class="pf-chip">{{ p.role }}</span></span>
+                <span class="sub">{{ p.email }} · {{ p.lastLoginAt ? `entró ${ago(p.lastLoginAt)}` : "nunca ha entrado" }}<template v-if="p.disabled"> · desactivada</template></span>
+              </span>
+            </li>
+          </ul>
+        </section>
+
+        <section v-if="detail.commissions" class="pf-card-stack" aria-labelledby="pc-title">
+          <h3 id="pc-title" class="pf-section-title">Lo que te ha dejado esta tienda</h3>
+          <p v-if="!detail.commissions.length" class="pf-muted">Todavía no paga: la comisión llega con su primer cobro.</p>
+          <div v-else class="pf-table-wrap">
+            <table class="pf-table">
+              <thead>
+                <tr><th scope="col">Fecha</th><th scope="col" class="num">Cobro</th><th scope="col" class="num">Tu comisión</th><th scope="col">Estado</th></tr>
+              </thead>
+              <tbody>
+                <tr v-for="c in detail.commissions" :key="c.id" :class="{ void: c.status === 'void' }">
+                  <td>{{ shortDate(c.createdAt) }}</td>
+                  <td class="num">{{ money(c.amount) }}</td>
+                  <td class="num"><strong>{{ money(c.commission) }}</strong> <small class="pf-muted">({{ Math.round(c.rate * 100) }}%)</small></td>
+                  <td><span class="adm-pill" :class="COMMISSION[c.status].tone">{{ COMMISSION[c.status].label }}</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="pf-card-stack" aria-labelledby="ph-title">
+          <h3 id="ph-title" class="pf-section-title">Historia de su cuenta</h3>
+          <ul v-if="detail.history.length" class="pf-timeline">
+            <li v-for="h in detail.history" :key="h.id">
+              <span class="dot" aria-hidden="true"></span>
+              <div>
+                <p>{{ h.note || h.type }}</p>
+                <small v-if="h.amount != null">{{ money(h.amount) }}</small>
+              </div>
+              <time :datetime="h.at">{{ ago(h.at) }}</time>
+            </li>
+          </ul>
+          <p v-else class="pf-muted">Sin movimientos todavía.</p>
+        </section>
+      </div>
     </section>
   </div>
 </template>

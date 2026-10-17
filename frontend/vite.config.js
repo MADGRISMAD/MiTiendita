@@ -30,12 +30,24 @@ const lan = lanHost()
 const pkgVersion = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')).version
 const commit = String(process.env.VERCEL_GIT_COMMIT_SHA || process.env.GITHUB_SHA || '').slice(0, 7)
 const APP_VERSION = commit ? `${pkgVersion}+${commit}` : pkgVersion
+const BUILT_AT = new Date().toISOString()
+
+// Publica /version.json con la versión y el commit de esta compilación: sirve para comprobar qué versión está en línea
+function versionFile() {
+  return {
+    name: 'version-file',
+    generateBundle() {
+      this.emitFile({ type: 'asset', fileName: 'version.json', source: JSON.stringify({ version: APP_VERSION, commit: commit || null, builtAt: BUILT_AT }, null, 2) })
+    },
+  }
+}
 
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [
     vue(),
     seoPlugin(),
+    versionFile(),
     VitePWA({
       registerType: 'prompt', // la versión nueva espera a que la persona toque «Actualizar» (ver src/appUpdate.js)
       includeAssets: ['logo.svg', 'icons/apple-touch-icon.png', 'icons/favicon-32.png'],
@@ -66,7 +78,7 @@ export default defineConfig({
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,ico,woff2,png}'],
         navigateFallback: '/index.html',
-        navigateFallbackDenylist: [/^\/api/],
+        navigateFallbackDenylist: [/^\/api/, /^\/version\.json$/],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
@@ -91,7 +103,7 @@ export default defineConfig({
   define: {
     'import.meta.env.VITE_LAN_HOST': JSON.stringify(lan),
     __APP_VERSION__: JSON.stringify(APP_VERSION),
-    __APP_BUILT_AT__: JSON.stringify(new Date().toISOString()),
+    __APP_BUILT_AT__: JSON.stringify(BUILT_AT),
   },
   server: {
     host: true,

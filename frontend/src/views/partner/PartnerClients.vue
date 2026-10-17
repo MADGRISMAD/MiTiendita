@@ -43,7 +43,7 @@
         <p v-else class="pf-empty-list">Cargando tiendas…</p>
       </section>
 
-      <div class="pf-pane-detail">
+      <div class="pf-pane-detail pf-fixed">
         <PartnerClientPanel v-if="id" :id="id" :team="team" @updated="patch" @close="close" />
         <div v-else class="adm-card adm-empty">
           <h3>Elige una tienda</h3>

@@ -1,7 +1,7 @@
 /* Área de plataforma (equipo de Mi Tiendita). Se apoya en admin.css (adm-*) y en los tokens de index.css.
    Todo lo propio lleva prefijo pf- para no chocar con otras vistas. */
 
-.pf { max-width: 80rem; margin-inline: auto; }
+.pf { width: min(100%, 80rem); margin-inline: auto; }
 .pf-muted { color: var(--timber-muted); }
 .pf-num { font-variant-numeric: tabular-nums; }
 .pf-grow { flex: 1 1 auto; min-width: 0; }
@@ -293,3 +293,6 @@ a.adm-kpi:hover { border-color: color-mix(in srgb, var(--timber-primary) 40%, va
 .pf-pay legend { padding: 0 0.4rem; font-size: 0.8rem; font-weight: 800; color: var(--timber-muted); }
 .pf-payto { display: grid; gap: 0.35rem; padding: 0.75rem 0.9rem; border-radius: 0.9rem; background: var(--timber-surface); font-size: 0.9rem; }
 .pf-payto p { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+
+/* Finanzas: todas las pestañas ocupan al menos el mismo alto para que la página no brinque al cambiar */
+.pf-finance-body { min-height: calc(100dvh - 15rem); }

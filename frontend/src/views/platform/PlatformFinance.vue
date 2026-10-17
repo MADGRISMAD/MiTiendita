@@ -14,7 +14,7 @@
 
     <p v-if="error" class="adm-banner err" role="alert">{{ error }}</p>
     <p v-if="loading && !books" class="pf-muted">Cargando números…</p>
-    <div v-else-if="books" :class="{ 'adm-loading': loading }">
+    <div v-else-if="books" :class="['pf-finance-body', { 'adm-loading': loading }]">
       <FinanceRevenue v-if="tab === 'ingresos'" :books="books" />
       <FinanceAi v-else-if="tab === 'ia'" :books="books" />
       <FinanceOwners v-else-if="tab === 'socios' && books.isOwner" :books="books" />

@@ -62,7 +62,7 @@
         </details>
       </section>
 
-      <div class="pf-pane-detail">
+      <div class="pf-pane-detail pf-fixed">
         <ReferrerPanel v-if="id" :id="id" @updated="patch" @close="close" />
         <div v-else class="adm-card adm-empty">
           <h3>Elige un vendedor</h3>

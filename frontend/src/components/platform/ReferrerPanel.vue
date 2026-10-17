@@ -43,10 +43,12 @@
         Está pausado: su código ya no sirve para registros nuevos. Sus tiendas actuales siguen generándole comisión.
       </p>
 
-      <ReferrerSummaryTab v-if="tab === 'resumen'" :detail="detail" />
-      <ReferrerClientsTab v-else-if="tab === 'clientes'" :detail="detail" />
-      <ReferrerAccessTab v-else-if="tab === 'accesos'" :detail="detail" />
-      <ReferrerCommissionsTab v-else :detail="detail" @changed="refresh" />
+      <div class="pf-tab-body">
+        <ReferrerSummaryTab v-if="tab === 'resumen'" :detail="detail" />
+        <ReferrerClientsTab v-else-if="tab === 'clientes'" :detail="detail" />
+        <ReferrerAccessTab v-else-if="tab === 'accesos'" :detail="detail" />
+        <ReferrerCommissionsTab v-else :detail="detail" @changed="refresh" />
+      </div>
     </section>
 
     <ReferrerDialog v-if="showEdit" :referrer="detail" @close="showEdit = false" @saved="saved" />
