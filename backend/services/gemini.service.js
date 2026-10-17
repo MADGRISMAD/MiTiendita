@@ -19,7 +19,7 @@ const EXTRACT_PROMPT = `Eres el ayudante de una tienda de abarrotes o farmacia e
 Del texto o de la foto, saca cada producto y, si es factura/nota de proveedor, los datos del proveedor.
 La lista NO siempre es una factura: a veces es una nota escrita a mano, corta y sin precios.
 Responde solo JSON:
-{"supplier":{"name":"","contact":"","whatsapp":"","date":"","expiresAt":""},"items":[{"name":"","cost":0,"price":0,"barcode":"","packs":1,"packSize":1,"lot":"","expiresAt":""}]}
+{"supplier":{"name":"","contact":"","whatsapp":"","date":"","expiresAt":""},"documentTotal":0,"items":[{"name":"","cost":0,"lineTotal":0,"price":0,"barcode":"","packs":1,"packSize":1,"lot":"","expiresAt":""}]}
 
 Proveedor (solo si se ve en la nota/factura; si no, strings vacíos):
 - name: razón social o nombre comercial del proveedor.
@@ -30,10 +30,12 @@ Proveedor (solo si se ve en la nota/factura; si no, strings vacíos):
 
 Significado de campos de producto:
 - name: producto (marca y tamaño si aparecen). Si dice PACK/PAQUETE/CAJA, déjalo en el nombre.
-- cost: precio de COMPRA del renglón. Si no hay dinero, 0.
+- cost: precio de COMPRA de UNA unidad de compra, tal como la cobra el proveedor (una pieza suelta, o UN pet/pack/caja completo). Si no hay dinero, 0.
+- lineTotal: el IMPORTE del renglón tal como está impreso (cantidad × precio). Si la nota no lo trae, 0. No lo calcules tú: cópialo.
+- documentTotal (fuera de items): el TOTAL de la nota/factura tal como está impreso. Si no hay, 0.
 - price: precio de VENTA al cliente por pieza. Si no hay dinero, 0.
 - barcode: código de barras si se ve; si no, "".
-- packs: cuántas piezas (o packs, si es mayoreo) entran. Si no se ve, 1.
+- packs: cuántas piezas (o cuántos pets/packs/cajas, si es mayoreo) compraste. Si no se ve, 1.
 - packSize: cuántas PIEZAS trae cada pack. Si es pieza suelta, 1.
   Si no puedes saber las piezas del pack, packSize = 0.
 - lot: lote / número de lote si aparece; si no, "".
@@ -46,6 +48,9 @@ Cómo leen los dueños (imítalo):
 - "2 aceites 1L" → name "Aceite 1 L", packs 2, packSize 1, cost 0, price 0.
 - "coca 600 a 22" → name "Coca Cola 600 ml", packs 1, price 22. El "a 22" sí es dinero.
 - "3 pack coca 12" → es PACK, packs 3, packSize 12.
+- PET = paquete de botellas. "coca 3L 1 pet de 4" → name "Coca Cola 3 L", packs 1, packSize 4 (son 4 cocas de 3 L).
+  "2 pets de 6 coca 2L" → name "Coca Cola 2 L", packs 2, packSize 6 (12 botellas en total).
+  El número que sigue a "pet de / pet x / pet c/" son las PIEZAS por pet; el número antes de "pet" son los pets.
 - "15 cocas de 600 a 18" → 15 piezas de Coca 600 ml, price 18.
 
 Reglas:
@@ -54,7 +59,9 @@ Reglas:
 - "de 600", "600ml", "1.5 L" son tamaño. Dinero solo si dice $, "a 18", "pesos", "c/u" o es una columna de precio en factura.
 - PACK / PAQUETE / CAJA = mayoreo: packSize = piezas del pack.
 - Factura de proveedor: el monto va en cost. Lista de venta ("a 22"): el monto va en price.
-- Números en pesos, sin $ ni comas.
+- Números en pesos, sin $ ni comas ni separador de miles. "230.000" o "230,000" son doscientos treinta mil (230000); "230.50" son 230 pesos con 50 centavos. Fíjate bien en cuántos dígitos tiene la cifra.
+- Copia TODOS los renglones: no omitas ninguno, aunque no tenga precio ni sea claro. Cada renglón de la nota es un item.
+- Nunca inventes ni "corrijas" cantidades o precios: lee exactamente lo que dice la nota.
 - No incluyas totales, IVA ni RFC como productos.
 - SÍ extrae proveedor, fecha, lote y caducidad cuando existan.
 - Si no lees nada, {"supplier":{"name":"","contact":"","whatsapp":"","date":"","expiresAt":""},"items":[]}.`;
@@ -169,6 +176,8 @@ function brandName(words) {
     .replace(/\b([a-záéíóúñ])/gi, (ch) => ch.toUpperCase());
 }
 
+const PACK_WORD = /\b(packs?|pets?|paq\.?|paquetes?|cjs?|cajas?|bultos?|displays?)\b/i;
+
 /** Nota suelta: "15 cocas de 600" = 15 piezas de Coca 600 ml, sin precio. */
 function parseLooseLine(line) {
   let raw = String(line || '').replace(/\s+/g, ' ').trim();
@@ -195,7 +204,15 @@ function parseLooseLine(line) {
 
   let explicitQty = false;
   let qty = 1;
-  const lead = raw.match(/^(\d{1,4})\s+(?=[a-záéíóúñ])/i);
+  let petPacks = 0;
+  // "1 pet de 4", "2 cajas x 24": el primer número son los paquetes y el segundo las piezas de cada uno
+  raw = raw.replace(/\b(\d{1,3})\s*(?:pets?|packs?|paq\.?|paquetes?|cjs?|cajas?|bultos?|displays?)\s*(?:de|x|c\/)?\s*(\d{1,3})\b/i, (_, n, per) => {
+    if (Number(per) >= 2 && Number(per) <= 200) petPacks = Number(per);
+    qty = Number(n) || 1;
+    explicitQty = true;
+    return ' ';
+  });
+  const lead = explicitQty ? null : raw.match(/^(\d{1,4})\s+(?=[a-záéíóúñ])/i);
   if (lead && Number(lead[1]) >= 1 && Number(lead[1]) <= 5000) {
     qty = Number(lead[1]);
     explicitQty = true;
@@ -203,8 +220,12 @@ function parseLooseLine(line) {
   }
   const marked = raw.match(/\bx\s*(\d{1,4})\b|\b(\d{1,4})\s*(?:pzas?|piezas|unidades|uds?)\b/i);
   if (marked) {
-    qty = Number(marked[1] || marked[2]);
-    explicitQty = true;
+    const n = Number(marked[1] || marked[2]);
+    if (PACK_WORD.test(line) && n >= 2 && n <= 200) petPacks = petPacks || n; // "caja de 25 pzas": son las piezas de cada caja
+    else {
+      qty = n;
+      explicitQty = true;
+    }
     raw = raw.replace(marked[0], ' ');
   }
 
@@ -239,10 +260,11 @@ function parseLooseLine(line) {
     }
   }
 
-  const isPack = /\b(packs?|paq\.?|paquetes?|cjs?|cajas?|bultos?|displays?)\b/i.test(line);
+  const isPack = PACK_WORD.test(line);
   let packSize = isPack ? 0 : 1;
-  if (isPack) {
-    raw = raw.replace(/\b(packs?|paq\.?|paquetes?|cjs?|cajas?|bultos?|displays?)\b/gi, ' ');
+  if (petPacks) packSize = petPacks;
+  if (isPack && !petPacks) {
+    raw = raw.replace(/\b(packs?|pets?|paq\.?|paquetes?|cjs?|cajas?|bultos?|displays?)\b/gi, ' ');
     const ps = raw.match(/\b(\d{1,3})\b/);
     if (ps && Number(ps[1]) >= 2 && Number(ps[1]) <= 48) {
       packSize = Number(ps[1]);
@@ -307,6 +329,7 @@ function absorbLoose(row) {
       packSize: intQty(row?.packSize, 0),
       lot,
       expiresAt,
+      lineTotal: num(row?.lineTotal),
       photo: photoNo(row?.photo),
       fromLoose: false,
     };
@@ -329,6 +352,7 @@ function absorbLoose(row) {
       : intQty(row?.packSize, loose.packSize),
     lot: lot || loose.lot || '',
     expiresAt: expiresAt || loose.expiresAt || '',
+    lineTotal: num(row?.lineTotal),
     fromLoose: true,
   };
 }
@@ -339,11 +363,11 @@ function parsePayload(text) {
   const items = Array.isArray(list)
     ? list
         .map((row) => absorbLoose(row))
-        .filter((row) => row.name && (row.cost > 0 || row.price > 0 || row.packs > 1 || row.packSize !== 1 || row.fromLoose))
+        .filter((row) => row.name && (row.cost > 0 || row.lineTotal > 0 || row.price > 0 || row.packs > 1 || row.packSize !== 1 || row.fromLoose))
         .slice(0, 80)
     : [];
   const supplier = normalizeSupplier(Array.isArray(parsed) ? null : parsed?.supplier);
-  return { items, supplier };
+  return { items, supplier, documentTotal: num(Array.isArray(parsed) ? 0 : parsed?.documentTotal) };
 }
 
 function parseItems(text) {
@@ -406,7 +430,9 @@ async function extractPrices({ text, images = [] }) {
     const reads = await Promise.all(images.map((img, i) => extractPrices({ text: i === 0 ? text : '', images: [img] })));
     const items = reads.flatMap((r, i) => r.items.map((it) => ({ ...it, photo: i + 1 })));
     const supplier = reads.map((r) => r.supplier).find((sup) => sup && sup.name) || reads[0].supplier || emptySupplier();
-    return { items: items.slice(0, 80), supplier };
+    // El total impreso sale en una sola foto (normalmente la última): se toma el más grande que se haya leído
+    const documentTotal = Math.max(0, ...reads.map((r) => Number(r.documentTotal) || 0));
+    return { items: items.slice(0, 80), supplier, documentTotal };
   }
 
   const hasImage = images.length > 0;
@@ -439,7 +465,7 @@ async function extractPrices({ text, images = [] }) {
         contents: [{ role: 'user', parts }],
         generationConfig: {
           temperature: 0.1,
-          maxOutputTokens: 4096,
+          maxOutputTokens: 8192,
           responseMimeType: 'application/json',
           responseSchema: {
             type: 'OBJECT',
@@ -454,6 +480,7 @@ async function extractPrices({ text, images = [] }) {
                   expiresAt: { type: 'STRING' },
                 },
               },
+              documentTotal: { type: 'NUMBER' },
               items: {
                 type: 'ARRAY',
                 items: {
@@ -461,6 +488,7 @@ async function extractPrices({ text, images = [] }) {
                   properties: {
                     name: { type: 'STRING' },
                     cost: { type: 'NUMBER' },
+                    lineTotal: { type: 'NUMBER' },
                     price: { type: 'NUMBER' },
                     barcode: { type: 'STRING' },
                     packs: { type: 'NUMBER' },
@@ -521,6 +549,7 @@ async function extractPrices({ text, images = [] }) {
   return {
     items: mergeItems(loose.items, payload.items).map(publicItem),
     supplier: payload.supplier || emptySupplier(),
+    documentTotal: payload.documentTotal || 0,
   };
 }
 
@@ -534,27 +563,41 @@ function publicItem(row) {
     packSize: row.packSize == null ? 1 : Number(row.packSize),
     lot: String(row.lot || '').trim().slice(0, 60),
     expiresAt: parseDocDate(row.expiresAt),
+    lineTotal: Number(row.lineTotal) > 0 ? Number(row.lineTotal) : 0,
     photo: photoNo(row.photo),
   };
 }
 
 /**
- * Con varias fotos, un producto puede salir en dos (la segunda foto traslapa la primera).
- * Si el mismo producto sale con los mismos datos en otra foto se cuenta una sola vez; si los datos
- * cambian se deja y se avisa para que el dueño decida. Siempre devuelve qué encontró.
+ * Un mismo producto no debe entrar dos veces a la lista (ni por traslape entre fotos ni porque la IA repitió un renglón):
+ *  - mismos datos → se cuenta una sola vez;
+ *  - misma presentación y costo pero otra cantidad → se suman las cantidades en un solo renglón;
+ *  - presentación o costo distintos → se dejan los dos y se avisa.
+ * Siempre devuelve qué encontró para avisarlo en pantalla.
  */
 function flagRepeats(items) {
   const kept = [];
   const repeats = [];
   for (const item of items) {
-    const first = item.photo ? kept.find((k) => k.photo && k.photo !== item.photo && sameItem(k.name, item.name)) : null;
+    const first = kept.find((k) => sameItem(k.name, item.name));
     if (!first) {
-      kept.push(item);
+      kept.push({ ...item });
       continue;
     }
-    const same = first.packs === item.packs && first.packSize === item.packSize && first.cost === item.cost && first.price === item.price;
-    repeats.push({ name: first.name, photos: [first.photo, item.photo], packs: [first.packs, item.packs], counted: same ? 'once' : 'both' });
-    if (!same) kept.push(item);
+    const photos = [first.photo || 0, item.photo || 0];
+    const samePack = first.packSize === item.packSize && first.cost === item.cost && first.price === item.price;
+    const sameQty = first.packs === item.packs;
+    const info = { name: first.name, photos, packs: [first.packs, item.packs] };
+    if (samePack && sameQty) {
+      repeats.push({ ...info, counted: 'once' });
+    } else if (samePack) {
+      first.packs += item.packs;
+      if (first.lineTotal || item.lineTotal) first.lineTotal = (first.lineTotal || 0) + (item.lineTotal || 0);
+      repeats.push({ ...info, counted: 'merged', total: first.packs });
+    } else {
+      kept.push({ ...item });
+      repeats.push({ ...info, counted: 'both' });
+    }
   }
   return { items: kept, repeats };
 }

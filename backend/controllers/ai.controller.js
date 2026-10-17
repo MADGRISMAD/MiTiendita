@@ -72,6 +72,16 @@ function cleanImages(body) {
   return images;
 }
 
+/** Compara lo que se leyó con el total impreso en la nota: si no cuadra, falta o se leyó mal algún renglón. */
+function checkTotals(items, documentTotal) {
+  const read = magic.roundPrice(
+    items.map((it) => magic.enrichItem(it)).reduce((sum, e) => sum + (e.lineTotal > 0 ? e.lineTotal : e.lineCost * e.packs), 0)
+  );
+  const document = magic.roundPrice(documentTotal || 0);
+  const diff = document > 0 ? magic.roundPrice(read - document) : 0;
+  return { read, document, diff, mismatch: document > 0 && read > 0 && Math.abs(diff) > Math.max(1, document * 0.01) };
+}
+
 function validMoney(value) {
   const n = magic.roundPrice(value);
   return Number.isFinite(n) && n >= 0 && n <= 999999 ? n : null;
@@ -160,7 +170,7 @@ async function preview(req, res) {
       text: text || '(sin texto, usa la imagen)',
       images,
     });
-    const found = images.length > 1 ? gemini.flagRepeats(extractedItems(extracted)) : { items: extractedItems(extracted), repeats: [] };
+    const found = gemini.flagRepeats(extractedItems(extracted));
     const items = found.items;
     const repeats = found.repeats;
     const supplier = await matchSupplier(tenantId, extracted?.supplier);
@@ -186,6 +196,7 @@ async function preview(req, res) {
       charged: true,
       ...matched,
       repeats,
+      totals: checkTotals(items, extracted?.documentTotal),
       supplier,
       quota: quotaPayload(plan, reserved.used, limit),
     });

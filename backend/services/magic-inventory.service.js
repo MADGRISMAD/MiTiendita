@@ -53,7 +53,7 @@ function suggestSell(cost) {
 }
 
 function looksLikePack(name) {
-  return /\b(pack|paq\.?|paquete|cjs?|caja|bulto|display)\b/i.test(String(name || ''));
+  return /\b(pack|pets?|paq\.?|paquete|cjs?|caja|bulto|display)\b/i.test(String(name || ''));
 }
 
 /** Intenta sacar piezas por pack del nombre si la IA no lo mandó. */
@@ -64,7 +64,7 @@ function inferPackSize(name, aiPackSize) {
 
   const n = String(name || '');
   const patterns = [
-    /(?:pack|paq\.?|paquete|caja|cjs?|bulto|display)\s*[/\s-]*(\d{1,3})\b/i,
+    /(?:pack|pets?|paq\.?|paquete|caja|cjs?|bulto|display)\s*(?:de|x|c\/)?\s*[/\s-]*(\d{1,3})\b/i,
     /\b(\d{1,3})\s*(?:pzas?|piezas|unidades|uds?)\b/i,
     /\bx\s*(\d{1,3})\b/i,
     /\bc\/\s*(\d{1,3})\b/i,
@@ -99,7 +99,18 @@ function unitCost(packCost, packSize) {
 
 function enrichItem(item) {
   const pack = stockFromItem(item);
-  const lineCost = roundPrice(item.cost || 0);
+  // `cost` es lo que cuesta UNA unidad de compra (pieza o pet/pack). Si la nota trae el importe del renglón,
+  // ese manda: importe ÷ paquetes comprados, así la compra suma exactamente lo que dice la nota.
+  let lineCost = roundPrice(item.cost || 0);
+  const lineTotal = roundPrice(item.lineTotal || 0);
+  let costFixed = false;
+  if (lineTotal > 0) {
+    const perPack = roundPrice(lineTotal / pack.packs);
+    if (lineCost <= 0 || Math.abs(lineCost * pack.packs - lineTotal) > Math.max(1, lineTotal * 0.02)) {
+      costFixed = lineCost > 0;
+      lineCost = perPack;
+    }
+  }
   const cost = pack.packSize > 1 ? unitCost(lineCost, pack.packSize) : lineCost;
   const sell = roundPrice(item.price || 0);
   return {
@@ -110,6 +121,8 @@ function enrichItem(item) {
     stockIn: pack.stockIn,
     isPack: pack.isPack,
     lineCost,
+    lineTotal,
+    costFixed,
     cost,
     price: sell > 0 ? sell : suggestSell(cost),
     lot: String(item.lot || '').trim().slice(0, 60),

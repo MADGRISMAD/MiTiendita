@@ -160,15 +160,23 @@
               </div>
             </div>
 
+            <div v-if="totals?.mismatch" class="mg-msg err" role="alert">
+              <PosIcon name="alert" :size="17" />
+              <span>
+                <b>La suma no cuadra con la nota.</b> Leí {{ money(totals.read) }} y la nota dice {{ money(totals.document) }}
+                ({{ totals.diff > 0 ? "me pasé" : "me faltan" }} {{ money(Math.abs(totals.diff)) }}). Puede faltar un renglón o haberse leído mal un precio o una cantidad: compara con la nota antes de guardar.
+              </span>
+            </div>
             <div v-if="repeats.length" class="mg-msg warn" role="status">
               <PosIcon name="alert" :size="17" />
               <span>
-                <b>Salieron productos repetidos entre fotos.</b> Revisa que no se cuenten doble:
+                <b>Había productos repetidos.</b> Ya los acomodé para que no se cuenten doble:
                 <ul class="mg-repeats">
-                  <li v-for="r in repeats" :key="r.name + r.photos.join()">
-                    {{ r.name }}: fotos {{ r.photos.join(" y ") }}.
-                    <template v-if="r.counted === 'once'">Eran iguales, lo conté una sola vez ({{ r.packs[0] }}).</template>
-                    <template v-else>Con cantidades distintas ({{ r.packs[0] }} y {{ r.packs[1] }}); dejé los dos renglones, borra el que sobre.</template>
+                  <li v-for="r in repeats" :key="r.name + r.photos.join() + r.counted">
+                    {{ r.name }}<template v-if="r.photos[0] && r.photos[1] && r.photos[0] !== r.photos[1]"> (fotos {{ r.photos.join(" y ") }})</template>:
+                    <template v-if="r.counted === 'once'">salía igual dos veces, lo conté una sola vez ({{ r.packs[0] }}).</template>
+                    <template v-else-if="r.counted === 'merged'">salía dos veces ({{ r.packs[0] }} y {{ r.packs[1] }}), lo junté en un renglón de {{ r.total }}.</template>
+                    <template v-else>salía con presentación o costo distintos, dejé los dos renglones; borra el que sobre.</template>
                   </li>
                 </ul>
               </span>
@@ -515,6 +523,7 @@ const saveCount = computed(() => {
   return u + c;
 });
 
+const totals = computed(() => result.value?.totals || null);
 const repeats = computed(() => (Array.isArray(result.value?.repeats) ? result.value.repeats : []));
 const costAlerts = computed(() => picks.value.filter((row) => row.costUp));
 const picksChecked = computed(() => picks.value.filter((row) => row.checked).length);
@@ -602,8 +611,8 @@ function blobToBase64(blob) {
 
 /** Achica la foto en el celular sin congelar la pantalla. */
 async function compressPhoto(file) {
-  const maxSide = 960;
-  const quality = 0.62;
+  const maxSide = 1800; // las notas largas con letra chica no se leen a menos resolución
+  const quality = 0.78;
 
   if (typeof createImageBitmap === "function") {
     const bitmap = await createImageBitmap(file);
