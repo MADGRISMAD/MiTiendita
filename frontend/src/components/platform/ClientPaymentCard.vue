@@ -1,5 +1,5 @@
 <template>
-  <section class="pf-card-stack pf-pay" aria-labelledby="pay-title">
+  <section class="pf-payment" aria-labelledby="pay-title">
     <h3 id="pay-title" class="pf-section-title">Registrar un pago</h3>
     <p class="adm-hint">
       Para pagos recibidos fuera de la app (transferencia, efectivo). Activa el negocio y extiende su periodo pagado.
