@@ -160,21 +160,22 @@
               </div>
             </div>
 
-            <div v-if="totals?.mismatch" class="mg-msg err" role="alert">
-              <PosIcon name="alert" :size="17" />
-              <span>
-                <b>La suma no cuadra con la nota.</b> Leí {{ money(totals.read) }} y la nota dice {{ money(totals.document) }}
-                <template v-if="totals.basis === 'subtotal'">de subtotal</template><template v-else-if="totals.printedTotal && totals.printedTotal !== totals.document">(total {{ money(totals.printedTotal) }} sin impuestos)</template>
-                ({{ totals.diff > 0 ? "me pasé" : "me faltan" }} {{ money(Math.abs(totals.diff)) }}). Puede faltar un renglón o haberse leído mal un precio o una cantidad: compara con la nota antes de guardar.
-                <details class="mg-sum-how">
-                  <summary>Ver cómo sumé</summary>
-                  <ul class="mg-repeats">
-                    <li v-for="(l, i) in totals.lines" :key="i">
-                      {{ l.name }} · {{ l.packs }}<template v-if="l.packSize > 1"> × {{ l.packSize }} pzas</template>: {{ money(l.amount) }}
-                    </li>
-                  </ul>
-                </details>
-              </span>
+            <!-- Comparación en vivo contra el total de la nota: se actualiza al corregir cualquier renglón -->
+            <div class="mg-check-total" :class="checkState.tone" :role="checkState.tone === 'bad' ? 'alert' : 'status'">
+              <div class="mg-check-msg">
+                <PosIcon :name="checkState.tone === 'ok' ? 'check' : 'alert'" :size="17" />
+                <span v-html="checkState.html"></span>
+              </div>
+              <label class="mg-field mg-check-input">
+                <span>Total de la nota</span>
+                <input v-model.number="noteTarget" class="mg-inp num" type="number" min="0" step="0.01" inputmode="decimal" placeholder="Escríbelo para comparar" />
+              </label>
+              <details class="mg-sum-how">
+                <summary>Ver cómo sumé</summary>
+                <ul class="mg-repeats">
+                  <li v-for="(l, i) in liveLines" :key="i">{{ l.name }} · {{ l.packs }}<template v-if="l.packSize > 1"> × {{ l.packSize }} pzas</template>: {{ money(l.amount) }}</li>
+                </ul>
+              </details>
             </div>
             <div v-if="repeats.length" class="mg-msg warn" role="status">
               <PosIcon name="alert" :size="17" />
@@ -568,6 +569,23 @@ const saveCount = computed(() => {
 });
 
 const totals = computed(() => result.value?.totals || null);
+// Total de la nota para comparar: el que leyó la IA, o el que escriba el dueño
+const noteTarget = ref("");
+watch(totals, (t) => { noteTarget.value = t?.document > 0 ? t.document : ""; }, { immediate: true });
+const lineAmountOf = (row) => Number(totalOf(row)) || 0;
+const liveLines = computed(() => [...picks.value, ...news.value].filter((r) => String(r.name || "").trim()).map((r) => ({ name: r.name, packs: r.packs || 1, packSize: r.packSize || 0, amount: lineAmountOf(r) })));
+const liveTotal = computed(() => Math.round(liveLines.value.reduce((t, l) => t + l.amount, 0) * 100) / 100);
+const checkState = computed(() => {
+  const target = Number(noteTarget.value) || 0;
+  const read = liveTotal.value;
+  if (!target) return { tone: "info", html: `Sumo <b>${money(read)}</b> en los renglones. Escribe el <b>total de la nota</b> (antes de IVA, si trae) para comprobar que no falte ni sobre dinero.` };
+  const diff = Math.round((read - target) * 100) / 100;
+  if (Math.abs(diff) <= Math.max(1, target * 0.01)) return { tone: "ok", html: `Los renglones suman <b>${money(read)}</b> y la nota dice <b>${money(target)}</b>. Cuadra.` };
+  return {
+    tone: "bad",
+    html: `<b>${diff > 0 ? "Detecté de más" : "Detecté de menos"}: ${money(Math.abs(diff))}.</b> Los renglones suman ${money(read)} y la nota dice ${money(target)}. Puede ${diff > 0 ? "haber un renglón repetido o un total mal leído" : "faltar un renglón o haberse leído mal una cantidad o precio"}: compara con la nota antes de guardar.`,
+  };
+});
 // Si lo que va a guardarse (costo × piezas que entran) ya no coincide con el importe de la nota, se avisa en el renglón
 function noteGap(row) {
   const total = Number(row?.note?.total) || 0;
@@ -1430,6 +1448,12 @@ onMounted(async () => {
 .mg-note { margin: 0.4rem 0 0.2rem; font-size: 0.82rem; line-height: 1.4; color: var(--timber-muted); }
 .mg-note b { color: var(--timber-text, inherit); }
 .mg-note-warn { color: var(--timber-danger); font-weight: 700; }
+.mg-check-total { display: grid; gap: 0.6rem; padding: 0.75rem 0.9rem; border-radius: 0.9rem; border: 1px solid var(--timber-line); background: var(--timber-surface); }
+.mg-check-total.bad { border-color: var(--timber-danger); background: color-mix(in srgb, var(--timber-danger) 10%, var(--timber-surface)); }
+.mg-check-total.ok { border-color: var(--timber-success); background: color-mix(in srgb, var(--timber-success) 10%, var(--timber-surface)); }
+.mg-check-msg { display: flex; align-items: flex-start; gap: 0.5rem; font-size: 0.88rem; line-height: 1.4; }
+.mg-check-total.bad .mg-check-msg { color: var(--timber-danger); font-weight: 600; }
+.mg-check-input { max-width: 16rem; }
 .mg-sum-how { margin-top: 0.35rem; font-weight: 500; }
 .mg-sum-how summary { cursor: pointer; font-weight: 700; }
 .mg-repeats { margin: 0.3rem 0 0; padding-left: 1.1rem; font-weight: 500; }
