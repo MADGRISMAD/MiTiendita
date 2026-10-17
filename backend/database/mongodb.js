@@ -1216,6 +1216,7 @@ async function CreateBillingEvent(data) {
     interval: data.interval || null,
     amount: data.amount == null ? null : Number(data.amount),
     note: data.note || '',
+    ...(data.months ? { months: Number(data.months) } : {}),
     mpStatus: data.mpStatus || null,
     // Identificador del pago en Mercado Pago: evita registrar dos veces el mismo cobro si el aviso se repite
     ...(data.mpPaymentId ? { mpPaymentId: String(data.mpPaymentId) } : {}),

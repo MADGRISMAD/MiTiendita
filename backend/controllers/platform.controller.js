@@ -1148,21 +1148,47 @@ async function ownerPayments(req, res) {
   }
 }
 
+/**
+ * Pago recibido fuera de la app (transferencia, efectivo). Activa la tienda y extiende su periodo pagado
+ * por los meses indicados (se cuenta desde el fin del periodo vigente, o desde hoy si ya venció).
+ */
 async function manualPayment(req, res) {
   try {
     const tenant = await db.GetTenantById(req.params.id);
     if (!tenant) return res.status(404).send('No encontré ese cliente.');
     const amount = Number(req.body?.amount);
     if (!Number.isFinite(amount) || amount <= 0) return res.status(400).send('Escribe un monto mayor a cero.');
+    const months = req.body?.months == null || req.body.months === '' ? 1 : Number(req.body.months);
+    if (!Number.isInteger(months) || months < 1 || months > 36) return res.status(400).send('Los meses deben ser un número entero de 1 a 36.');
+    const perpetual = isPerpetual(tenant.plan);
     const note = String(req.body?.note || '').trim().slice(0, 200) || 'Cobro registrado a mano';
+
     await db.CreateBillingEvent({
       tenantId: tenant.id,
       type: 'payment',
       plan: tenant.plan,
-      interval: tenant.billingInterval,
+      interval: perpetual ? 'lifetime' : tenant.billingInterval,
       amount,
+      months: perpetual ? null : months,
       note,
     });
+
+    let periodEnd = null;
+    if (!perpetual) {
+      const now = new Date();
+      const current = tenant.currentPeriodEnd ? new Date(tenant.currentPeriodEnd) : null;
+      const base = current && !Number.isNaN(current.getTime()) && current.getTime() > now.getTime() && tenant.billingStatus === 'active' ? current : now;
+      periodEnd = new Date(base);
+      periodEnd.setMonth(periodEnd.getMonth() + months);
+    }
+    await db.UpdateTenant(tenant.id, {
+      billingStatus: 'active',
+      suspendedAt: null,
+      suspendedReason: null,
+      cancelAtPeriodEnd: false,
+      ...(periodEnd ? { currentPeriodEnd: periodEnd } : {}),
+    });
+
     let commission = null;
     if (tenant.referrerId) {
       commission = await referrals.recordPayment({
@@ -1176,10 +1202,10 @@ async function manualPayment(req, res) {
     await audit.record(req, {
       tenantId: tenant.id,
       type: 'manual_payment',
-      message: `Registró un cobro de $${amount.toFixed(2)}${commission ? ` (comisión $${commission.commission.toFixed(2)})` : ''}`,
-      meta: { amount },
+      message: `Registró un pago de $${amount.toFixed(2)}${periodEnd ? ` por ${months} ${months === 1 ? 'mes' : 'meses'} (paga hasta ${periodEnd.toISOString().slice(0, 10)})` : ''}${commission ? ` (comisión $${commission.commission.toFixed(2)})` : ''}`,
+      meta: { amount, months: perpetual ? null : months },
     });
-    return res.status(201).json({ ok: true, commission });
+    return res.status(201).json({ ok: true, commission, currentPeriodEnd: periodEnd });
   } catch (err) {
     return refFail(res, err);
   }

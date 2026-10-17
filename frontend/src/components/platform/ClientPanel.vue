@@ -43,7 +43,10 @@
         <!-- El cuerpo tiene siempre el mismo alto: lo que sobra se desplaza dentro, no cambia el tamaño de la ventana -->
         <div class="pf-tab-body">
           <ClientSummaryTab v-if="tab === 'resumen'" :detail="detail" :can-edit="editable" @changed="reloadQuiet()" />
-          <ClientLicenseTab v-else-if="tab === 'licencia'" :detail="detail" :can-edit="editable" @saved="onSaved" />
+          <div v-else-if="tab === 'licencia'" class="pf-card-stack">
+            <ClientLicenseTab :detail="detail" :can-edit="editable" @saved="onSaved" />
+            <ClientPaymentCard v-if="editable" :detail="detail" @changed="reloadQuiet()" />
+          </div>
           <ClientPeopleTab v-else-if="tab === 'personas'" :detail="detail" />
           <ClientMailTab v-else-if="tab === 'correo'" :detail="detail" :initial-ticket="initialTicket" @waiting="onWaiting" />
           <ClientActivityTab v-else :detail="detail" />
@@ -108,6 +111,7 @@ import ClientAvatar from "./ClientAvatar.vue";
 import StatusPill from "./StatusPill.vue";
 import ClientSummaryTab from "./ClientSummaryTab.vue";
 import ClientLicenseTab from "./ClientLicenseTab.vue";
+import ClientPaymentCard from "./ClientPaymentCard.vue";
 import ClientPeopleTab from "./ClientPeopleTab.vue";
 import ClientMailTab from "./ClientMailTab.vue";
 import ClientActivityTab from "./ClientActivityTab.vue";

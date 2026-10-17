@@ -20,21 +20,6 @@
       <button v-if="detail.referrer" type="button" class="adm-btn danger-ghost" :disabled="busy" @click="remove">Quitar</button>
     </form>
 
-    <form class="pf-inline" @submit.prevent="register">
-      <label class="adm-field">
-        <span>Registrar un cobro hecho fuera de Mercado Pago (MXN)</span>
-        <input v-model="amount" class="adm-inp" type="number" min="1" step="0.01" inputmode="decimal" placeholder="Ej. 3490" />
-      </label>
-      <label class="adm-field grow">
-        <span>Nota</span>
-        <input v-model="note" class="adm-inp" maxlength="200" placeholder="Ej. licencia perpetua, transferencia" />
-      </label>
-      <button type="submit" class="adm-btn" :disabled="busy || !(Number(amount) > 0)">Registrar cobro</button>
-    </form>
-    <p class="adm-hint">
-      Úsalo para pagos en efectivo o transferencia y licencias perpetuas. Si la tienda tiene vendedor, ese cobro también le genera comisión.
-    </p>
-
     <p v-if="error" class="pf-err" role="alert">{{ error }}</p>
     <p v-if="ok" class="pf-ok" role="status">{{ ok }}</p>
   </section>
@@ -43,14 +28,11 @@
 <script setup>
 import { ref } from "vue";
 import { apiService } from "../../apiService";
-import { money } from "../../platform/format";
 
 const props = defineProps({ detail: { type: Object, required: true } });
 const emit = defineEmits(["changed"]);
 
 const code = ref("");
-const amount = ref("");
-const note = ref("");
 const busy = ref(false);
 const error = ref("");
 const ok = ref("");
@@ -81,15 +63,4 @@ const assign = () =>
     () => "Vendedor asignado."
   );
 const remove = () => run(() => apiService.platformSetTenantReferrer(props.detail.id, null), () => "Se quitó el vendedor.");
-const register = () =>
-  run(
-    async () => {
-      const value = Number(amount.value);
-      const res = await apiService.platformManualPayment(props.detail.id, { amount: value, note: note.value });
-      ok.value = res.commission ? `Cobro registrado. Comisión de ${money(res.commission.commission)} para el vendedor.` : "Cobro registrado.";
-      amount.value = "";
-      note.value = "";
-    },
-    () => ok.value
-  );
 </script>

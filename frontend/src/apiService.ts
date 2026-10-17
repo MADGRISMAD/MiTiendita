@@ -625,7 +625,7 @@ export const apiService = {
   platformSetTenantReferrer(tenantId: string, code: string | null) {
     return axios.put(`/platform/tenants/${tenantId}/referrer`, { code }).then((r) => r.data);
   },
-  platformManualPayment(tenantId: string, payload: { amount: number; note?: string }) {
+  platformManualPayment(tenantId: string, payload: { amount: number; months?: number; note?: string }) {
     return axios.post(`/platform/tenants/${tenantId}/manual-payment`, payload).then((r) => r.data);
   },
   checkReferralCode(code: string) {
