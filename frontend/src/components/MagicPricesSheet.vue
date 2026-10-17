@@ -288,10 +288,13 @@
                       <option v-for="opt in row.options" :key="opt.id" :value="opt.id">{{ opt.name }} (hoy {{ money(opt.oldPrice) }})</option>
                     </select>
                   </label>
-                  <div class="mg-fields">
-                    <label class="mg-field"><span>Costo/pza</span><input v-model.number="row.cost" class="mg-inp num" type="number" min="0" step="0.01" inputmode="decimal" /></label>
+                  <div class="mg-fields top">
+                    <label class="mg-field"><span>Costo/pza</span><input :value="row.cost" class="mg-inp num" type="number" min="0" step="any" inputmode="decimal" @input="setCost(row, $event.target.value)" /></label>
                     <label class="mg-field"><span>Venta</span><input v-model.number="row.price" class="mg-inp num" type="number" min="0" step="0.01" inputmode="decimal" /></label>
-                    <label class="mg-field"><span>Entran</span><input v-model.number="row.stockIn" class="mg-inp num" type="number" min="0" step="1" inputmode="numeric" /></label>
+                    <label class="mg-field"><span>Entran</span><input :value="row.stockIn" class="mg-inp num" type="number" min="0" step="1" inputmode="numeric" @input="setStock(row, $event.target.value)" /></label>
+                    <label class="mg-field"><span>Total del renglón</span><input :value="totalOf(row)" class="mg-inp num" type="number" min="0" step="0.01" inputmode="decimal" @input="setTotal(row, $event.target.value)" /></label>
+                  </div>
+                  <div class="mg-fields bottom two">
                     <label class="mg-field"><span>Lote</span><input v-model="row.lot" class="mg-inp" maxlength="60" /></label>
                     <label class="mg-field"><span>Caduca</span><input v-model="row.expiresAt" class="mg-inp" type="date" /></label>
                   </div>
@@ -354,10 +357,13 @@
                     <input v-model.number="row.packSize" class="mg-inp num tiny" type="number" min="0" step="1" aria-label="Piezas por pack" @input="onPackSize(row)" />
                     <span>pzas = <strong>{{ row.stockIn || 0 }}</strong> al inventario</span>
                   </p>
-                  <div class="mg-fields">
-                    <label class="mg-field"><span>Costo/pza</span><input v-model.number="row.cost" class="mg-inp num" type="number" min="0" step="0.01" inputmode="decimal" /></label>
+                  <div class="mg-fields top">
+                    <label class="mg-field"><span>Costo/pza</span><input :value="row.cost" class="mg-inp num" type="number" min="0" step="any" inputmode="decimal" @input="setCost(row, $event.target.value)" /></label>
                     <label class="mg-field"><span>Venta</span><input v-model.number="row.price" class="mg-inp num" type="number" min="0" step="0.01" inputmode="decimal" /></label>
-                    <label class="mg-field"><span>Entran</span><input v-model.number="row.stockIn" class="mg-inp num" type="number" min="0" step="1" inputmode="numeric" /></label>
+                    <label class="mg-field"><span>Entran</span><input :value="row.stockIn" class="mg-inp num" type="number" min="0" step="1" inputmode="numeric" @input="setStock(row, $event.target.value)" /></label>
+                    <label class="mg-field"><span>Total del renglón</span><input :value="totalOf(row)" class="mg-inp num" type="number" min="0" step="0.01" inputmode="decimal" @input="setTotal(row, $event.target.value)" /></label>
+                  </div>
+                  <div class="mg-fields bottom">
                     <label class="mg-field"><span>Lote</span><input v-model="row.lot" class="mg-inp" maxlength="60" /></label>
                     <label class="mg-field"><span>Caduca</span><input v-model="row.expiresAt" class="mg-inp" type="date" /></label>
                     <label class="mg-field">
@@ -828,6 +834,7 @@ function fillPicks(data) {
       expiresAt: String(row.expiresAt || "").slice(0, 10),
       from: row.from,
       note: row.note || null,
+      total: row.note?.total > 0 ? row.note.total : undefined,
       checked: true,
       options: null,
       costUp: Boolean(row.costChanged && row.costDelta > 0),
@@ -856,6 +863,7 @@ function fillPicks(data) {
       expiresAt: String(row.expiresAt || "").slice(0, 10),
       from: row.from,
       note: row.note || null,
+      total: row.note?.total > 0 ? row.note.total : undefined,
       checked: false,
       options: row.options,
       costUp: Boolean(row.costChanged && row.costDelta > 0),
@@ -887,6 +895,7 @@ function fillPicks(data) {
     return {
       key: `n-${i}-${row.name}`,
       note: row.note || null,
+      total: row.note?.total > 0 ? row.note.total : undefined,
       name: row.name,
       cost: Number(row.cost) || 0,
       price: Number(row.price) || 0,
@@ -926,6 +935,37 @@ function onPackSize(row) {
   const packs = Math.max(1, Math.floor(Number(row.packs) || 1));
   const size = Math.max(0, Math.floor(Number(row.packSize) || 0));
   row.stockIn = size > 0 ? packs * size : 0;
+  afterPieces(row);
+}
+
+// Costo por pieza, piezas que entran y total del renglón van ligados: el total es el ancla (es lo que dice la nota)
+const cents = (n) => Math.round((Number(n) || 0) * 100) / 100;
+const num = (raw) => {
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? n : 0;
+};
+function totalOf(row) {
+  if (row.total != null && row.total !== "") return row.total;
+  return cents((Number(row.cost) || 0) * Math.max(0, Math.floor(Number(row.stockIn) || 0))) || "";
+}
+function setCost(row, raw) {
+  row.cost = num(raw);
+  row.total = cents(row.cost * Math.max(0, Math.floor(Number(row.stockIn) || 0)));
+}
+function setTotal(row, raw) {
+  row.total = num(raw);
+  const pieces = Math.max(0, Math.floor(Number(row.stockIn) || 0));
+  if (pieces > 0) row.cost = Math.round((row.total / pieces) * 10000) / 10000;
+}
+function afterPieces(row) {
+  const pieces = Math.max(0, Math.floor(Number(row.stockIn) || 0));
+  const total = Number(row.total) || 0;
+  if (pieces > 0 && total > 0) row.cost = Math.round((total / pieces) * 10000) / 10000;
+  else row.total = cents((Number(row.cost) || 0) * pieces);
+}
+function setStock(row, raw) {
+  row.stockIn = Math.floor(num(raw));
+  afterPieces(row);
 }
 
 function onChoose(index) {
@@ -1569,6 +1609,12 @@ onMounted(async () => {
 .mg-tags .mg-pill.warn { background: var(--timber-warning-soft); }
 .mg-choose { max-width: 26rem; }
 .mg-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(6.4rem, 1fr)); gap: 0.45rem; }
+.mg-fields.top { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.mg-fields.bottom { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 0.1rem; }
+.mg-fields.bottom.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 40rem) {
+  .mg-fields.top, .mg-fields.bottom, .mg-fields.bottom.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 .mg-was { margin: 0; font-size: 0.78rem; color: var(--timber-muted); }
 .mg-warn { margin: 0; font-size: 0.8rem; font-weight: 700; color: var(--timber-danger); }
 .mg-suggest {
