@@ -128,8 +128,12 @@ async function listTenants(req, res) {
     // Las sucursales no son clientes aparte: se cuentan dentro de su matriz
     const tenants = everyTenant.filter((t) => !t.isBranch);
     const branchCount = new Map();
+    const blockedCount = new Map();
     for (const t of everyTenant) {
-      if (t.isBranch && t.matrixTenantId) branchCount.set(String(t.matrixTenantId), (branchCount.get(String(t.matrixTenantId)) || 0) + 1);
+      if (!t.isBranch || !t.matrixTenantId) continue;
+      const key = String(t.matrixTenantId);
+      branchCount.set(key, (branchCount.get(key) || 0) + 1);
+      if (t.overPlan) blockedCount.set(key, (blockedCount.get(key) || 0) + 1);
     }
     const waiting = new Map();
     for (const item of inbox.items || []) {
@@ -149,7 +153,7 @@ async function listTenants(req, res) {
       const card = await clientCard(tenant, { pre });
       const open = waiting.get(tenant.id) || { count: 0, at: null };
       const branches = branchCount.get(String(tenant.id)) || 0;
-      return { ...card, waiting: open.count, waitingAt: open.at, isMatrix: branches > 0, branchCount: branches };
+      return { ...card, waiting: open.count, waitingAt: open.at, isMatrix: branches > 0, branchCount: branches, blockedBranches: blockedCount.get(String(tenant.id)) || 0 };
     }));
     return res.status(200).json(enriched);
   } catch (err) {
@@ -186,10 +190,11 @@ async function branchInfo(tenant) {
           return at && (!latest || at > latest) ? at : latest;
         }, null),
         suspended: Boolean(b.branchSuspendedAt),
+        overPlan: Boolean(b.overPlan),
       };
     })
     .sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
-  return { isBranch: false, isMatrix: true, branchCount: branches.length, branches };
+  return { isBranch: false, isMatrix: true, branchCount: branches.length, blockedBranches: branches.filter((b) => b.overPlan).length, branches };
 }
 
 async function getTenant(req, res) {

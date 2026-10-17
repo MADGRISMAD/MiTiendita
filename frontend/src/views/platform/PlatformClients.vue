@@ -40,6 +40,7 @@
                   <span v-if="c.isMatrix" class="pf-chip info" :title="`Matriz con ${c.branchCount} ${c.branchCount === 1 ? 'sucursal' : 'sucursales'}`">
                     Matriz · {{ c.branchCount }} {{ c.branchCount === 1 ? "sucursal" : "sucursales" }}
                   </span>
+                  <span v-if="c.blockedBranches" class="pf-chip warn" title="El plan ya no cubre estas sucursales">{{ c.blockedBranches }} sin acceso por plan</span>
                   <span class="pf-chip" :class="quiet(c) ? 'warn' : ''">{{ lastSeen(c) === "nunca ha entrado" ? "sin entrar" : lastSeen(c) }}</span>
                 </span>
               </span>

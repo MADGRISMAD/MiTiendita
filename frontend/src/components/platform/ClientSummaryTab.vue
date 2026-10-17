@@ -40,6 +40,9 @@
       <h3 id="branches-title" class="pf-section-title">
         Matriz · {{ detail.branchCount }} {{ detail.branchCount === 1 ? "sucursal" : "sucursales" }}
       </h3>
+      <p v-if="detail.blockedBranches" class="adm-banner warn" role="status">
+        El plan de esta matriz ({{ detail.planName }}) cubre menos sucursales de las que tiene: {{ detail.blockedBranches }} {{ detail.blockedBranches === 1 ? "quedó" : "quedaron" }} sin acceso. Sus datos se conservan y vuelven a abrirse si la matriz sube de plan.
+      </p>
       <p class="pf-muted">Las sucursales las administra el dueño de la cuenta; aquí solo se consultan. El plan y el cobro son los de esta matriz.</p>
       <div class="pf-table-wrap">
         <table class="pf-table">
@@ -52,7 +55,7 @@
               <td>{{ shortDate(b.createdAt) }}</td>
               <td class="num">{{ b.usersCount }}</td>
               <td>{{ lastSeen(b) }}</td>
-              <td>{{ b.suspended ? "Dada de baja" : "Activa" }}</td>
+              <td>{{ b.suspended ? "Dada de baja" : b.overPlan ? "Sin acceso (el plan ya no la incluye)" : "Activa" }}</td>
             </tr>
           </tbody>
         </table>

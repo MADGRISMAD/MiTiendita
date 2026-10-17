@@ -202,6 +202,11 @@ const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 async function consolidatedSummary(store, principal, { from, to }) {
   const found = await resolveOrg(store, principal);
   if (!found) throw errNotOwner();
+  // El reporte consolidado es de los planes con sucursales, y solo cuenta las que el plan cubre
+  const matrix = await store.getEffectiveTenant(found.org.matrixTenantId);
+  if (planOf(matrix) <= 1) throw httpError(403, 'Tu plan actual no incluye sucursales ni el reporte consolidado. Pasa al plan Pro para volver a usarlo.', 'BRANCH_OVER_PLAN');
+  const over = blockedByPlan(found.tenants.filter((x) => String(x.id) !== String(found.org.matrixTenantId)), matrix?.plan);
+  found.tenants = found.tenants.filter((x) => !over.has(String(x.id)));
   const f = new Date(from);
   const t = new Date(to);
   if (Number.isNaN(f.getTime()) || Number.isNaN(t.getTime()) || f > t) throw httpError(400, 'Rango de fechas inválido.');

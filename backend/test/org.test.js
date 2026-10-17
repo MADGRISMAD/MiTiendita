@@ -264,3 +264,13 @@ test('los lugares del plan los ocupan las sucursales más antiguas; las dadas de
   // Plan de 1 tienda: ninguna sucursal cabe, y la dada de baja no se marca
   assert.deepEqual([...blockedByPlan(kids, 'basic')].sort(), ['a', 'c', 'd']);
 });
+
+test('el reporte consolidado exige un plan con sucursales y deja fuera las que el plan ya no cubre', async () => {
+  const w = world({ plan: 'pro' });
+  const P = w.P('lupita', w.matrix.id);
+  await org.createBranch(w.store, P, { name: 'Centro' });
+  const range = { from: '2026-01-01', to: '2026-12-31' };
+  assert.equal((await org.consolidatedSummary(w.store, P, range)).branches.length, 2);
+  w.tenants.get(w.matrix.id).plan = 'basic';
+  await assert.rejects(org.consolidatedSummary(w.store, P, range), (e) => e.code === 'BRANCH_OVER_PLAN');
+});
