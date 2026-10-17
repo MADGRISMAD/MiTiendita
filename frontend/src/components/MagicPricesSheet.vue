@@ -337,7 +337,7 @@
                     <label class="mg-field"><span>Caduca</span><input v-model="row.expiresAt" class="mg-inp" type="date" /></label>
                     <label class="mg-field">
                       <span>Categoría</span>
-                      <select v-model="row.menuId" class="mg-inp">
+                      <select v-model="row.menuId" class="mg-inp" @change="row.menuTouched = true">
                         <option v-for="m in catalogMenus" :key="m.id" :value="m.id">{{ m.name }}</option>
                       </select>
                     </label>
@@ -402,6 +402,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { apiService } from "../apiService";
 import { authStore } from "../authStore";
+import { suggestMenuId } from "../magicMenu";
 import PosIcon from "./PosIcon.js";
 import { errText, money } from "../textUtils";
 
@@ -428,6 +429,17 @@ const news = ref([]);
 const supplierOptions = ref([]);
 const menuOptions = ref([]);
 const purchase = ref(emptyPurchase());
+// Si el proveedor cambia, los productos nuevos a los que no se les eligió categoría a mano se reacomodan
+watch(
+  () => purchase.value.name,
+  () => {
+    news.value.forEach((row) => {
+      if (row.menuTouched) return;
+      const id = suggestMenuId(row.name, purchase.value.name, catalogMenus.value);
+      if (id) row.menuId = id;
+    });
+  }
+);
 const restored = ref(false);
 /** Mensaje del guardado: con él se muestra el paso «Listo» */
 const done = ref("");
@@ -554,6 +566,11 @@ const saveLabel = computed(() => {
 });
 
 
+
+// Categoría sugerida por el nombre del producto y el proveedor de la nota; si no hay pista, la de siempre
+function menuFor(productName) {
+  return suggestMenuId(productName, purchase.value.name, catalogMenus.value) || defaultMenu();
+}
 
 function defaultMenu() {
   return props.defaultMenuId || catalogMenus.value[0]?.id || "";
@@ -827,7 +844,7 @@ function fillPicks(data) {
         isPack: /pack|paq|caja/i.test(row),
         lot: "",
         expiresAt: "",
-        menuId: defaultMenu(),
+        menuId: menuFor(typeof row === "string" ? row : row.name),
         checked: true,
       };
     }
@@ -843,7 +860,7 @@ function fillPicks(data) {
       isPack: Boolean(row.isPack),
       lot: String(row.lot || "").trim(),
       expiresAt: String(row.expiresAt || "").slice(0, 10),
-      menuId: defaultMenu(),
+      menuId: menuFor(typeof row === "string" ? row : row.name),
       checked: true,
     };
   });
