@@ -291,6 +291,7 @@ const supportDock = [
   { to: "/platform", name: "platform", label: "Hoy", icon: ico.home },
   { to: "/platform/soporte", name: "platformSupport", label: "Soporte", icon: ico.inbox },
   { to: "/platform/clientes", name: "platformClients", label: "Clientes", icon: ico.products },
+  { to: "/platform/licencias-escritorio", name: "platformDesktopLicenses", label: "Escritorio", icon: ico.tag },
 ];
 const adminDock = [
   ...supportDock,

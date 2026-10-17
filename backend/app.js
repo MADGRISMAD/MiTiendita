@@ -61,6 +61,7 @@ app.use('/ai', require('./routers/ai.router'));
 app.use('/platform', require('./routers/platform.router'));
 app.use('/partner', require('./routers/partner.router'));
 app.use('/point', require('./routers/point.router'));
+app.use('/desktop', require('./routers/desktop.router'));
 app.use('/client-errors', require('./routers/client-errors.router'));
 app.use('/print-jobs', require('./routers/print-jobs.router'));
 

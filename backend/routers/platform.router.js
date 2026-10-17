@@ -1,5 +1,6 @@
 const router = require('express').Router();
 const platform = require('../controllers/platform.controller');
+const desktop = require('../controllers/desktop.controller');
 const { requireAuth, requireRoles } = require('../middleware/auth.middleware');
 const { rateLimit } = require('../services/rate-limit.service');
 const { refuseBranch } = require('../middleware/refuse-branch');
@@ -25,6 +26,13 @@ router.get('/staff', ...adminOnly, platform.listStaff);
 router.post('/staff', ...adminOnly, writeLimit, platform.createStaff);
 router.delete('/staff/:id', ...adminOnly, writeLimit, platform.deleteStaff);
 router.post('/staff/:id/reset-mfa', ...adminOnly, writeLimit, platform.resetStaffMfa);
+
+// Licencias de la versión de escritorio (permanente): soporte las consulta, solo admin genera, libera o revoca
+router.get('/desktop-licenses', ...staff, desktop.list);
+router.get('/desktop-licenses/:id', ...staff, desktop.detail);
+router.post('/desktop-licenses', ...adminOnly, writeLimit, desktop.create);
+router.post('/desktop-licenses/:id/release', ...adminOnly, writeLimit, desktop.release);
+router.post('/desktop-licenses/:id/revoke', ...adminOnly, writeLimit, desktop.revoke);
 
 router.get('/inbox', ...staff, platform.inbox);
 router.get('/support', ...staff, platform.support);

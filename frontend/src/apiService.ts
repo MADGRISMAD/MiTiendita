@@ -631,6 +631,22 @@ export const apiService = {
   checkReferralCode(code: string) {
     return axios.get(`/usuarios/referral/${encodeURIComponent(code)}`).then((r) => r.data);
   },
+  // ── Licencias de escritorio (versión permanente) ──
+  platformDesktopLicenses(params: { q?: string; status?: string } = {}) {
+    return axios.get('/platform/desktop-licenses', { params }).then((r) => r.data);
+  },
+  platformDesktopLicense(id: string) {
+    return axios.get(`/platform/desktop-licenses/${id}`).then((r) => r.data);
+  },
+  platformCreateDesktopLicense(payload: Record<string, unknown>) {
+    return axios.post('/platform/desktop-licenses', payload).then((r) => r.data);
+  },
+  platformReleaseDesktopLicense(id: string, reason: string) {
+    return axios.post(`/platform/desktop-licenses/${id}/release`, { reason }).then((r) => r.data);
+  },
+  platformRevokeDesktopLicense(id: string, reason: string) {
+    return axios.post(`/platform/desktop-licenses/${id}/revoke`, { reason }).then((r) => r.data);
+  },
   platformListStaff() {
     return axios.get('/platform/staff').then((r) => r.data);
   },

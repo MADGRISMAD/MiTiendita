@@ -124,6 +124,18 @@ const routes: RouteRecordRaw[] = [
   { path: "/socio/comisiones", name: "partnerCommissions", component: () => import("./views/partner/PartnerCommissions.vue"), meta: { requiresAuth: true, roles: ["partner_admin"], owner: true } },
   { path: "/socio/equipo", name: "partnerTeam", component: () => import("./views/partner/PartnerTeam.vue"), meta: { requiresAuth: true, roles: PARTNER_ROLES, owner: true } },
   {
+    path: "/platform/licencias-escritorio",
+    name: "platformDesktopLicenses",
+    component: () => import("./views/platform/PlatformDesktopLicenses.vue"),
+    meta: { requiresAuth: true, roles: ["platform_admin", "platform_support"], owner: true },
+  },
+  {
+    path: "/platform/licencias-escritorio/:id",
+    name: "platformDesktopLicense",
+    component: () => import("./views/platform/PlatformDesktopLicenses.vue"),
+    meta: { requiresAuth: true, roles: ["platform_admin", "platform_support"], owner: true },
+  },
+  {
     path: "/platform/equipo",
     name: "platformTeam",
     component: () => import("./views/platform/PlatformTeam.vue"),

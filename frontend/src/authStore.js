@@ -129,6 +129,8 @@ export const routeRoles = {
   platformClient: ["platform_admin", "platform_support"],
   platformFinance: ["platform_admin"],
   platformTeam: ["platform_admin"],
+  platformDesktopLicenses: ["platform_admin", "platform_support"],
+  platformDesktopLicense: ["platform_admin", "platform_support"],
   platformReferrers: ["platform_admin"],
   platformReferrer: ["platform_admin"],
   partner: ["partner_admin", "partner_staff"],
