@@ -12,6 +12,10 @@
           "destination": "/ayuda/index.html"
         },
         {
+          "source": "/descargar",
+          "destination": "/descargar/index.html"
+        },
+        {
           "source": "/register",
           "destination": "/register/index.html"
         },

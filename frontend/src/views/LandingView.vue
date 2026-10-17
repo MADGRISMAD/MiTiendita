@@ -711,6 +711,7 @@
           </div>
           <div class="lp-modal-acts">
             <WhatsAppHelp label="Pregúntanos por WhatsApp" :message="PERPETUAL_MESSAGE" />
+            <router-link class="lp-modal-link" to="/descargar" @click="showPerpetual = false">Descargar para PC y Mac</router-link>
             <router-link v-if="loggedIn" class="lp-modal-link" :to="{ name: 'billing' }" @click="showPerpetual = false">
               Ver mi plan actual
             </router-link>
@@ -728,6 +729,7 @@
         <router-link to="/login">Ingresar</router-link>
         <router-link to="/register">Registro</router-link>
         <router-link to="/ayuda">Ayuda</router-link>
+        <router-link to="/descargar">Descargar para PC y Mac</router-link>
         <a href="/guia-cajero.pdf" download>Guía de cajero</a>
         <router-link to="/terminos">Términos</router-link>
         <router-link to="/privacidad">Privacidad</router-link>

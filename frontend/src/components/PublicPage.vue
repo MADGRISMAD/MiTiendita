@@ -38,6 +38,7 @@ import { authStore, homeForRole } from "../authStore";
 
 const links = [
   { to: "/ayuda", label: "Ayuda" },
+  { to: "/descargar", label: "Descargar" },
   { to: "/terminos", label: "Términos" },
   { to: "/privacidad", label: "Privacidad" },
 ];

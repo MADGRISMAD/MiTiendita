@@ -49,6 +49,7 @@ const routes: RouteRecordRaw[] = [
   { path: "/terminos", name: "terms", component: () => import("./views/LegalView.vue"), props: { page: "terms" } },
   { path: "/privacidad", name: "privacy", component: () => import("./views/LegalView.vue"), props: { page: "privacy" } },
   { path: "/ayuda", name: "help", component: () => import("./views/HelpView.vue") },
+  { path: "/descargar", name: "download", component: () => import("./views/DownloadView.vue") },
   { path: "/factura/:token", name: "factura", component: () => import("./views/InvoiceRequestView.vue") },
   { path: "/setup", name: "setup", component: () => import("./views/SetupWizard.vue"), meta: { requiresAuth: true } },
   { path: "/dashboard", name: "dashboard", component: () => import("./views/DashboardView.vue"), meta: authMeta(["admin", "cashier"]) },

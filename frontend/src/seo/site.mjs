@@ -178,6 +178,12 @@ const PUBLIC = {
     priority: '0.6',
     changefreq: 'monthly',
   },
+  '/descargar': {
+    title: 'Descargar Mi Tiendita para PC y Mac | Licencia permanente',
+    description: 'Descarga el punto de venta Mi Tiendita para Windows y Mac: pago único, funciona sin internet y sin mensualidades.',
+    priority: '0.7',
+    changefreq: 'monthly',
+  },
   '/register': {
     title: 'Crea tu tienda gratis 3 días | Mi Tiendita',
     description: 'Crea tu cuenta de Mi Tiendita en un minuto: punto de venta en la nube con 3 días gratis y sin tarjeta.',
