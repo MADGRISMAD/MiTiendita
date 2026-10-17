@@ -7,9 +7,11 @@
         <small>ingresos menos IA y gastos</small>
       </div>
       <div class="adm-kpi">
-        <span>Ingresos</span>
+        <span>Cobrado en el mes</span>
         <strong class="pf-num">{{ money(books.revenue) }}</strong>
-        <small>solo planes activos</small>
+        <small>
+          {{ books.collectedManual ? `incluye ${money(books.collectedManual)} cobrado a mano · ` : "" }}esperado de planes activos: {{ money(books.expected) }}
+        </small>
       </div>
       <div class="adm-kpi">
         <span>Clientes que pagan</span>

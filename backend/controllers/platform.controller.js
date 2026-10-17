@@ -15,6 +15,7 @@ const promoSvc = require('../services/promo.service');
 const refTiers = require('../services/referral.tiers');
 const { isPermanentAdmin, PERMANENT_ADMINS } = require('../configurations/platform-owners');
 const ownerIncome = require('../services/owner-income.service');
+const { round2 } = require('../utils/tax');
 const { zonedToInstant } = require('../utils/store-time');
 
 const SHORT_MONTHS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
@@ -479,14 +480,20 @@ async function buildBooks() {
     const month = db.aiMonthKey();
     const costPerUse = Number(process.env.AI_COST_MXN_PER_USE || 0.15);
     // Las sucursales no pagan ni cuentan como clientes aparte: sus ingresos son los de la matriz
-    const [tenants, usage, expenses, usageAll, expensesAll, snapshots] = await Promise.all([
+    const range = ownerIncome.monthRange(month, zonedToInstant);
+    const [tenants, usage, expenses, usageAll, expensesAll, snapshots, monthPayments] = await Promise.all([
       db.ListTenants({ includeBranches: false }),
       db.ListAiUsage(month),
       db.ListPlatformExpenses(month),
       db.ListAiUsageAll(),
       db.ListPlatformExpensesAll(),
       db.ListPlatformSnapshots(),
+      range ? db.ListPaymentsBetween(range.from, range.to) : [],
     ]);
+    // Lo realmente cobrado en el mes: Mercado Pago y también efectivo/transferencia registrados a mano
+    const paid = ownerIncome.summarizePayments({ events: monthPayments });
+    const collected = paid.collected;
+    const collectedManual = round2(paid.payments.filter((p) => p.source === 'manual').reduce((a, p) => a + p.amount, 0));
     const settingsMap = await db.GetSettingsMany(tenants.map((tenant) => tenant.id));
     const settingsList = tenants.map((tenant) => settingsMap.get(tenant.id) || null);
     const nameOf = (tenant, settings) => settings?.businessName || tenant.name || 'Sin nombre';
@@ -512,7 +519,7 @@ async function buildBooks() {
       else counts.trialing += 1;
 
       const amount = monthlyFee(tenant);
-      revenue += amount;
+      revenue += amount; // se reemplaza más abajo por lo realmente cobrado
       const plan = byPlan[tenant.plan] ? tenant.plan : 'basic';
       if (amount > 0) {
         byPlan[plan].clients += 1;
@@ -551,6 +558,8 @@ async function buildBooks() {
     aiClients.sort((a, b) => b.uses - a.uses);
     const aiCost = aiUses * costPerUse;
     const expensesTotal = expenses.reduce((sum, row) => sum + row.amount, 0);
+    const expected = revenue; // lo que deberían pagar los planes activos al mes
+    revenue = collected;
     const profit = revenue - aiCost - expensesTotal;
 
     const usesByMonth = new Map();
@@ -588,6 +597,8 @@ async function buildBooks() {
       month,
       clients: counts,
       revenue,
+      expected,
+      collectedManual,
       byPlan: ['basic', 'growth', 'pro'].map((id) => ({
         id,
         name: PLAN_CATALOG[id].name,
