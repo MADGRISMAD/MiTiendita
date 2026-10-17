@@ -14,7 +14,7 @@
         <button type="button" class="adm-x" aria-label="Cerrar aviso" @click="error = ''"><PosIcon name="x" :size="16" /></button>
       </p>
 
-      <div :class="{ 'adm-loading': loading }">
+      <div class="br-body" :class="{ 'adm-loading': loading }">
         <!-- No es el dueño -->
         <div v-if="ov && !ov.isOwner" class="adm-empty">
           <PosIcon name="store" :size="30" />
@@ -91,7 +91,17 @@
           </form>
 
           <!-- Reporte consolidado -->
-          <section v-if="ov.organization" class="adm-card br-report">
+          <section v-if="ov.organization && ov.limit <= 1" class="adm-card br-plan">
+            <div class="adm-card-head">
+              <div>
+                <h2>Reporte de todas juntas</h2>
+                <p>Tu plan actual no incluye sucursales, así que el reporte consolidado está en pausa. Con el plan <b>Pro</b> vuelve a abrirse junto con tus sucursales.</p>
+              </div>
+            </div>
+            <router-link class="adm-btn primary" to="/billing">Ver planes</router-link>
+          </section>
+
+          <section v-else-if="ov.organization" class="adm-card br-report">
             <div class="adm-card-head">
               <div>
                 <h2>Todas juntas</h2>
@@ -234,7 +244,7 @@ async function load() {
   try {
     ov.value = await apiService.getOrganization();
     applyOrg(ov.value);
-    if (ov.value?.organization) await loadReport();
+    if (ov.value?.organization && ov.value.limit > 1) await loadReport();
   } catch (e) {
     error.value = msgOf(e, "No se pudieron cargar las sucursales.");
   } finally {
@@ -332,6 +342,11 @@ onMounted(load);
 
 <style scoped>
 .br > * + * { margin-top: 0.8rem; }
+.br-body { display: flex; flex-direction: column; gap: 1rem; }
+.br-body > .adm-banner { margin: 0; }
+.br-report .adm-tabs { margin: 0.25rem 0 0.75rem; }
+.br-report .adm-err { margin: 0.5rem 0 0; }
+.br-plan { display: grid; gap: 0.9rem; justify-items: start; }
 .br-list { display: grid; gap: 0.6rem; grid-template-columns: repeat(auto-fill, minmax(min(100%, 18rem), 1fr)); }
 .br-card { display: grid; gap: 0.7rem; align-content: space-between; }
 .br-card.current { border-color: var(--timber-primary); }
