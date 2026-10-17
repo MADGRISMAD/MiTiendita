@@ -115,7 +115,9 @@ async function requireActiveSubscription(req, res, next) {
     if (!isSubscriptionActive(tenant)) {
       return res.status(403).json({
         code: 'SUBSCRIPTION_REQUIRED',
-        message: 'Tu prueba o suscripción no está activa. Ve a Facturación.',
+        message: tenant.overPlan
+          ? 'El plan de tu matriz ya no incluye esta sucursal. Tus datos se conservan: pasa a un plan con sucursales para volver a usarla.'
+          : 'Tu prueba o suscripción no está activa. Ve a Facturación.',
         billingStatus: tenant.billingStatus,
         trialEndsAt: tenant.trialEndsAt,
         plan: tenant.plan,

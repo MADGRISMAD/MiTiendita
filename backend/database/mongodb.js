@@ -1597,6 +1597,7 @@ async function Ping() {
 }
 
 module.exports = {
+  overlayMatrix,
   Ping, ListPaymentsBetween, CreatePrintJob, ClaimPrintJob, FinishPrintJob, GetPrintJob, TouchPrintStation, GetPrintStation, AcquireJobLock, FinishJob, ListJobRuns, ClaimDunningNotice, ReleaseDunningNotice, CustomerOrderStats, GetOrdersByCustomer, ApplyOrderReturn, GetClosedCashSessionsBetween, ListSettingsWithDailySummary, ClaimDailySummary, ReleaseDailySummary,
   ensureConnection,
   CreateTenant, GetTenantById, UpdateTenant, ListTenants, CountUsersByTenant, CountPendingInvites, ListUsersByTenant, GetTenantByMpPreapprovalId,
