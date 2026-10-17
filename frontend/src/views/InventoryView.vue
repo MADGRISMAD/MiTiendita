@@ -109,6 +109,9 @@
             <button v-if="isAdmin" type="button" class="adm-btn sm st-adjust" :aria-label="`Ajustar existencia de ${f.name}`" @click="openAdjust(f)">
               <PosIcon name="sliders" :size="16" /><span class="hide-mobile">Ajustar</span>
             </button>
+            <button v-if="isAdmin && f.stock > 0" type="button" class="adm-btn sm st-adjust" :aria-label="`Canje con proveedor de ${f.name}`" @click="openExchange(f)">
+              <PosIcon name="truck" :size="16" /><span class="hide-mobile">Canje</span>
+            </button>
           </li>
         </ul>
         <div v-else-if="!loading.foods" class="adm-empty">
@@ -556,6 +559,57 @@
         </div>
       </Teleport>
 
+      <!-- ============ Diálogo: canje con proveedor ============ -->
+      <Teleport to="body">
+        <div v-if="exchanging" class="adm-dlg-bg" @click.self="exchanging = null">
+          <form class="adm-dlg" role="dialog" aria-modal="true" aria-labelledby="exc-title" @submit.prevent="saveExchange">
+            <div class="adm-dlg-head">
+              <span class="adm-dlg-ico"><PosIcon name="truck" :size="22" /></span>
+              <div>
+                <h3 id="exc-title">Canje con proveedor</h3>
+                <p>{{ exchanging.name }} · hay <b>{{ qty(exchanging.stock) }}</b>. El proveedor te cambia piezas viejas por la misma cantidad nueva.</p>
+              </div>
+              <button type="button" class="adm-dlg-x" aria-label="Cerrar" @click="exchanging = null"><PosIcon name="x" :size="18" /></button>
+            </div>
+            <label class="adm-field">
+              <span>Proveedor</span>
+              <select v-model="exchangeForm.supplierId" class="adm-inp" required>
+                <option value="" disabled>Elige quién te cambió</option>
+                <option v-for="s in suppliers" :key="s.id" :value="s.id">{{ s.name }}</option>
+              </select>
+            </label>
+            <label class="adm-field">
+              <span>Piezas cambiadas</span>
+              <input v-model.number="exchangeForm.quantity" class="adm-inp num" type="number" min="0" :max="exchanging.stock" step="any" inputmode="decimal" required />
+            </label>
+            <label class="adm-field">
+              <span>Caducidad de las piezas nuevas <em v-if="!exchanging.tracksExpiry">(opcional)</em></span>
+              <input v-model="exchangeForm.newExpiresAt" class="adm-inp" type="date" :required="exchanging.tracksExpiry" />
+            </label>
+            <label v-if="exchangeForm.newExpiresAt || exchanging.tracksExpiry" class="adm-field">
+              <span>Lote nuevo <em>(opcional)</em></span>
+              <input v-model="exchangeForm.newLot" class="adm-inp" maxlength="60" placeholder="Si no lo pones, se llama CANJE-fecha" />
+            </label>
+            <label class="adm-field">
+              <span>Nota <em>(opcional)</em></span>
+              <input v-model="exchangeForm.note" class="adm-inp" maxlength="140" placeholder="Estaban por caducar" />
+            </label>
+            <p class="adm-hint">
+              La existencia no cambia y no cuenta como merma ni como compra.
+              <template v-if="exchanging.tracksExpiry">Las piezas viejas salen primero de los lotes más próximos a caducar.</template>
+              <template v-if="exchanging.cost > 0"> Valor a costo: {{ money((Number(exchangeForm.quantity) || 0) * exchanging.cost) }}.</template>
+            </p>
+            <p v-if="exchangeErr" class="adm-err">{{ exchangeErr }}</p>
+            <div class="adm-dlg-acts">
+              <button type="button" class="adm-btn" @click="exchanging = null">Cancelar</button>
+              <button type="submit" class="adm-btn primary" :disabled="saving || !(Number(exchangeForm.quantity) > 0)">
+                {{ saving ? 'Guardando…' : 'Registrar canje' }}
+              </button>
+            </div>
+          </form>
+        </div>
+      </Teleport>
+
       <!-- ============ Diálogo: ajustar existencia ============ -->
       <Teleport to="body">
         <div v-if="adjusting" class="adm-dlg-bg" @click.self="adjusting = null">
@@ -872,6 +926,49 @@ async function saveAdjust() {
   }
 }
 
+// Canje con proveedor (pieza por pieza: sale lo viejo, entra lo nuevo)
+const exchanging = ref(null);
+const exchangeForm = reactive({ supplierId: "", quantity: 1, newExpiresAt: "", newLot: "", note: "" });
+const exchangeErr = ref("");
+function openExchange(f) {
+  if (!suppliers.value.length) {
+    error.value = "Primero agrega a tu proveedor; luego registra el canje.";
+    setTab("proveedores");
+    return;
+  }
+  exchanging.value = f;
+  exchangeForm.supplierId = suppliers.value.find((s) => (f.supplierIds || []).map(String).includes(String(s.id)))?.id || "";
+  exchangeForm.quantity = 1;
+  exchangeForm.newExpiresAt = "";
+  exchangeForm.newLot = "";
+  exchangeForm.note = "";
+  exchangeErr.value = "";
+}
+async function saveExchange() {
+  if (!exchanging.value) return;
+  saving.value = true;
+  exchangeErr.value = "";
+  try {
+    await apiService.exchangeWithSupplier({
+      foodId: exchanging.value.id,
+      supplierId: exchangeForm.supplierId,
+      quantity: Number(exchangeForm.quantity),
+      newExpiresAt: exchangeForm.newExpiresAt || undefined,
+      newLot: exchangeForm.newLot.trim() || undefined,
+      note: exchangeForm.note.trim() || undefined,
+    });
+    say(`${exchanging.value.name}: canje de ${qty(Number(exchangeForm.quantity))} registrado.`);
+    exchanging.value = null;
+    loadFoods();
+    loadExpiry();
+    loadActivity();
+  } catch (e) {
+    exchangeErr.value = errText(e, "No se pudo registrar el canje.");
+  } finally {
+    saving.value = false;
+  }
+}
+
 // ---------- Sugerido ----------
 const suggestionGroups = computed(() => (Array.isArray(suggestions.value?.groups) ? suggestions.value.groups : []));
 const suggestionCount = computed(() => suggestionGroups.value.reduce((s, g) => s + (g.itemCount || g.items?.length || 0), 0));
@@ -1175,6 +1272,7 @@ const activityGroups = computed(() => {
 function iconOf(type) {
   if (type === "purchase_confirmed") return { name: "truck", tone: "good" };
   if (type === "stock_adjusted") return { name: "sliders", tone: "warn" };
+  if (type === "supplier_exchange") return { name: "truck", tone: "info" };
   if (type === "cash_opened" || type === "cash_closed") return { name: "sliders", tone: "info" };
   if (["sale_voided", "order_line_removed", "price_changed", "cost_changed", "discount_applied", "customer_deleted", "product_deleted", "category_deleted"].includes(type)) return { name: "sliders", tone: "warn" };
   if (String(type).startsWith("supplier_")) return { name: "users", tone: "info" };
@@ -1267,7 +1365,7 @@ const LOG_GROUPS = [
   { id: "ventas", label: "Anulaciones, productos quitados y descuentos", types: ["sale_voided", "order_line_removed", "discount_applied"] },
   { id: "precios", label: "Precios y costos", types: ["price_changed", "cost_changed"] },
   { id: "caja", label: "Caja (apertura y corte)", types: ["cash_opened", "cash_closed"] },
-  { id: "inventario", label: "Inventario", types: ["stock_adjusted", "purchase_confirmed", "supplier_created", "supplier_deleted"] },
+  { id: "inventario", label: "Inventario", types: ["stock_adjusted", "supplier_exchange", "purchase_confirmed", "supplier_created", "supplier_deleted"] },
   { id: "clientes", label: "Clientes dados de baja", types: ["customer_deleted"] },
   { id: "catalogo", label: "Productos y categorías", types: ["product_created", "product_updated", "product_deleted", "category_created", "category_renamed", "category_deleted"] },
 ];

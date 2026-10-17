@@ -789,6 +789,9 @@ export const apiService = {
   cancelStocktake(id: string) {
     return axios.post(`/inventory/counts/${id}/cancel`).then((r) => r.data);
   },
+  exchangeWithSupplier(data: { foodId: string; supplierId: string; quantity: number; newExpiresAt?: string; newLot?: string; note?: string }) {
+    return axios.post('/inventory/exchange', data).then((r) => r.data);
+  },
   adjustStock(data: { foodId: string; stock: number; reason: string; note?: string }) {
     return axios.post('/inventory/adjust', data).then((r) => r.data);
   },

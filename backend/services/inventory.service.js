@@ -370,7 +370,92 @@ async function purchaseSuggestions(tenantId) {
   return { salesDays: SUGGEST_SALES_DAYS, groups: list };
 }
 
+/**
+ * Canje parejo con el proveedor: te cambia piezas viejas (por caducar o en mal estado) por la misma cantidad nueva.
+ * La existencia no cambia ni se genera gasto; solo se mueven los lotes (sale el viejo, entra el nuevo) y queda
+ * registrado a nombre del proveedor. No cuenta como merma ni como compra.
+ */
+async function exchangeWithSupplier({ tenantId, user, body }) {
+  const foodId = String(body?.foodId || '');
+  if (!ObjectId.isValid(foodId)) throw httpError(400, 'Producto inválido');
+  const food = await db.GetFoodById(foodId, tenantId);
+  if (!food) throw httpError(404, 'Producto no encontrado');
+  const supplier = ObjectId.isValid(String(body?.supplierId || '')) ? await db.GetSupplierById(String(body.supplierId), tenantId) : null;
+  if (!supplier) throw httpError(400, 'Elige el proveedor que hizo el canje');
+  const quantity = roundQty(body?.quantity);
+  if (!(quantity > 0)) throw httpError(400, 'Escribe cuántas piezas te cambiaron');
+  if (quantity > (Number(food.stock) || 0)) throw httpError(400, `Solo hay ${food.stock} de ${food.name}: no puedes cambiar más de lo que tienes`);
+
+  const expiresAt = parseDay(body?.newExpiresAt);
+  const tracks = Boolean(food.tracksExpiry) || Boolean(expiresAt);
+  if (tracks && !expiresAt) throw httpError(400, `Indica la caducidad de las piezas nuevas de ${food.name}`);
+
+  // Salen las piezas viejas: del lote que se indique o, si no, de los más próximos a caducar
+  let out = [];
+  if (food.tracksExpiry) {
+    if (body?.lotId) {
+      const lot = await db.TakeFromLot(body.lotId, quantity, tenantId);
+      if (!lot) throw httpError(400, 'Ese lote no tiene tantas piezas');
+      out = [{ lotId: String(lot.id), qty: quantity, lot: lot.lot || '', expiresAt: lot.expiresAt || null }];
+    } else {
+      out = await db.ConsumeSaleLots(food.id, quantity, tenantId);
+    }
+  }
+
+  // Entran las nuevas
+  const now = new Date();
+  let newLot = null;
+  if (tracks) {
+    if (!food.tracksExpiry) await db.UpdateFood(food.id, { tracksExpiry: true }, tenantId);
+    const code = String(body?.newLot || '').trim().slice(0, 60) || `CANJE-${now.toISOString().slice(0, 10).replace(/-/g, '')}`;
+    const lot = await db.CreateLot({
+      tenantId,
+      foodId: String(food.id),
+      foodName: food.name,
+      lot: code,
+      expiresAt,
+      quantity,
+      initialQuantity: quantity,
+      unitCost: Number(food.cost) || 0,
+      source: 'exchange',
+      createdAt: now,
+      updatedAt: now,
+    });
+    newLot = { lotId: String(lot.id), lot: code, expiresAt };
+  }
+
+  const unitCost = Number(food.cost) || 0;
+  const note = String(body?.note || '').trim().slice(0, 140);
+  const exchange = await db.CreateExchange({
+    tenantId,
+    supplierId: String(supplier.id),
+    supplierName: supplier.name,
+    foodId: String(food.id),
+    foodName: food.name,
+    quantity,
+    unitCost,
+    value: roundMoney(quantity * unitCost),
+    out,
+    newLot,
+    note,
+    createdBy: user?.username || '',
+    createdAt: now,
+  });
+  await db
+    .CreateActivityLog({
+      tenantId,
+      type: 'supplier_exchange',
+      message: `Canje con ${supplier.name}: ${quantity} × ${food.name} por piezas nuevas${note ? ` · ${note}` : ''}`,
+      meta: { exchangeId: exchange.id, foodId: String(food.id), supplierId: String(supplier.id), quantity },
+      user: user?.username || '',
+      createdAt: now,
+    })
+    .catch(() => {});
+  return exchange;
+}
+
 module.exports = {
+  exchangeWithSupplier,
   confirmPurchase,
   resolveSupplier,
   listExpiring,

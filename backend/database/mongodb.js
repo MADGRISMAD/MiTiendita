@@ -1497,6 +1497,25 @@ async function GetExpiringLots(tenantId, until) {
   return (await dbConnection.collection('lots').find(filter).sort({ expiresAt: 1 }).toArray()).map(withId);
 }
 
+/** Saca piezas de un lote concreto (atómico: no deja el lote en negativo). Devuelve el lote o null. */
+async function TakeFromLot(lotId, quantity, tenantId) {
+  if (!ObjectId.isValid(String(lotId))) return null;
+  const qty = Math.max(0, Number(quantity) || 0);
+  const filter = { _id: new ObjectId(String(lotId)), quantity: { $gte: qty }, ...(tenantId ? { tenantId } : {}) };
+  const lot = await dbConnection.collection('lots').findOneAndUpdate(filter, { $inc: { quantity: -qty }, $set: { updatedAt: new Date() } }, { returnDocument: 'before' });
+  return lot ? withId(lot.value !== undefined ? lot.value : lot) : null;
+}
+// ── Canjes con proveedor ──
+async function CreateExchange(data) {
+  const result = await dbConnection.collection('exchanges').insertOne(data);
+  return withId(await dbConnection.collection('exchanges').findOne({ _id: result.insertedId }));
+}
+async function GetExchanges(tenantId, opts = {}) {
+  const filter = { ...(tenantId ? { tenantId } : {}) };
+  if (opts.supplierId) filter.supplierId = String(opts.supplierId);
+  return (await dbConnection.collection('exchanges').find(filter).sort({ createdAt: -1 }).limit(300).toArray()).map(withId);
+}
+
 // ── Bitácora ──
 async function CreateActivityLog(data) {
   const result = await dbConnection.collection('activity_log').insertOne(data);
@@ -1587,6 +1606,6 @@ module.exports = {
   CreateSupplier, GetSuppliers, GetSupplierById, UpdateSupplier, DeleteSupplier, SearchSuppliers, FindSupplierByName,
   GetFoodsBySupplier, UnlinkSupplierFromFoods,
   CreatePurchase, GetPurchases, GetPurchaseById,
-  CreateLot, GetLotsByFood, GetExpiringLots,
+  CreateLot, GetLotsByFood, GetExpiringLots, TakeFromLot, CreateExchange, GetExchanges,
   CreatePlatformAudit, ListPlatformAudit, CreateActivityLog, GetActivityLog, GetPaidItemQtySince,
 };

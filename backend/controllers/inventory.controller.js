@@ -203,6 +203,29 @@ async function activity(req, res) {
   }
 }
 
+// Canje parejo con un proveedor: sale lo viejo, entra lo nuevo, sin merma ni gasto
+async function exchange(req, res) {
+  try {
+    const done = await inventory.exchangeWithSupplier({ tenantId: req.tenantId, user: req.user, body: req.body });
+    const food = await db.GetFoodById(done.foodId, req.tenantId);
+    return res.status(201).json({ exchange: done, food });
+  } catch (err) {
+    if (err.status) return res.status(err.status).send(err.message);
+    console.error(err);
+    return res.status(500).send(err.message || 'No pude registrar el canje');
+  }
+}
+
+async function listExchanges(req, res) {
+  try {
+    const supplierId = String(req.query.supplierId || '').trim() || null;
+    return res.status(200).json(await db.GetExchanges(req.tenantId, { supplierId }));
+  } catch (err) {
+    console.error(err);
+    return res.status(500).send('No pude leer los canjes');
+  }
+}
+
 const ADJUST_REASONS = {
   count: 'Conteo físico',
   waste: 'Merma o caducado',
@@ -247,6 +270,8 @@ async function adjustStock(req, res) {
 module.exports = {
   listSuppliers,
   adjustStock,
+  exchange,
+  listExchanges,
   getSupplier,
   createSupplier,
   updateSupplier,
