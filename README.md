@@ -121,6 +121,7 @@ cd backend && npm run seed:platform-admin
 ```
 
 - **Admin** — `platform` / `Platform123!` → `/platform`. Números, licencias (incluida **Perpetua**), gastos y **Equipo**.
+- **Cobros y mi parte** (`/platform` → Finanzas, **solo los 3 socios**, es decir los admins permanentes de `backend/configurations/platform-owners.js`; ni el soporte ni otros admins ven la pestaña, y el servidor lo exige): lista los cobros reales del mes (de Mercado Pago o registrados a mano, sin repetirse), lo comparan con el estimado por planes y muestran la parte de cada socio en partes iguales —del ingreso cobrado y de la utilidad después de IA y gastos—. Se puede descargar en CSV. El número de socios es el de admins permanentes; no descuenta comisiones de vendedores ni de Mercado Pago.
 - **Soporte** — lo crea un admin en `/platform/equipo`. Solo ve clientes y responde correo.
 
 ## Seguridad de las cuentas

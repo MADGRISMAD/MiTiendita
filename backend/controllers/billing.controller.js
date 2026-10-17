@@ -507,6 +507,7 @@ async function webhook(req, res) {
             interval: tenant.billingInterval,
             amount,
             mpStatus: payment.status,
+            mpPaymentId: payment.id || dataId,
             note: 'Cobro de la suscripción',
           });
           // Primer cobro tras la prueba (o cobro que regulariza un atraso): la tienda pasa a plan activo

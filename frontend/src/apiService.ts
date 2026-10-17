@@ -509,6 +509,13 @@ export const apiService = {
   platformOverview() {
     return cachedGet('/platform/overview');
   },
+  /** Cobros reales del mes y la parte de cada socio (solo los admins permanentes). */
+  platformPayments(month?: string) {
+    return axios.get('/platform/payments', { params: { month } }).then((r) => r.data);
+  },
+  platformPaymentsCsv(month: string) {
+    return axios.get('/platform/payments', { params: { month, format: 'csv' }, responseType: 'blob' }).then((r) => r.data);
+  },
   platformReport() {
     return axios.get('/platform/report', { responseType: 'text' }).then((r) => r.data);
   },

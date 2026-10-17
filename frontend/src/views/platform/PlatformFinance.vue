@@ -17,6 +17,7 @@
     <div v-else-if="books" :class="{ 'adm-loading': loading }">
       <FinanceRevenue v-if="tab === 'ingresos'" :books="books" />
       <FinanceAi v-else-if="tab === 'ia'" :books="books" />
+      <FinanceOwners v-else-if="tab === 'socios' && books.isOwner" :books="books" />
       <FinanceExpenses v-else :books="books" @changed="load" />
     </div>
   </PlatformFrame>
@@ -29,17 +30,20 @@ import PlatformFrame from "../../components/platform/PlatformFrame.vue";
 import FinanceRevenue from "../../components/platform/FinanceRevenue.vue";
 import FinanceAi from "../../components/platform/FinanceAi.vue";
 import FinanceExpenses from "../../components/platform/FinanceExpenses.vue";
+import FinanceOwners from "../../components/platform/FinanceOwners.vue";
 import { apiService } from "../../apiService";
 
 const route = useRoute();
 const router = useRouter();
 
-const TABS = [
+// «Socios» solo existe para los dueños del software (el servidor manda isOwner y además lo exige en la ruta)
+const TABS = computed(() => [
   { id: "ingresos", label: "Ingresos" },
+  ...(books.value?.isOwner ? [{ id: "socios", label: "Cobros y mi parte" }] : []),
   { id: "ia", label: "Gasto de IA" },
   { id: "gastos", label: "Otros gastos" },
-];
-const tab = computed(() => (TABS.some((t) => t.id === route.query.v) ? route.query.v : "ingresos"));
+]);
+const tab = computed(() => (TABS.value.some((t) => t.id === route.query.v) ? route.query.v : "ingresos"));
 function setTab(id) {
   router.replace({ query: { v: id === "ingresos" ? undefined : id } }).catch(() => {});
 }

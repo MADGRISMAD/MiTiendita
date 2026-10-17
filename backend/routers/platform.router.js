@@ -11,6 +11,8 @@ const writeLimit = rateLimit({ name: 'platform-write', windowMs: 10 * 60 * 1000,
 router.get('/overview', ...adminOnly, platform.overview);
 router.get('/report', ...adminOnly, platform.report);
 router.get('/activity', ...adminOnly, platform.activity);
+// Cobros reales y la parte de cada socio: el controlador además exige ser admin permanente
+router.get('/payments', ...adminOnly, platform.ownerPayments);
 router.post('/expenses', ...adminOnly, writeLimit, platform.createExpense);
 router.delete('/expenses/:id', ...adminOnly, writeLimit, platform.deleteExpense);
 

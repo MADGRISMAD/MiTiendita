@@ -13,7 +13,9 @@ const referrals = require('../services/referral.service');
 const partners = require('../services/partner.service');
 const promoSvc = require('../services/promo.service');
 const refTiers = require('../services/referral.tiers');
-const { isPermanentAdmin } = require('../configurations/platform-owners');
+const { isPermanentAdmin, PERMANENT_ADMINS } = require('../configurations/platform-owners');
+const ownerIncome = require('../services/owner-income.service');
+const { zonedToInstant } = require('../utils/store-time');
 
 const SHORT_MONTHS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 
@@ -574,6 +576,8 @@ async function overview(req, res) {
     const [books, inbox] = await Promise.all([buildBooks(), supportMail.waitingInbox(staffEmail)]);
     return res.status(200).json({
       ...books,
+      // Solo los socios (los admins permanentes) ven sus ingresos y su parte
+      isOwner: isPermanentAdmin({ email: staffEmail }),
       waiting: inbox.items || [],
       inboxError: inbox.inboxError || '',
     });
@@ -1046,6 +1050,51 @@ async function setTenantReferrer(req, res) {
 }
 
 /** Un cobro que no pasó por Mercado Pago (efectivo, transferencia, licencia perpetua): también paga comisión. */
+/**
+ * Cobros reales de un mes y la parte de cada socio (partes iguales). Solo para los dueños del software.
+ *   GET /platform/payments?month=AAAA-MM[&format=csv]
+ */
+async function ownerPayments(req, res) {
+  try {
+    const email = await currentStaffEmail(req);
+    if (!isPermanentAdmin({ email })) return res.status(403).send('Esta información es solo para los socios.');
+    const month = String(req.query.month || db.aiMonthKey());
+    const range = ownerIncome.monthRange(month, zonedToInstant);
+    if (!range) return res.status(400).send('El mes debe ser AAAA-MM.');
+
+    const costPerUse = Number(process.env.AI_COST_MXN_PER_USE || 0.15);
+    const [events, usage, expenses, tenants] = await Promise.all([
+      db.ListPaymentsBetween(range.from, range.to),
+      db.ListAiUsage(month),
+      db.ListPlatformExpenses(month),
+      db.ListTenants(),
+    ]);
+    const settings = await db.GetSettingsMany(tenants.map((t) => t.id));
+    const names = new Map(
+      tenants.map((t) => [String(t.id), { businessName: settings.get(String(t.id))?.businessName || t.name || 'Sin nombre', planName: PLAN_NAMES[t.plan] || '' }])
+    );
+    const summary = {
+      month,
+      ...ownerIncome.summarizePayments({
+        events,
+        names,
+        partners: PERMANENT_ADMINS.length,
+        costs: { ai: usage.reduce((a, u) => a + u.count, 0) * costPerUse, expenses: expenses.reduce((a, e) => a + e.amount, 0) },
+      }),
+    };
+    if (req.query.format === 'csv') {
+      res.set('Content-Type', 'text/csv; charset=utf-8');
+      res.set('Content-Disposition', `attachment; filename="cobros_${month}.csv"`);
+      return res.status(200).send(ownerIncome.csvOf(summary));
+    }
+    return res.status(200).json(summary);
+  } catch (err) {
+    if (err.status) return res.status(err.status).send(err.message);
+    console.error(err);
+    return res.status(500).send(err.message || 'No pude leer los cobros');
+  }
+}
+
 async function manualPayment(req, res) {
   try {
     const tenant = await db.GetTenantById(req.params.id);
@@ -1095,6 +1144,7 @@ module.exports = {
   voidCommission,
   setTenantReferrer,
   manualPayment,
+  ownerPayments,
   support,
   tenantActivity,
   activity,

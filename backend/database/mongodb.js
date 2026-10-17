@@ -76,6 +76,12 @@ async function ensureIndexes() {
   }
   // Los trabajos de impresión no se guardan más de 3 días
   await dbConnection.collection('print_jobs').createIndex({ createdAt: 1 }, { expireAfterSeconds: 3 * 24 * 60 * 60 }).catch(() => {});
+  // Un mismo cobro de Mercado Pago no se registra dos veces
+  await dbConnection
+    .collection('billing_events')
+    .createIndex({ mpPaymentId: 1 }, { unique: true, partialFilterExpression: { mpPaymentId: { $type: 'string' } } })
+    .catch(() => {});
+  await dbConnection.collection('billing_events').createIndex({ type: 1, at: -1 }).catch(() => {});
   await dbConnection.collection('suppliers').createIndex({ tenantId: 1, name: 1 }).catch(() => {});
   await dbConnection.collection('purchases').createIndex({ tenantId: 1, date: -1 }).catch(() => {});
   await dbConnection.collection('lots').createIndex({ tenantId: 1, foodId: 1, expiresAt: 1 }).catch(() => {});
@@ -1194,10 +1200,21 @@ async function CreateBillingEvent(data) {
     amount: data.amount == null ? null : Number(data.amount),
     note: data.note || '',
     mpStatus: data.mpStatus || null,
+    // Identificador del pago en Mercado Pago: evita registrar dos veces el mismo cobro si el aviso se repite
+    ...(data.mpPaymentId ? { mpPaymentId: String(data.mpPaymentId) } : {}),
     at: data.at || new Date(),
   };
   const result = await dbConnection.collection('billing_events').insertOne(doc);
   return { id: String(result.insertedId), ...doc };
+}
+/** Cobros recibidos en un rango (para el panel de los socios). */
+async function ListPaymentsBetween(from, to) {
+  const rows = await dbConnection
+    .collection('billing_events')
+    .find({ type: 'payment', amount: { $gt: 0 }, at: { $gte: new Date(from), $lte: new Date(to) } })
+    .sort({ at: -1 })
+    .toArray();
+  return rows.map((r) => ({ id: String(r._id), tenantId: r.tenantId, plan: r.plan, interval: r.interval, amount: r.amount, note: r.note || '', mpPaymentId: r.mpPaymentId || null, at: r.at }));
 }
 async function ListBillingEvents(tenantId, limit = 40) {
   const rows = await dbConnection
@@ -1544,7 +1561,7 @@ async function Ping() {
 }
 
 module.exports = {
-  Ping, CreatePrintJob, ClaimPrintJob, FinishPrintJob, GetPrintJob, TouchPrintStation, GetPrintStation, AcquireJobLock, FinishJob, ListJobRuns, ClaimDunningNotice, ReleaseDunningNotice, CustomerOrderStats, GetOrdersByCustomer, ApplyOrderReturn, GetClosedCashSessionsBetween, ListSettingsWithDailySummary, ClaimDailySummary, ReleaseDailySummary,
+  Ping, ListPaymentsBetween, CreatePrintJob, ClaimPrintJob, FinishPrintJob, GetPrintJob, TouchPrintStation, GetPrintStation, AcquireJobLock, FinishJob, ListJobRuns, ClaimDunningNotice, ReleaseDunningNotice, CustomerOrderStats, GetOrdersByCustomer, ApplyOrderReturn, GetClosedCashSessionsBetween, ListSettingsWithDailySummary, ClaimDailySummary, ReleaseDailySummary,
   ensureConnection,
   CreateTenant, GetTenantById, UpdateTenant, ListTenants, CountUsersByTenant, CountPendingInvites, ListUsersByTenant, GetTenantByMpPreapprovalId,
   CreateUser, FindUserByEmail, LoginUsuario, FindUserByUsername, UpdateUserById, FindUserByResetToken,
