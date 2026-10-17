@@ -174,7 +174,8 @@
                 <ul class="mg-repeats">
                   <li v-for="r in repeats" :key="r.name + r.photos.join() + r.counted">
                     {{ r.name }}<template v-if="r.photos[0] && r.photos[1] && r.photos[0] !== r.photos[1]"> (fotos {{ r.photos.join(" y ") }})</template>:
-                    <template v-if="r.counted === 'once'">salía igual dos veces, lo conté una sola vez ({{ r.packs[0] }}).</template>
+                    <template v-if="r.counted === 'once' && r.differs">salía en otra foto con datos distintos ({{ r.packs[0] }} y {{ r.packs[1] }}); conté solo uno ({{ r.packs[0] }}). Revísalo con la nota.</template>
+                    <template v-else-if="r.counted === 'once'">salía igual dos veces, lo conté una sola vez ({{ r.packs[0] }}).</template>
                     <template v-else-if="r.counted === 'merged'">salía dos veces ({{ r.packs[0] }} y {{ r.packs[1] }}), lo junté en un renglón de {{ r.total }}.</template>
                     <template v-else>salía con presentación o costo distintos, dejé los dos renglones; borra el que sobre.</template>
                   </li>

@@ -585,6 +585,15 @@ function flagRepeats(items) {
       continue;
     }
     const photos = [first.photo || 0, item.photo || 0];
+    // Otra foto de la misma nota: el mismo producto es el mismo renglón visto dos veces (las fotos se traslapan o
+    // se subió la misma). Se queda la lectura más completa y, si no coinciden los datos, se avisa.
+    if (first.photo && item.photo && first.photo !== item.photo) {
+      const same = ['packs', 'packSize', 'cost', 'price', 'lineTotal'].every((k) => (first[k] || 0) === (item[k] || 0));
+      const richer = (r) => (r.lineTotal > 0 ? 2 : 0) + (r.cost > 0 ? 1 : 0);
+      if (richer(item) > richer(first)) Object.assign(first, item, { photo: first.photo });
+      repeats.push({ name: first.name, photos, packs: [first.packs, item.packs], counted: 'once', differs: !same });
+      continue;
+    }
     const samePack = first.packSize === item.packSize && first.cost === item.cost && first.price === item.price;
     const sameQty = first.packs === item.packs;
     const info = { name: first.name, photos, packs: [first.packs, item.packs] };

@@ -33,13 +33,28 @@ const row = (name, photo, extra = {}) => ({ name, photo, packs: 1, packSize: 1, 
 test('un producto igual en dos fotos se cuenta una vez y se avisa', () => {
   const out = flagRepeats([row('Coca Cola 600 ml', 1, { packs: 15 }), row('Sabritas', 1), row('coca cola 600ml', 2, { packs: 15 })]);
   assert.equal(out.items.length, 2);
-  assert.deepEqual(out.repeats, [{ name: 'Coca Cola 600 ml', photos: [1, 2], packs: [15, 15], counted: 'once' }]);
+  assert.deepEqual(out.repeats, [{ name: 'Coca Cola 600 ml', photos: [1, 2], packs: [15, 15], counted: 'once', differs: false }]);
 });
 
-test('si cambia la presentación se conservan los dos y se avisa', () => {
-  const out = flagRepeats([row('Sabritas', 1, { packs: 8 }), row('Sabritas', 2, { packs: 3, packSize: 12 })]);
+test('el mismo producto en otra foto cuenta una vez aunque los datos varíen un poco', () => {
+  const out = flagRepeats([row('Sabritas', 1, { packs: 8 }), row('Sabritas', 2, { packs: 3, packSize: 12 }), row('Sabritas', 3, { packs: 8 })]);
+  assert.equal(out.items.length, 1);
+  assert.equal(out.items[0].packs, 8);
+  assert.equal(out.repeats.length, 2);
+  assert.equal(out.repeats[0].differs, true);
+  assert.equal(out.repeats[1].differs, false);
+});
+
+test('misma presentación distinta dentro de la misma foto se deja en dos renglones', () => {
+  const out = flagRepeats([row('Sabritas', 1, { packs: 8 }), row('Sabritas', 1, { packs: 3, packSize: 12 })]);
   assert.equal(out.items.length, 2);
   assert.equal(out.repeats[0].counted, 'both');
+});
+
+test('cuatro fotos de la misma nota dejan solo los productos de la nota', () => {
+  const nota = (photo, drift = {}) => [row('Coca Cola 400 ml', photo, { packs: 2, cost: 100, ...drift }), row('Coca Cola 1.5 L', photo, { packs: 20 }), row('Coca Cola 3 L', photo, { packs: 4 })];
+  const out = flagRepeats([...nota(1), ...nota(2), ...nota(3, { cost: 0 }), ...nota(4, { packs: 3 })]);
+  assert.equal(out.items.length, 3);
 });
 
 test('el mismo renglón repetido en la misma foto se cuenta una vez', () => {
