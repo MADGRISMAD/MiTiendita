@@ -1,5 +1,5 @@
 <template>
-  <form class="pf-card-stack" @submit.prevent="requestSave">
+  <form class="pf-card-stack pf-form-stack" @submit.prevent="requestSave">
     <p v-if="!canEdit" class="adm-banner warn" role="note">
       Estás en modo soporte: puedes ver los datos, pero solo un admin cambia el plan, el estado o los datos de la tienda.
     </p>

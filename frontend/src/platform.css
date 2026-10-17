@@ -296,3 +296,8 @@ a.adm-kpi:hover { border-color: color-mix(in srgb, var(--timber-primary) 40%, va
 
 /* Finanzas: todas las pestañas ocupan al menos el mismo alto para que la página no brinque al cambiar */
 .pf-finance-body { min-height: calc(100dvh - 15rem); }
+
+/* Formulario de licencia: separación pareja entre bloques, incluido el aviso de confirmación que aparece al cambiar el plan */
+.pf-form-stack { display: flex; flex-direction: column; gap: 1rem; }
+.pf-form-stack > * { margin-top: 0 !important; }
+.pf-form-stack > .adm-banner { align-items: center; }
