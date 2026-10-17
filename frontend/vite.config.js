@@ -77,8 +77,6 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,ico,woff2,png}'],
-        // Tipografías de la landing: se bajan solo al visitarla, no hacen falta para cobrar sin internet
-        globIgnores: ['fonts/**'],
         navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/api/, /^\/version\.json$/],
         runtimeCaching: [
