@@ -175,15 +175,6 @@ async function revokeAll(user, reason) {
   await db.RevokeUserSessions(String(user._id), reason);
   const updated = await db.BumpUserTokenVersion(String(user._id));
   forgetUser(user.username);
-  // Si es dueño de sucursales, también caen las sesiones de las cuentas técnicas de sus sucursales
-  try {
-    for (const linked of await require('../database/org.db').listLinkedUsers(user.username)) {
-      await db.RevokeUserSessions(String(linked._id), `owner_${reason}`);
-      forgetUser(linked.username);
-    }
-  } catch (err) {
-    console.error('[sucursales] no se pudieron cerrar las sesiones de las sucursales:', err.message);
-  }
   return updated || user;
 }
 

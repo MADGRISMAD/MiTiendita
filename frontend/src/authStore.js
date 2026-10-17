@@ -1,5 +1,4 @@
 import { reactive } from "vue";
-import { clearBillingStatus } from "./billingStore";
 
 const STORAGE_KEY = "timber_auth";
 
@@ -65,7 +64,6 @@ export function clearSession() {
   authStore.username = null;
   authStore.email = null;
   localStorage.removeItem(STORAGE_KEY);
-  clearBillingStatus();
 }
 
 export function isAuthenticated() {

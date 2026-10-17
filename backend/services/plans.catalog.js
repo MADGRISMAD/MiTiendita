@@ -35,7 +35,8 @@ const PLAN_LIMITS = {
   basic: { users: 2, products: 250, branches: 1 },
   growth: { users: 6, products: 1500, branches: 1 },
   pro: { users: 20, products: null, branches: 5 },
-  perpetual: { users: 20, products: null, branches: 1 },
+  // Versión instalable: sin tope de usuarios ni productos.
+  perpetual: { users: null, products: null, branches: 1 },
 };
 
 const PLAN_CATALOG = {

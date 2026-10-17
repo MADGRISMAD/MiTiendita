@@ -3,7 +3,6 @@ const db = require('../database/mongodb');
 const limits = require('../services/plan-limits.service');
 const masterCatalog = require('../services/master-catalog.service');
 const { isSubscriptionActive } = require('../models/tenant.model');
-const supportMail = require('../services/support-mail.service');
 
 async function GetSettings(req, res) {
   try {
@@ -147,57 +146,9 @@ async function DismissOnboarding(req, res) {
   }
 }
 
-async function GetSupport(req, res) {
-  try {
-    const users = await db.ListUsersByTenant(req.tenantId);
-    const me = users.find((user) => user.username === req.user?.username);
-    const clientEmail = String(me?.email || '').trim().toLowerCase();
-    if (!clientEmail.includes('@')) {
-      return res.status(400).send('Tu usuario no tiene un correo. Agrégalo para ver tus mensajes.');
-    }
-    return res.status(200).json(await supportMail.threadForLocal(req.tenantId, { clientEmail }));
-  } catch (err) {
-    console.error(err);
-    return res.status(500).send(err.message || 'Error al leer soporte');
-  }
-}
-
-async function SendSupport(req, res) {
-  try {
-    const subject = String(req.body?.subject || '').trim().slice(0, 140);
-    const message = String(req.body?.message || '').trim();
-    if (subject.length < 3) return res.status(400).send('Escribe un asunto (mín. 3 caracteres).');
-    if (message.length < 8) return res.status(400).send('Cuéntanos el problema con un poco más de detalle.');
-
-    const [settings, users] = await Promise.all([
-      db.GetSettings(req.tenantId),
-      db.ListUsersByTenant(req.tenantId),
-    ]);
-    const me = users.find((u) => u.username === req.user?.username) || users[0];
-    const from = me?.email || '';
-    if (!from.includes('@')) {
-      return res.status(400).send('Tu usuario no tiene un correo. Agrégalo o escribe desde otra cuenta.');
-    }
-
-    const thread = await supportMail.sendFromClient({
-      tenantId: req.tenantId,
-      from,
-      storeName: settings?.businessName || 'Tienda',
-      subject,
-      message,
-    });
-    return res.status(201).json(thread);
-  } catch (err) {
-    console.error(err);
-    return res.status(err.status || 500).send(err.message || 'Error al enviar a soporte');
-  }
-}
-
 module.exports = {
   GetSettings,
   SaveSettings,
   GetOnboarding,
   DismissOnboarding,
-  GetSupport,
-  SendSupport,
 };

@@ -4,7 +4,6 @@ const errorReport = require('../services/error-report.service');
 const returnsSvc = require('../services/returns.service');
 const { normalizeOrder, orderStatuses, paymentMethods, newToken } = require('../models/order.model');
 const { storeDayRange } = require('../utils/store-time');
-const pointCharges = require('../services/point.charges.service');
 const { firstUnpriced } = require('../services/unpriced-items.service');
 const creditSvc = require('../services/credit.service');
 const creditDb = require('../database/credit.db');
@@ -182,27 +181,9 @@ async function settlePayment(req, existing, body, { requireCash = true, paidAt }
   const deliveryFee = Number(existing.deliveryFee || 0);
   const total = Number((totals.total + deliveryFee).toFixed(2));
 
-  // Cobro con terminal Mercado Pago: debe estar aprobado, ser de esta tienda, por este monto y usarse una sola vez
-  let pointChargeId = null;
-  if (body?.pointChargeId) {
-    if (method !== 'card' && method !== 'split') {
-      throw httpError(400, 'El cobro con terminal solo aplica a pagos con tarjeta');
-    }
-    // Pago mixto: la terminal cobra solo la parte de tarjeta
-    const cardPortion = Number(body?.cardAmount ?? 0);
-    if (method === 'split' && !(cardPortion > 0 && cardPortion < total)) {
-      throw httpError(400, 'El monto de tarjeta debe ser mayor a 0 y menor al total');
-    }
-    try {
-      const charge = await pointCharges.consumeCharge(req.tenantId, String(body.pointChargeId), {
-        clientSaleId: existing.clientSaleId || String(existing.id),
-        total: method === 'split' ? cardPortion : total,
-      });
-      pointChargeId = charge.id;
-    } catch (err) {
-      throw httpError(err.status || 409, err.message);
-    }
-  }
+  // La versión instalable no cobra con terminal Mercado Pago: la tarjeta se registra a mano.
+  if (body?.pointChargeId) throw httpError(400, 'El cobro con terminal no está disponible en esta versión.');
+  const pointChargeId = null;
 
   // Fiado: se carga al cliente ANTES de tocar existencias; si algo falla después, el cargo se deshace
   let creditInfo = null;
@@ -568,15 +549,6 @@ async function voidSale(req, res) {
       return res.status(400).send('Abre la caja para devolver el dinero.');
     }
 
-    // Cobro con terminal: primero se devuelve el dinero en Mercado Pago; si MP lo rechaza no se toca nada
-    if (existing.pointChargeId) {
-      try {
-        await pointCharges.refundCharge(req.tenantId, String(existing.pointChargeId));
-      } catch (e) {
-        console.error('[refund mp]', e.code || '', e.message);
-        return res.status(e.status || 502).send(e.message || 'No se pudo devolver el dinero en Mercado Pago.');
-      }
-    }
 
     // Fiado: primero se cancela lo que quedó a deber (es idempotente: si algo falla después, reintentar no cobra doble)
     if ((existing.paymentMethod || 'cash') === 'credit') {

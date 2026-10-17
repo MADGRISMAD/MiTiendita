@@ -42,20 +42,13 @@ function trialEndsFrom(date = new Date()) {
 
 function createTenantDoc(name = 'Mi negocio') {
   const now = new Date();
+  // Versión instalable: la tienda es permanente desde que se activa (sin prueba, cobros ni promociones).
   return {
     name,
-    plan: 'basic',
-    billingStatus: 'trialing',
-    billingInterval: 'month',
-    trialEndsAt: trialEndsFrom(now),
-    mpPreapprovalId: null,
-    mpPayerEmail: null,
-    currentPeriodEnd: null,
-    cancelAtPeriodEnd: false,
+    plan: 'perpetual',
+    billingStatus: 'active',
     suspendedAt: null,
     suspendedReason: null,
-    // Promoción de lanzamiento: solo las tiendas que se crean ahora (las existentes no la tienen)
-    promoEligible: true,
     createdAt: now,
     updatedAt: now,
   };

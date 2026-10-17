@@ -333,11 +333,6 @@
             </router-link>
           </template>
 
-          <!-- ======= Terminal de cobro (Mercado Pago Point) ======= -->
-          <template v-else-if="section === 'terminal'">
-            <PointTerminalSettings />
-          </template>
-
           <!-- ======= Impresora ======= -->
           <template v-else-if="section === 'impresora'">
             <section class="adm-card cfg-card">
@@ -630,68 +625,14 @@
           <template v-else-if="section === 'soporte'">
             <section class="adm-card cfg-card">
               <h3>Versión de la app</h3>
-              <p class="state-line" :class="updateState.available ? 'off' : 'on'">
-                <i></i>{{ updateState.available ? 'Hay una versión nueva disponible' : 'Tienes la última versión' }}
-              </p>
-              <p class="adm-hint">
-                Versión <b>{{ appVersion }}</b><template v-if="appBuiltAt"> · compilada el {{ new Date(appBuiltAt).toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' }) }}</template>.
-                La app busca actualizaciones sola, pero solo se actualiza cuando tú lo decides.
-              </p>
-              <p v-if="updateState.error" class="adm-banner warn">{{ updateState.error }}</p>
-              <div class="printer-acts">
-                <button v-if="updateState.available" type="button" class="adm-btn primary" @click="applyUpdate">Actualizar ahora</button>
-                <button type="button" class="adm-btn" :disabled="updateState.checking" @click="checkForUpdate({ force: true })">
-                  {{ updateState.checking ? 'Buscando…' : 'Buscar actualizaciones' }}
-                </button>
-              </div>
+              <p class="adm-hint">Versión permanente <b>{{ appVersion }}</b>. Funciona sin internet y sin suscripción.</p>
             </section>
             <section class="adm-card cfg-card">
               <h3>Ayuda por WhatsApp</h3>
-              <p class="adm-hint">La forma más rápida. El mensaje ya lleva el nombre de tu tienda y tu plan para atenderte sin preguntas.</p>
+              <p class="adm-hint">La forma más rápida. El mensaje ya lleva el nombre de tu tienda para atenderte sin preguntas.</p>
               <WhatsAppHelp />
             </section>
-            <form class="adm-card cfg-card" @submit.prevent="sendSupport">
-              <h3>Escríbenos</h3>
-              <p class="adm-hint">
-                Te contestamos por correo{{ authStore.email ? ` a ${authStore.email}` : '' }}. Solo tú ves tus conversaciones.
-              </p>
-              <label class="adm-field">
-                <span>Asunto</span>
-                <input v-model="support.subject" class="adm-inp" required minlength="3" maxlength="140" placeholder="No puedo abrir caja" />
-              </label>
-              <label class="adm-field">
-                <span>¿Qué pasa?</span>
-                <textarea v-model="support.message" class="adm-inp" required minlength="8" rows="5" placeholder="Cuéntanos qué hiciste, en qué pantalla y qué esperabas que pasara."></textarea>
-              </label>
-              <p v-if="supportErr" class="adm-err">{{ supportErr }}</p>
-              <p v-if="supportMsg" class="adm-banner ok"><PosIcon name="check" :size="18" /> {{ supportMsg }}</p>
-              <button type="submit" class="adm-btn primary" :disabled="supportBusy">
-                <PosIcon name="chat" :size="18" /> {{ supportBusy ? 'Enviando…' : 'Enviar a soporte' }}
-              </button>
-            </form>
-            <section class="adm-card cfg-card">
-              <h3>Tus conversaciones</h3>
-              <p v-if="supportNote" class="adm-hint">{{ supportNote }}</p>
-              <ul v-if="tickets.length" class="threads">
-                <li v-for="t in tickets" :key="t.id">
-                  <button type="button" class="thread-head" :aria-expanded="openTicket === t.id" @click="openTicket = openTicket === t.id ? '' : t.id">
-                    <span class="thread-main">
-                      <strong>{{ t.subject }}</strong>
-                      <small>{{ t.messages?.length || 0 }} {{ (t.messages?.length || 0) === 1 ? 'mensaje' : 'mensajes' }}<template v-if="t.updatedAt"> · {{ when(t.updatedAt) }}</template></small>
-                    </span>
-                    <span class="adm-pill" :class="t.status === 'open' ? 'warn' : 'good'">{{ t.status === 'open' ? 'Esperando respuesta' : 'Respondida' }}</span>
-                  </button>
-                  <div v-if="openTicket === t.id" class="bubbles">
-                    <div v-for="(m, i) in t.messages || []" :key="m.id || i" class="bubble" :class="m.direction === 'out' ? 'them' : 'me'">
-                      <p>{{ m.text || m.snippet || '(sin texto)' }}</p>
-                      <small>{{ m.direction === 'out' ? 'Soporte' : 'Tú' }}<template v-if="m.at"> · {{ when(m.at) }}</template></small>
-                    </div>
-                  </div>
-                </li>
-              </ul>
-              <p v-else-if="!supportNote" class="adm-hint">Aún no nos has escrito.</p>
-            </section>
-          </template>
+                      </template>
         </main>
       </div>
 
@@ -718,7 +659,6 @@ import AppShell from "../components/AppShell.vue";
 import PosIcon from "../components/PosIcon.js";
 import TicketHeader from "../components/TicketHeader.vue";
 import WhatsAppHelp from "../components/WhatsAppHelp.vue";
-import PointTerminalSettings from "../components/PointTerminalSettings.vue";
 import { MIN_PASSWORD, passwordProblem } from "../passwordPolicy";
 import { apiService, logoutSession } from "../apiService";
 import { currentVenueSettings, fetchVenueSettings, saveVenueSettings, venueStore } from "../venueStore";
@@ -734,7 +674,8 @@ import { stationState, syncPrintStation } from "../printStation";
 import { SCALE_COMMANDS, connectScale, disconnectScale, saveScaleSettings, scaleLive, scaleStore, scaleSupported } from "../scale";
 import { errText as sharedErrText, money } from "../textUtils";
 import { useFlash } from "../useFlash";
-import { appBuiltAt, appVersion, applyUpdate, checkForUpdate, updateState } from "../appUpdate";
+// Versión de esta compilación (la define vite.config.js).
+const appVersion = __APP_VERSION__;
 
 const PRINTER_MODES = [
   { id: "browser", label: "Navegador (actual)", hint: "Abre el ticket y el diálogo de imprimir de Chrome. Sirve con cualquier impresora." },
@@ -795,20 +736,18 @@ const SECTIONS = {
   negocio: { label: "Mi negocio", icon: "store", desc: "Nombre, giro, dirección y logo", lead: "Así te ven tus clientes en el ticket y en la app.", tone: "info" },
   ventas: { label: "Ventas e IVA", icon: "percent", desc: "IVA y comisión por tarjeta", lead: "El impuesto de tus ventas y la comisión al pagar con tarjeta.", tone: "good" },
   inventario: { label: "Inventario", icon: "box", desc: "Existencias y costo de compras", lead: "Cómo se mueven tus existencias y tus costos.", tone: "warn" },
-  terminal: { label: "Terminal de cobro", icon: "card", desc: "Vincula tu terminal Mercado Pago", lead: "Cobra con tarjeta directo en tu terminal.", tone: "good" },
   bascula: { label: "Báscula", icon: "hash", desc: "Pesar a granel y agregar solo", lead: "La báscula de esta caja.", tone: "good" },
   impresora: { label: "Impresora", icon: "printer", desc: "Ticket directo en térmica y cajón", lead: "Cómo sale el ticket en esta caja.", tone: "info" },
   apariencia: { label: "Apariencia", icon: "sun", desc: "Tema claro u oscuro", lead: "Cómo se ve la app en este dispositivo.", tone: "" },
   cuenta: { label: "Mi cuenta", icon: "lock", desc: "Contraseña y sesión", lead: "Tus datos de acceso.", tone: "" },
-  soporte: { label: "Soporte", icon: "chat", desc: "Escríbenos y ve las respuestas", lead: "Estamos para ayudarte.", tone: "info" },
+  soporte: { label: "Ayuda", icon: "chat", desc: "Versión y ayuda por WhatsApp", lead: "Estamos para ayudarte.", tone: "info" },
 };
 const NAV = [
-  { title: "Tu tienda", items: ["negocio", "ventas", "inventario", "terminal"].map((id) => ({ id, ...SECTIONS[id] })) },
+  { title: "Tu tienda", items: ["negocio", "ventas", "inventario"].map((id) => ({ id, ...SECTIONS[id] })) },
   {
-    title: "Equipo y plan",
+    title: "Equipo",
     items: [
       { id: "staff", to: "/staff", label: "Empleados", icon: "users", desc: "Quién entra, invitaciones y turnos", tone: "good" },
-      { id: "billing", to: "/billing", label: "Plan y facturación", icon: "card", desc: "Tu suscripción y pagos", tone: "warn" },
     ],
   },
   { title: "Esta app", items: ["impresora", "bascula", "apariencia", "cuenta", "soporte"].map((id) => ({ id, ...SECTIONS[id] })) },
@@ -1251,48 +1190,6 @@ function logout() {
 }
 
 // ---------- Soporte ----------
-const support = reactive({ subject: "", message: "" });
-const supportBusy = ref(false);
-const supportMsg = ref("");
-const supportErr = ref("");
-const supportNote = ref("");
-const tickets = ref([]);
-const openTicket = ref("");
-function when(value) {
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? "" : d.toLocaleString("es-MX", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
-}
-async function loadSupport() {
-  supportNote.value = "";
-  try {
-    const data = await apiService.getSupportThread();
-    tickets.value = Array.isArray(data?.tickets) ? [...data.tickets].sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0)) : [];
-  } catch (e) {
-    tickets.value = [];
-    const d = e?.response?.data;
-    if (typeof d === "string" && d) supportNote.value = d;
-  }
-}
-async function sendSupport() {
-  supportBusy.value = true;
-  supportMsg.value = "";
-  supportErr.value = "";
-  try {
-    const data = await apiService.sendSupportMessage({ subject: support.subject.trim(), message: support.message.trim() });
-    tickets.value = Array.isArray(data?.tickets) ? data.tickets : tickets.value;
-    support.subject = "";
-    support.message = "";
-    supportMsg.value = "Mensaje enviado. Te respondemos a tu correo.";
-  } catch (e) {
-    supportErr.value = errText(e, "No se pudo enviar.");
-  } finally {
-    supportBusy.value = false;
-  }
-}
-watch(section, (s) => {
-  if (s === "soporte") loadSupport();
-});
-
 // ---------- Salir sin guardar ----------
 function onBeforeUnload(e) {
   if (!dirty.value || leaving) return;
@@ -1311,7 +1208,6 @@ onMounted(async () => {
   tick = setInterval(() => (now.value = new Date()), 30000);
   syncTaxChoice();
   syncFeeChoice();
-  if (section.value === "soporte") loadSupport();
   await fetchVenueSettings().catch(() => {});
   // Solo refresca el formulario si no se ha empezado a editar
   if (!dirty.value) {

@@ -36,7 +36,7 @@
           {{ isDark ? '☀' : '☾' }}
         </button>
         <button
-          v-if="moreItems.length || ownerMode"
+          v-if="moreItems.length"
           type="button"
           class="icon-btn"
           :class="{ 'only-pc': moreInDock }"
@@ -50,14 +50,6 @@
     </header>
 
     <div class="pos-body">
-      <div v-if="updateState.available" class="billing-banner info" role="status">
-        <span>Hay una nueva versión de Mi Tiendita. Termina la venta en curso y actualiza para tener lo último.</span>
-        <span class="banner-acts"><button type="button" @click="applyUpdate">Actualizar ahora</button></span>
-      </div>
-      <div v-if="billingBanner" class="billing-banner" :class="billingBanner.tone">
-        <span>{{ billingBanner.text }}</span>
-        <router-link to="/billing">Facturación</router-link>
-      </div>
       <div v-if="offlineBanner" class="billing-banner" :class="offlineBanner.tone" role="status">
         <span>{{ offlineBanner.text }}<small v-if="offlineBanner.last" class="sync-last"> · {{ offlineBanner.last }}</small></span>
         <span v-if="offlineBanner.upload || offlineBanner.review" class="banner-acts">
@@ -76,40 +68,7 @@
             Tema: {{ isDark ? 'Oscuro' : 'Claro' }}
           </button>
           <template v-for="item in moreItems" :key="item.to">
-            <!-- Sucursales: si ya hay organización, cada sucursal es un renglón del submenú -->
-            <div v-if="item.name === 'branches' && branchMenu" class="more-group">
-              <button
-                type="button"
-                class="more-link more-group-head"
-                :class="{ 'router-link-active': route.name === 'branches' }"
-                :aria-expanded="branchesOpen"
-                aria-controls="more-branches"
-                @click="branchesOpen = !branchesOpen"
-              >
-                <span>Sucursales <small class="more-count">{{ branchMenu.length }}</small></span>
-                <span class="more-chev" :class="{ open: branchesOpen }" aria-hidden="true">›</span>
-              </button>
-              <div v-show="branchesOpen" id="more-branches" class="more-sub" role="group" aria-label="Sucursales">
-                <button
-                  v-for="b in branchMenu"
-                  :key="b.id"
-                  type="button"
-                  class="more-sub-link"
-                  :class="{ current: b.current, off: b.suspended }"
-                  :disabled="b.current || b.suspended || branchBusy"
-                  :aria-current="b.current ? 'true' : undefined"
-                  @click="goBranch(b)"
-                >
-                  <span class="more-sub-name">{{ b.name }}</span>
-                  <small>{{ b.current ? (b.isMatrix ? 'Matriz · estás aquí' : 'Estás aquí') : b.suspended ? 'De baja' : b.isMatrix ? 'Matriz' : 'Entrar' }}</small>
-                </button>
-                <p v-if="branchError" class="more-sub-err" role="alert">{{ branchError }}</p>
-                <router-link to="/sucursales" class="more-sub-link all" @click="moreOpen = false">
-                  <span class="more-sub-name">Administrar y ver reporte de todas</span>
-                </router-link>
-              </div>
-            </div>
-            <router-link v-else :to="item.to" class="more-link" @click="moreOpen = false">
+            <router-link :to="item.to" class="more-link" @click="moreOpen = false">
               {{ item.label }}
             </router-link>
           </template>
@@ -161,33 +120,24 @@ import { venueStore } from "../venueStore";
 import BrandName from "./BrandName.vue";
 import WhatsAppHelp from "./WhatsAppHelp.vue";
 import { themeStore, toggleUiTheme } from "../themeStore";
-import { authStore, canAccessRoute, hasRole, isPartner, isPartnerAdmin, isPlatformAdmin, isPlatformStaff } from "../authStore";
-import { apiService, logoutSession } from "../apiService";
-import { applyBillingStatus } from "../billingStore";
+import { canAccessRoute } from "../authStore";
+import { logoutSession } from "../apiService";
 import { offlineStore } from "../offlineFlags";
-import { platformStore } from "../platform/platformStore";
 import { flushOfflineSales } from "../offlineSync";
-import { applyUpdate, updateState } from "../appUpdate";
-import { orgStore, loadOrg, enterBranch } from "../orgStore";
 
 const route = useRoute();
 const router = useRouter();
 const moreOpen = ref(false);
 const now = ref(new Date());
-const billingStatus = ref(null);
 let timer;
 
 const isDesk = computed(() =>
   ["pos", "products", "orders"].includes(String(route.name || ""))
 );
 
-// Cuentas fuera de una tienda (plataforma y socios): sin caja, facturación ni ventas sin conexión
-const ownerMode = computed(() => isPlatformStaff() || isPartner());
-const businessName = computed(() => {
-  if (!ownerMode.value) return venueStore.businessName || "Mi negocio";
-  if (isPartner()) return authStore.partnerName || "Portal de socios";
-  return isPlatformAdmin() ? "Admin" : "Soporte";
-});
+// Versión instalable: solo cuentas de la tienda (sin plataforma ni socios).
+const ownerMode = computed(() => false);
+const businessName = computed(() => venueStore.businessName || "Mi negocio");
 const logoSrc = computed(() => venueStore.logoUrl || "/logo.svg");
 const isDark = computed(() => themeStore.mode === "dark");
 const clock = computed(() => {
@@ -197,44 +147,6 @@ const clock = computed(() => {
   } catch {
     return now.value.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" });
   }
-});
-
-const billingBanner = computed(() => {
-  const s = billingStatus.value;
-  if (!s || !hasRole("admin", "cashier")) return null;
-  if (s.plan === "perpetual" || s.isPerpetual) return null;
-  if (s.billingStatus === "past_due") {
-    // Periodo de gracia: la tienda sigue vendiendo, pero hay que actualizar la tarjeta antes de la fecha
-    if (s.active && s.graceEndsAt) {
-      const end = new Date(s.graceEndsAt).toLocaleDateString("es-MX", { day: "numeric", month: "long" });
-      return { tone: "warn", text: `No pudimos cobrar tu plan. Actualiza tu tarjeta en Facturación antes del ${end} para no perder el acceso.` };
-    }
-    return { tone: "danger", text: "Pago pendiente — regulariza tu suscripción." };
-  }
-  if (s.billingStatus === "suspended") {
-    return { tone: "danger", text: "Cuenta suspendida — contacta a Mi Tiendita o paga tu plan." };
-  }
-  if (s.billingStatus === "trialing" && s.subscribedInTrial) {
-    const days = Number(s.trialDaysLeft);
-    return { tone: "warn", text: `Tu plan ya está listo: el primer cobro es al terminar tu prueba (te quedan ${days} día(s)).` };
-  }
-  if (s.billingStatus === "trialing") {
-    const days = Number(s.trialDaysLeft);
-    return {
-      tone: days <= 3 ? "danger" : "warn",
-      text:
-        days <= 0
-          ? "Tu prueba terminó. Activa un plan para seguir cobrando."
-          : `Prueba: te quedan ${days} día(s). Activa un plan cuando quieras.`,
-    };
-  }
-  if (s.cancelAtPeriodEnd && s.currentPeriodEnd) {
-    return {
-      tone: "warn",
-      text: `La suscripción no se renovará. Acceso hasta ${new Date(s.currentPeriodEnd).toLocaleDateString("es-MX")}.`,
-    };
-  }
-  return null;
 });
 
 const offlineBanner = computed(() => {
@@ -286,32 +198,6 @@ const ico = {
   inbox: `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13l2.5-8h13L21 13"/><path d="M3 13v6h18v-6h-5l-1.5 2h-5L8 13H3z"/></svg>`,
 };
 
-// Plataforma: soporte ve lo de atender; el admin, además, el dinero y el equipo
-const supportDock = [
-  { to: "/platform", name: "platform", label: "Hoy", icon: ico.home },
-  { to: "/platform/soporte", name: "platformSupport", label: "Soporte", icon: ico.inbox },
-  { to: "/platform/clientes", name: "platformClients", label: "Clientes", icon: ico.products },
-];
-const adminDock = [
-  ...supportDock,
-  { to: "/platform/finanzas", name: "platformFinance", label: "Finanzas", icon: ico.cash },
-  { to: "/platform/vendedores", name: "platformReferrers", label: "Vendedores", icon: ico.tag },
-  { to: "/platform/equipo", name: "platformTeam", label: "Equipo", icon: ico.people },
-];
-
-// Socios: el dueño ve además sus comisiones; el equipo es visible para todos, solo el dueño lo cambia
-const partnerStaffDock = [
-  { to: "/socio", name: "partner", label: "Inicio", icon: ico.home },
-  { to: "/socio/clientes", name: "partnerClients", label: "Mis tiendas", icon: ico.products },
-  { to: "/socio/equipo", name: "partnerTeam", label: "Equipo", icon: ico.people },
-];
-const partnerAdminDock = [
-  partnerStaffDock[0],
-  partnerStaffDock[1],
-  { to: "/socio/comisiones", name: "partnerCommissions", label: "Comisiones", icon: ico.cash },
-  partnerStaffDock[2],
-];
-
 const allDock = [
   { to: "/pos", name: "pos", label: "Vender", icon: ico.sell },
   { to: "/products", name: "products", label: "Productos", icon: ico.products },
@@ -323,43 +209,15 @@ const allMore = [
   { to: "/inventory", name: "inventory", label: "Inventario / Proveedores" },
   { to: "/customers", name: "customers", label: "Clientes" },
   { to: "/staff", name: "staff", label: "Empleados" },
-  { to: "/sucursales", name: "branches", label: "Sucursales" },
-  { to: "/billing", name: "billing", label: "Facturación / Planes" },
   { to: "/settings", name: "settings", label: "Configuración" },
   { to: "/ayuda", name: "help", label: "Ayuda" },
 ];
 
-const dock = computed(() => {
-  if (!ownerMode.value) return allDock.filter((i) => canAccessRoute(i.name));
-  if (isPartner()) return isPartnerAdmin() ? partnerAdminDock : partnerStaffDock;
-  const items = isPlatformAdmin() ? adminDock : supportDock;
-  // Tickets por responder sobre «Soporte»
-  return items.map((i) => (i.name === "platformSupport" ? { ...i, badge: platformStore.waiting || 0 } : i));
-});
+const dock = computed(() => allDock.filter((i) => canAccessRoute(i.name)));
 const moreItems = computed(() => allMore.filter((i) => canAccessRoute(i.name)));
 
-// Submenú de sucursales: solo el dueño y solo cuando ya existe la organización (hay al menos una sucursal además de la matriz)
-const branchMenu = computed(() => {
-  if (!orgStore.isOwner || !orgStore.organization || orgStore.branches.length < 2) return null;
-  // La matriz primero y luego las sucursales por orden de alta
-  return [...orgStore.branches].sort((a, b) => Number(b.isMatrix) - Number(a.isMatrix));
-});
-const branchesOpen = ref(true);
-const branchBusy = ref(false);
-const branchError = ref("");
-async function goBranch(b) {
-  branchBusy.value = true;
-  branchError.value = "";
-  try {
-    await enterBranch(b);
-  } catch (e) {
-    branchError.value = e?.response?.data?.message || "No se pudo cambiar de sucursal.";
-  } finally {
-    branchBusy.value = false;
-  }
-}
 // "Más" vive con las demás pestañas cuando caben (celular y tablet)
-const moreInDock = computed(() => (moreItems.value.length > 0 || ownerMode.value) && dock.value.length <= 4);
+const moreInDock = computed(() => moreItems.value.length > 0 && dock.value.length <= 4);
 const dockCount = computed(() => dock.value.length + (moreInDock.value ? 1 : 0));
 const onMoreRoute = computed(() => moreItems.value.some((i) => i.name === route.name));
 
@@ -368,23 +226,11 @@ function logout() {
   logoutSession().finally(() => router.push("/"));
 }
 
-async function loadBilling() {
-  if (ownerMode.value) return;
-  try {
-    billingStatus.value = await apiService.getBillingStatus();
-    applyBillingStatus(billingStatus.value);
-  } catch {
-    billingStatus.value = null;
-  }
-}
-
 onMounted(() => {
   timer = setInterval(() => {
     now.value = new Date();
   }, 30000);
-  loadBilling();
   flushOfflineSales();
-  loadOrg();
 });
 onUnmounted(() => clearInterval(timer));
 </script>

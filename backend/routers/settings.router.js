@@ -8,8 +8,6 @@ const { requireAuth, requireActiveSubscription, requireRoles } = require('../mid
 router.get('/', requireAuth, upload.none(), settingsController.GetSettings);
 router.get('/onboarding', requireAuth, settingsController.GetOnboarding);
 router.post('/onboarding/dismiss', requireAuth, requireRoles('admin'), settingsController.DismissOnboarding);
-router.get('/support', requireAuth, requireRoles('admin'), settingsController.GetSupport);
-router.post('/support', requireAuth, requireRoles('admin'), settingsController.SendSupport);
 router.post(
   '/',
   requireAuth,

@@ -15,7 +15,6 @@ const { passwordProblem } = require('../utils/password-policy');
 const sessions = require('../services/session.service');
 const totp = require('../utils/totp');
 const secretBox = require('../utils/secret-box');
-const referrals = require('../services/referral.service');
 
 const MAX_FAILED_LOGINS = 5;
 const LOCK_MS = 15 * 60 * 1000;
@@ -52,65 +51,6 @@ function checkSecondFactor(user, code) {
   return null;
 }
 
-/** Para el formulario de registro: ¿ese código es de un vendedor activo? Solo da el nombre de pila. */
-const CheckReferralCode = async (req, res) => {
-  try {
-    const ref = await referrals.findActiveByCode(req.params.code);
-    if (!ref) return res.status(200).json({ valid: false });
-    return res.status(200).json({ valid: true, seller: ref.name.split(' ')[0] });
-  } catch (err) {
-    console.error(err);
-    return res.status(200).json({ valid: false });
-  }
-};
-
-/** Solicitud pública para ser proveedor oficial (socio). Queda en revisión. */
-const ApplyPartner = async (req, res) => {
-  const partners = require('../services/partner.service');
-  try {
-    const body = req.body || {};
-    const { partner, user } = await partners.apply({
-      name: body.name,
-      lastName: body.lastName,
-      email: body.email,
-      username: body.username,
-      password: body.password,
-      cellphone: body.cellphone,
-      state: body.state,
-      city: body.city,
-      notes: body.notes,
-    });
-    await db
-      .CreatePlatformAudit({
-        tenantId: null,
-        type: 'partner_applied',
-        message: `Nueva solicitud de proveedor: ${partner.name} (${partner.state || 'sin estado'})`,
-        meta: { referrerId: partner.id },
-        actor: user.username,
-        actorRole: 'partner_admin',
-        createdAt: new Date(),
-      })
-      .catch(() => {});
-    const inbox = String(process.env.SUPPORT_EMAIL || process.env.SMTP_USER || '').trim();
-    if (inbox.includes('@')) {
-      const { sendMail } = require('../utils/mail.utils');
-      const esc = (v) => String(v || '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-      safeSend(() =>
-        sendMail({
-          to: inbox,
-          subject: `Nueva solicitud de proveedor: ${partner.name}`,
-          html: `<p><strong>${esc(partner.name)}</strong> quiere ser proveedor oficial.</p><p>${esc(partner.email)} · ${esc(partner.phone || 'sin teléfono')} · ${esc([partner.city, partner.state].filter(Boolean).join(', '))}</p><p>Revísalo en Admin → Vendedores para aprobarlo.</p>`,
-        })
-      );
-    }
-    return res.status(201).json({ ok: true, status: 'pending', username: user.username });
-  } catch (err) {
-    if (err.status) return res.status(err.status).send(err.message);
-    console.error(err);
-    return res.status(500).send('No pudimos registrar tu solicitud. Intenta de nuevo.');
-  }
-};
-
 const CreateUser = async (req, res) => {
   try {
     const { error, value } = schema.validate(req.body);
@@ -126,19 +66,10 @@ const CreateUser = async (req, res) => {
       return res.status(400).send('Usuario con el correo ya registrado');
     }
 
-    // Código de un vendedor (opcional): se valida antes de crear nada para no dejar una tienda a medias
-    let referrer = null;
-    try {
-      referrer = await referrals.resolveForSignup(value.referralCode, { email: value.email });
-    } catch (err) {
-      if (err instanceof referrals.ReferralError) return res.status(err.status).send(err.message);
-      throw err;
-    }
     delete value.referralCode;
 
     const tenant = await db.CreateTenant({
       ...createTenantDoc(value.businessName || `${value.name} ${value.lastName}`),
-      ...(referrer ? referrals.referralFields(referrer) : {}),
     });
     const tenantId = tenant.id;
 
@@ -148,21 +79,6 @@ const CreateUser = async (req, res) => {
     delete value.businessName;
 
     await service.CreateUser(value);
-
-    if (referrer) {
-      await db.CreateBillingEvent({
-        tenantId,
-        type: 'referred',
-        note: `Llegó con el código ${referrer.code} (${referrer.name})`,
-      }).catch(() => {});
-    }
-    await db.CreateBillingEvent({
-      tenantId,
-      type: 'trial_started',
-      plan: 'basic',
-      interval: 'month',
-      note: `Prueba de ${TRIAL_DAYS} días`,
-    }).catch(() => {});
 
     await db.CreateSettings({
       tenantId,
@@ -488,8 +404,6 @@ const ChangePassword = async (req, res) => {
 
 module.exports = {
   CreateUser,
-  ApplyPartner,
-  CheckReferralCode,
   LoginUsuario,
   LoginMfa,
   RefreshSession,

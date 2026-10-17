@@ -144,15 +144,6 @@ axios.interceptors.response.use(
     }
     if (status === 401 && !isAuthCall) endSessionAndGoToLogin();
     if (status === 403 && error.response?.data?.code === 'MFA_SETUP_REQUIRED') endSessionAndGoToLogin();
-    if (
-      status === 403 &&
-      error.response?.data?.code === 'SUBSCRIPTION_REQUIRED' &&
-      typeof window !== 'undefined' &&
-      !window.location.pathname.startsWith('/billing') &&
-      !window.location.pathname.startsWith('/platform')
-    ) {
-      window.location.href = '/billing';
-    }
     return Promise.reject(error);
   }
 );
@@ -189,9 +180,6 @@ export const apiService = {
   },
   mfaDisable(password: string, code: string) {
     return axios.post('/usuarios/mfa/disable', { password, code }).then((r) => r.data);
-  },
-  registerPartner(payload: Record<string, unknown>) {
-    return axios.post('/usuarios/register-partner', payload).then((r) => r.data);
   },
   register(payload: Record<string, unknown>) {
     return axios.post('/usuarios/register', payload).then((r) => r.data);
@@ -316,12 +304,6 @@ export const apiService = {
   markInvoiceIssued(orderId: string) {
     return axios.put(`/orders/${orderId}/invoice`).then((r) => r.data);
   },
-  getPublicInvoice(token: string) {
-    return axios.get(`/invoices/public/${token}`).then((r) => r.data);
-  },
-  submitPublicInvoice(token: string, payload: Record<string, string>) {
-    return axios.post(`/invoices/public/${token}`, payload).then((r) => r.data);
-  },
   editOrderAsCompleted(orderId: string) {
     return this.updateOrderStatus(orderId, 'served');
   },
@@ -396,109 +378,14 @@ export const apiService = {
     return axios.get(`/cash/session/${id}`).then((r) => r.data);
   },
 
-    // ── Terminal Mercado Pago (Point) ──
-  pointStatus() {
-    return axios.get('/point/status').then((r) => r.data);
-  },
-  pointConnect() {
-    return axios.get('/point/connect').then((r) => r.data);
-  },
-  pointTerminals() {
-    return axios.get('/point/terminals').then((r) => r.data);
-  },
-  pointRegisterTerminal(terminalId: string) {
-    return axios.post('/point/terminal', { terminalId }).then((r) => r.data);
-  },
-  pointDisconnect() {
-    return axios.delete('/point/connection').then((r) => r.status === 204);
-  },
-  pointStartCharge(body: { clientSaleId: string; amount: number }) {
-    return axios.post('/point/charges', body, { timeout: 20000 }).then((r) => r.data);
-  },
-  pointChargeStatus(id: string) {
-    return axios.get(`/point/charges/${id}`, { timeout: 15000 }).then((r) => r.data);
-  },
-  pointCancelCharge(id: string) {
-    return axios.post(`/point/charges/${id}/cancel`, {}, { timeout: 20000 }).then((r) => r.data);
-  },
 
-  getBillingPlans() {
-    return axios.get('/billing/plans').then((r) => r.data);
-  },
-  getBillingStatus() {
-    return axios.get('/billing/status').then((r) => r.data);
-  },
-  getBillingHistory() {
-    return axios.get('/billing/history').then((r) => r.data);
-  },
-  billingCheckout(plan: string, email?: string, interval: 'month' | 'year' = 'month') {
-    return axios.post('/billing/checkout', { plan, email, interval }).then((r) => r.data);
-  },
-  billingSync(preapprovalId?: string) {
-    return axios.post('/billing/sync', { preapprovalId }).then((r) => r.data);
-  },
-  billingCancel() {
-    return axios.post('/billing/cancel').then((r) => r.data);
-  },
-  billingDevActivate(plan: string, preapprovalId?: string, interval: 'month' | 'year' = 'month') {
-    return axios
-      .post('/billing/dev/activate', { plan, preapprovalId, interval })
-      .then((r) => r.data);
-  },
   getOnboarding() {
     return axios.get('/settings/onboarding').then((r) => r.data);
   },
   dismissOnboarding() {
     return axios.post('/settings/onboarding/dismiss').then((r) => r.data);
   },
-  getSupportThread() {
-    return axios.get('/settings/support').then((r) => r.data);
-  },
-  sendSupportMessage(payload: { subject: string; message: string }) {
-    return axios.post('/settings/support', payload).then((r) => r.data);
-  },
 
-  aiQuota() {
-    return axios.get('/ai/quota').then((r) => r.data);
-  },
-  aiPreview(payload: { text?: string; images?: { imageBase64: string; mimeType: string }[]; imageBase64?: string; mimeType?: string }) {
-    return axios.post('/ai/preview', payload, { timeout: 130_000 }).then((r) => r.data);
-  },
-  aiApply(
-    updates: {
-      id: string;
-      price?: number;
-      cost?: number;
-      stockIn?: number;
-      lot?: string;
-      expiresAt?: string;
-    }[],
-    creates?: {
-      name: string;
-      price: number;
-      cost?: number;
-      barcode?: string;
-      menuId: string;
-      stock?: number;
-      stockIn?: number;
-      lot?: string;
-      expiresAt?: string;
-    }[],
-    purchase?: {
-      supplierId?: string;
-      name?: string;
-      contact?: string;
-      whatsapp?: string;
-      date?: string;
-      expiresAt?: string;
-      lot?: string;
-      notes?: string;
-    }
-  ) {
-    return axios
-      .post('/ai/apply', { updates, creates: creates || [], purchase: purchase || undefined })
-      .then((r) => r.data);
-  },
 
   changePassword(currentPassword: string, newPassword: string) {
     return axios
@@ -506,140 +393,6 @@ export const apiService = {
       .then((r) => r.data);
   },
 
-  platformOverview() {
-    return cachedGet('/platform/overview');
-  },
-  /** Cobros reales del mes y la parte de cada socio (solo los admins permanentes). */
-  platformPayments(month?: string) {
-    return axios.get('/platform/payments', { params: { month } }).then((r) => r.data);
-  },
-  platformPaymentsCsv(month: string) {
-    return axios.get('/platform/payments', { params: { month, format: 'csv' }, responseType: 'blob' }).then((r) => r.data);
-  },
-  platformReport() {
-    return axios.get('/platform/report', { responseType: 'text' }).then((r) => r.data);
-  },
-  platformCreateExpense(payload: { label: string; amount: number; note?: string }) {
-    return axios.post('/platform/expenses', payload).then((r) => r.data);
-  },
-  platformDeleteExpense(id: string) {
-    return axios.delete(`/platform/expenses/${id}`).then((r) => r.data);
-  },
-  platformListTenants() {
-    return cachedGet('/platform/tenants');
-  },
-  platformGetTenant(id: string) {
-    return axios.get(`/platform/tenants/${id}`).then((r) => r.data);
-  },
-  platformUpdateTenant(id: string, payload: Record<string, unknown>) {
-    return axios.patch(`/platform/tenants/${id}`, payload).then((r) => r.data);
-  },
-  platformClientMail(id: string) {
-    return axios.get(`/platform/tenants/${id}/mail`).then((r) => r.data);
-  },
-  platformSendClientMail(id: string, payload: { to?: string; subject?: string; message: string; ticketId?: string }) {
-    return axios.post(`/platform/tenants/${id}/mail`, payload).then((r) => r.data);
-  },
-  /** Bandeja de soporte: tickets de todos los clientes que le tocan a quien pregunta. */
-  platformSupport(params: { status?: 'open' | 'answered' | 'all'; q?: string; limit?: number } = {}) {
-    return cachedGet('/platform/support', params, 15000);
-  },
-  platformTenantActivity(id: string) {
-    return axios.get(`/platform/tenants/${id}/activity`).then((r) => r.data);
-  },
-  platformActivity(limit = 60) {
-    return cachedGet('/platform/activity', { limit });
-  },
-  platformResetStaffMfa(id: string) {
-    return axios.post(`/platform/staff/${id}/reset-mfa`).then((r) => r.data);
-  },
-  platformInbox() {
-    return cachedGet('/platform/inbox');
-  },
-  platformSuspendTenant(id: string, reason: string) {
-    return axios.post(`/platform/tenants/${id}/suspend`, { reason }).then((r) => r.data);
-  },
-  platformReactivateTenant(id: string, mode: 'active' | 'trial' = 'active') {
-    return axios.post(`/platform/tenants/${id}/reactivate`, { mode }).then((r) => r.data);
-  },
-  platformSetPlan(id: string, plan: string) {
-    return axios.patch(`/platform/tenants/${id}/plan`, { plan }).then((r) => r.data);
-  },
-  partnerHome() {
-    return cachedGet('/partner/home');
-  },
-  partnerClients() {
-    return cachedGet('/partner/clients');
-  },
-  partnerClient(id: string) {
-    return axios.get(`/partner/clients/${id}`).then((r) => r.data);
-  },
-  partnerAddNote(id: string, text: string) {
-    return axios.post(`/partner/clients/${id}/notes`, { text }).then((r) => r.data);
-  },
-  partnerAssign(id: string, username: string | null) {
-    return axios.put(`/partner/clients/${id}/assignee`, { username }).then((r) => r.data);
-  },
-  partnerCommissions() {
-    return axios.get('/partner/commissions').then((r) => r.data);
-  },
-  partnerTeam() {
-    return cachedGet('/partner/team');
-  },
-  partnerCreateMember(payload: Record<string, unknown>) {
-    return axios.post('/partner/team', payload).then((r) => r.data);
-  },
-  partnerSetMemberActive(id: string, active: boolean) {
-    return axios.put(`/partner/team/${id}/${active ? 'reactivate' : 'deactivate'}`).then((r) => r.data);
-  },
-  partnerSetMemberRole(id: string, role: string) {
-    return axios.put(`/partner/team/${id}/role`, { role }).then((r) => r.data);
-  },
-  platformReferrerUsers(id: string) {
-    return axios.get(`/platform/referrers/${id}/users`).then((r) => r.data);
-  },
-  platformCreateReferrerUser(id: string, payload: Record<string, unknown>) {
-    return axios.post(`/platform/referrers/${id}/users`, payload).then((r) => r.data);
-  },
-  platformSetReferrerUserActive(id: string, userId: string, active: boolean) {
-    return axios.put(`/platform/referrers/${id}/users/${userId}/active`, { active }).then((r) => r.data);
-  },
-  platformReferrers() {
-    return cachedGet('/platform/referrers');
-  },
-  platformReferrer(id: string) {
-    return axios.get(`/platform/referrers/${id}`).then((r) => r.data);
-  },
-  platformCreateReferrer(payload: Record<string, unknown>) {
-    return axios.post('/platform/referrers', payload).then((r) => r.data);
-  },
-  platformUpdateReferrer(id: string, payload: Record<string, unknown>) {
-    return axios.patch(`/platform/referrers/${id}`, payload).then((r) => r.data);
-  },
-  platformPayReferrer(id: string, note = '') {
-    return axios.post(`/platform/referrers/${id}/payouts`, { note }).then((r) => r.data);
-  },
-  platformVoidCommission(id: string, reason = '') {
-    return axios.post(`/platform/commissions/${id}/void`, { reason }).then((r) => r.data);
-  },
-  platformSetTenantReferrer(tenantId: string, code: string | null) {
-    return axios.put(`/platform/tenants/${tenantId}/referrer`, { code }).then((r) => r.data);
-  },
-  platformManualPayment(tenantId: string, payload: { amount: number; months?: number; note?: string }) {
-    return axios.post(`/platform/tenants/${tenantId}/manual-payment`, payload).then((r) => r.data);
-  },
-  checkReferralCode(code: string) {
-    return axios.get(`/usuarios/referral/${encodeURIComponent(code)}`).then((r) => r.data);
-  },
-  platformListStaff() {
-    return axios.get('/platform/staff').then((r) => r.data);
-  },
-  platformCreateStaff(payload: Record<string, unknown>) {
-    return axios.post('/platform/staff', payload).then((r) => r.data);
-  },
-  platformDeleteStaff(id: string) {
-    return axios.delete(`/platform/staff/${id}`).then((r) => r.data);
-  },
 
   // ── Clientes ──
   getCustomers(q?: string) {
@@ -653,29 +406,6 @@ export const apiService = {
   },
   updateCustomer(id: string, data: Record<string, unknown>) {
     return axios.put(`/customers/${id}`, data).then((r) => r.data);
-  },
-  // Sucursales
-  getOrganization() {
-    return axios.get('/org').then((r) => r.data);
-  },
-  createBranch(name: string) {
-    return axios.post('/org/branches', { name }).then((r) => r.data);
-  },
-  suspendBranch(id: string) {
-    return axios.post(`/org/branches/${id}/suspend`).then((r) => r.data);
-  },
-  reactivateBranch(id: string) {
-    return axios.post(`/org/branches/${id}/reactivate`).then((r) => r.data);
-  },
-  /** Abre una sesión como la cuenta de esa sucursal; la respuesta es la misma que la del login. */
-  switchBranch(branchId: string) {
-    return axios.post('/org/switch', { branchId }).then((r) => r.data);
-  },
-  getOrgSummary(range: { from: string; to: string }) {
-    return axios.get('/org/reports/summary', { params: range }).then((r) => r.data);
-  },
-  getOrgSummaryCsv(range: { from: string; to: string }) {
-    return axios.get('/org/reports/summary.csv', { params: range, responseType: 'blob' }).then((r) => r.data as Blob);
   },
   // Fiado y abonos
   /** Compras, gasto, última visita y segmento (frecuente / inactivo / nuevo) de cada cliente. */

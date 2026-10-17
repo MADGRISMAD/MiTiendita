@@ -19,7 +19,6 @@ import { useRoute } from "vue-router";
 import { SUPPORT_HOURS, supportMessage, whatsappLink } from "../support";
 import { venueStore } from "../venueStore";
 import { authStore } from "../authStore";
-import { billingStore } from "../billingStore";
 
 // message: texto propio (landing, licencia perpetua); sin él arma el de ayuda con los datos de la tienda
 const props = defineProps({
@@ -36,7 +35,7 @@ const href = computed(() =>
       supportMessage({
         businessName: venueStore.businessName,
         tenantId: authStore.tenantId,
-        plan: billingStore.planName || billingStore.plan,
+        plan: "Versión permanente",
         screen: route?.fullPath,
       })
   )
