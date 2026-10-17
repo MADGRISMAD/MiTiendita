@@ -60,22 +60,26 @@
                   <span>Preparando la foto…</span>
                 </div>
 
-                <!-- Ya hay foto -->
-                <template v-else-if="photoUrl">
-                  <figure class="mg-preview">
-                    <img :src="photoUrl" alt="Foto de la nota" />
-                    <button type="button" class="mg-preview-x" :disabled="busy" aria-label="Quitar foto" @click="clearPhoto">
-                      <PosIcon name="x" :size="18" />
-                    </button>
-                  </figure>
-                  <div class="mg-pick small">
+                <!-- Ya hay fotos -->
+                <template v-else-if="photos.length">
+                  <div class="mg-previews">
+                    <figure v-for="(p, i) in photos" :key="p.id" class="mg-preview">
+                      <img :src="p.url" :alt="`Foto ${i + 1} de la nota`" />
+                      <figcaption v-if="photos.length > 1" class="mg-preview-n">{{ i + 1 }}</figcaption>
+                      <button type="button" class="mg-preview-x" :disabled="busy" :aria-label="`Quitar foto ${i + 1}`" @click="removePhoto(p.id)">
+                        <PosIcon name="x" :size="18" />
+                      </button>
+                    </figure>
+                  </div>
+                  <div v-if="photos.length < MAX_PHOTOS" class="mg-pick small">
                     <button type="button" class="mg-pick-btn" :disabled="busy" @click="cameraInput?.click()">
                       <PosIcon name="camera" :size="18" /> <span>Tomar otra</span>
                     </button>
                     <button type="button" class="mg-pick-btn" :disabled="busy" @click="galleryInput?.click()">
-                      <PosIcon name="image" :size="18" /> <span>Elegir otra</span>
+                      <PosIcon name="image" :size="18" /> <span>Agregar otra</span>
                     </button>
                   </div>
+                  <p class="mg-photo-tip">Si la nota es larga, toma varias fotos (hasta {{ MAX_PHOTOS }}). Se leen juntas y cuentan como un solo uso.</p>
                 </template>
 
                 <!-- Sin foto: dos botones grandes -->
@@ -98,7 +102,7 @@
                 </template>
 
                 <input ref="cameraInput" type="file" accept="image/*" capture="environment" class="sr-only" tabindex="-1" aria-hidden="true" @change="onPhoto" />
-                <input ref="galleryInput" type="file" accept="image/jpeg,image/png,image/webp,image/*" class="sr-only" tabindex="-1" aria-hidden="true" @change="onPhoto" />
+                <input ref="galleryInput" type="file" multiple accept="image/jpeg,image/png,image/webp,image/*" class="sr-only" tabindex="-1" aria-hidden="true" @change="onPhoto" />
               </section>
               <div class="mg-or" aria-hidden="true"><span>o</span></div>
               <label class="mg-text">
@@ -111,7 +115,7 @@
                 />
               </label>
             </div>
-            <button v-if="photoUrl && !photoBusy" type="button" class="mg-link" @click="clearPhoto">Quitar foto</button>
+            <button v-if="photos.length && !photoBusy" type="button" class="mg-link" @click="clearPhoto">{{ photos.length > 1 ? "Quitar fotos" : "Quitar foto" }}</button>
 
             <ul class="mg-how">
               <li>
@@ -142,7 +146,7 @@
           <!-- ========== Paso 2: revisar ========== -->
           <template v-else-if="step === 2">
             <div class="mg-summary">
-              <img v-if="photoUrl" :src="photoUrl" alt="" class="mg-mini" />
+              <img v-if="photos.length" :src="photos[0].url" alt="" class="mg-mini" />
               <div class="mg-sum-chips">
                 <span class="mg-pill">{{ picks.length }} {{ picks.length === 1 ? 'ya lo tienes' : 'ya los tienes' }}</span>
                 <span class="mg-pill info">{{ news.length }} {{ news.length === 1 ? 'nuevo' : 'nuevos' }}</span>
@@ -154,6 +158,20 @@
                 <small>Compra</small>
                 <strong>{{ money(purchaseTotal) }}</strong>
               </div>
+            </div>
+
+            <div v-if="repeats.length" class="mg-msg warn" role="status">
+              <PosIcon name="alert" :size="17" />
+              <span>
+                <b>Salieron productos repetidos entre fotos.</b> Revisa que no se cuenten doble:
+                <ul class="mg-repeats">
+                  <li v-for="r in repeats" :key="r.name + r.photos.join()">
+                    {{ r.name }}: fotos {{ r.photos.join(" y ") }}.
+                    <template v-if="r.counted === 'once'">Eran iguales, lo conté una sola vez ({{ r.packs[0] }}).</template>
+                    <template v-else>Con cantidades distintas ({{ r.packs[0] }} y {{ r.packs[1] }}); dejé los dos renglones, borra el que sobre.</template>
+                  </li>
+                </ul>
+              </span>
             </div>
 
             <section class="mg-card">
@@ -387,12 +405,10 @@ const props = defineProps({
 const emit = defineEmits(["close", "applied", "manual"]);
 
 const text = ref("");
-const photoName = ref("");
-const photoUrl = ref("");
+const MAX_PHOTOS = 4;
+const photos = ref([]); // [{ id, url, base64, mimeType, objectUrl }]
 const photoBusy = ref(false);
-const imageBase64 = ref("");
-const mimeType = ref("");
-const photoObjectUrl = ref("");
+let photoSeq = 0;
 const quota = ref(null);
 const error = ref("");
 const notice = ref("");
@@ -486,7 +502,7 @@ const blocked = computed(() => {
 });
 
 const canReview = computed(() =>
-  Boolean(text.value.trim() || imageBase64.value)
+  Boolean(text.value.trim() || photos.value.length)
 );
 
 function readyNew(row) {
@@ -499,6 +515,7 @@ const saveCount = computed(() => {
   return u + c;
 });
 
+const repeats = computed(() => (Array.isArray(result.value?.repeats) ? result.value.repeats : []));
 const costAlerts = computed(() => picks.value.filter((row) => row.costUp));
 const picksChecked = computed(() => picks.value.filter((row) => row.checked).length);
 const newsReady = computed(() => news.value.filter(readyNew).length);
@@ -551,19 +568,19 @@ async function loadQuota() {
   }
 }
 
-function releasePhotoUrl() {
-  if (photoObjectUrl.value) {
-    URL.revokeObjectURL(photoObjectUrl.value);
-    photoObjectUrl.value = "";
-  }
+function releasePhoto(p) {
+  if (p?.objectUrl) URL.revokeObjectURL(p.objectUrl);
+}
+
+function removePhoto(id) {
+  const p = photos.value.find((x) => x.id === id);
+  releasePhoto(p);
+  photos.value = photos.value.filter((x) => x.id !== id);
 }
 
 function clearPhoto() {
-  releasePhotoUrl();
-  photoName.value = "";
-  photoUrl.value = "";
-  imageBase64.value = "";
-  mimeType.value = "";
+  photos.value.forEach(releasePhoto);
+  photos.value = [];
   photoBusy.value = false;
 }
 
@@ -656,43 +673,47 @@ const cameraInput = ref(null);
 const galleryInput = ref(null);
 
 async function onPhoto(event) {
-  const file = event.target.files?.[0];
+  const files = Array.from(event.target.files || []);
   event.target.value = "";
-  await takePhoto(file);
+  await takePhotos(files);
 }
 
 function onDrop(event) {
   dragging.value = false;
-  const file = event.dataTransfer?.files?.[0];
-  if (file && /^image\//.test(file.type)) takePhoto(file);
-  else if (file) error.value = "Eso no es una imagen. Arrastra la foto de la nota.";
+  const files = Array.from(event.dataTransfer?.files || []);
+  const images = files.filter((f) => /^image\//.test(f.type));
+  if (images.length) takePhotos(images);
+  else if (files.length) error.value = "Eso no es una imagen. Arrastra la foto de la nota.";
 }
 
-async function takePhoto(file) {
-  if (!file || busy.value) return;
-  if (file.size > 12_000_000) {
-    error.value = "La foto es muy pesada. Toma otra más sencilla.";
-    return;
-  }
+async function takePhotos(files) {
+  if (!files.length || busy.value) return;
   error.value = "";
   notice.value = "";
+  const room = MAX_PHOTOS - photos.value.length;
+  if (room <= 0) {
+    error.value = `Máximo ${MAX_PHOTOS} fotos por nota.`;
+    return;
+  }
+  const picked = files.slice(0, room);
   photoBusy.value = true;
-  releasePhotoUrl();
-  photoUrl.value = "";
-  imageBase64.value = "";
-  mimeType.value = "";
-  photoName.value = file.name || "Foto";
   try {
-    await yieldUi();
-    const packed = await compressPhoto(file);
-    photoObjectUrl.value = packed.objectUrl || "";
-    photoUrl.value = packed.url;
-    mimeType.value = packed.mimeType;
-    imageBase64.value = packed.base64;
-    notice.value = "Foto lista. Ya puedes revisar la lista.";
-  } catch (e) {
-    clearPhoto();
-    error.value = e?.message || "No pude usar esa foto.";
+    for (const file of picked) {
+      if (file.size > 12_000_000) {
+        error.value = "Una foto es muy pesada y no se agregó. Toma otra más sencilla.";
+        continue;
+      }
+      await yieldUi();
+      try {
+        const packed = await compressPhoto(file);
+        photos.value = [...photos.value, { id: ++photoSeq, url: packed.url, base64: packed.base64, mimeType: packed.mimeType, objectUrl: packed.objectUrl || "" }];
+      } catch (e) {
+        error.value = e?.message || "No pude usar esa foto.";
+      }
+    }
+    if (photos.value.length) {
+      notice.value = files.length > room ? `Agregué ${picked.length}; el máximo es ${MAX_PHOTOS} fotos.` : photos.value.length > 1 ? `${photos.value.length} fotos listas. Ya puedes revisar la lista.` : "Foto lista. Ya puedes revisar la lista.";
+    }
   } finally {
     photoBusy.value = false;
   }
@@ -899,8 +920,7 @@ async function review() {
   try {
     const data = await apiService.aiPreview({
       text: text.value,
-      imageBase64: imageBase64.value || undefined,
-      mimeType: mimeType.value || undefined,
+      images: photos.value.length ? photos.value.map((p) => ({ imageBase64: p.base64, mimeType: p.mimeType })) : undefined,
     });
     if (data.quota) quota.value = data.quota;
     if (data.message) notice.value = data.message;
@@ -1303,6 +1323,10 @@ onMounted(async () => {
 @keyframes mg-spin { to { transform: rotate(360deg); } }
 .mg-preview { position: relative; margin: 0; overflow: hidden; border-radius: 1rem; border: 1px solid var(--timber-line); background: var(--timber-surface); }
 .mg-preview img { display: block; width: 100%; max-height: 16rem; object-fit: contain; }
+.mg-repeats { margin: 0.3rem 0 0; padding-left: 1.1rem; font-weight: 500; }
+.mg-previews { display: grid; grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr)); gap: 0.6rem; }
+.mg-previews .mg-preview img { max-height: 11rem; }
+.mg-preview-n { position: absolute; left: 0.4rem; bottom: 0.4rem; min-width: 1.5rem; padding: 0.1rem 0.4rem; border-radius: 999px; background: rgb(0 0 0 / 0.65); color: #fff; font-size: 0.75rem; font-weight: 800; text-align: center; }
 .mg-preview-x {
   position: absolute;
   top: 0.5rem;

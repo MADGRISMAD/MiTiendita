@@ -461,7 +461,7 @@ export const apiService = {
   aiQuota() {
     return axios.get('/ai/quota').then((r) => r.data);
   },
-  aiPreview(payload: { text?: string; imageBase64?: string; mimeType?: string }) {
+  aiPreview(payload: { text?: string; images?: { imageBase64: string; mimeType: string }[]; imageBase64?: string; mimeType?: string }) {
     return axios.post('/ai/preview', payload, { timeout: 130_000 }).then((r) => r.data);
   },
   aiApply(

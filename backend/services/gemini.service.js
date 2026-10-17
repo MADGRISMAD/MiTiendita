@@ -288,6 +288,11 @@ function parseLooseList(text) {
   return { items: items.slice(0, 80), complete: lines.length > 0 && missed === 0 && items.length > 0 };
 }
 
+function photoNo(value) {
+  const n = Math.floor(Number(value));
+  return Number.isFinite(n) && n > 0 && n <= 9 ? n : 0;
+}
+
 function absorbLoose(row) {
   const lot = String(row?.lot || row?.lote || '').trim().slice(0, 60);
   const expiresAt = parseDocDate(row?.expiresAt || row?.caducidad || row?.expiry);
@@ -302,6 +307,7 @@ function absorbLoose(row) {
       packSize: intQty(row?.packSize, 0),
       lot,
       expiresAt,
+      photo: photoNo(row?.photo),
       fromLoose: false,
     };
   }
@@ -361,7 +367,9 @@ function sameItem(a, b) {
   if (ka === kb) return true;
   const nums = (value) => (value.match(/\d+(?:\.\d+)?/g) || []).join(',');
   if (nums(ka) !== nums(kb)) return false;
-  return ka.includes(kb) || kb.includes(ka);
+  if (ka.includes(kb) || kb.includes(ka)) return true;
+  const [ca, cb] = [ka.replace(/ /g, ''), kb.replace(/ /g, '')];
+  return ca.includes(cb) || cb.includes(ca);
 }
 
 function mergeItems(local, ai) {
@@ -385,7 +393,7 @@ function looksLikeInvoice(text) {
   return /\b(factura|proveedor|rfc|remisi[oó]n|caducidad|lote|fecha|iva|subtotal)\b/i.test(String(text || ''));
 }
 
-async function extractPrices({ text, imageBase64, mimeType }) {
+async function extractPrices({ text, images = [] }) {
   const key = String(process.env.GEMINI_API_KEY || '').trim();
   if (!key) {
     const err = new Error('Falta GEMINI_API_KEY en el servidor.');
@@ -393,7 +401,7 @@ async function extractPrices({ text, imageBase64, mimeType }) {
     throw err;
   }
 
-  const hasImage = Boolean(imageBase64);
+  const hasImage = images.length > 0;
   const loose = parseLooseList(text);
   if (!hasImage && loose.complete && !looksLikeInvoice(text)) {
     return { items: loose.items.map(publicItem), supplier: emptySupplier() };
@@ -404,14 +412,12 @@ async function extractPrices({ text, imageBase64, mimeType }) {
       text: `${EXTRACT_PROMPT}\n\nTexto del usuario:\n${text || '(sin texto, usa la imagen)'}`,
     },
   ];
-  if (hasImage) {
-    parts.push({
-      inlineData: {
-        mimeType: mimeType || 'image/jpeg',
-        data: imageBase64,
-      },
-    });
+  if (images.length > 1) {
+    parts[0].text += `\n\nSon ${images.length} fotos de la MISMA nota, en orden (foto 1, foto 2…). Lista TODOS los renglones que veas en cada foto, aunque un renglón se vea en dos fotos porque se traslapan: NO los unas ni los quites. En "photo" pon el número de la foto donde lo leíste.`;
   }
+  images.forEach((img) => {
+    parts.push({ inlineData: { mimeType: img.mimeType || 'image/jpeg', data: img.imageBase64 } });
+  });
 
   const model = geminiModel();
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
@@ -456,6 +462,7 @@ async function extractPrices({ text, imageBase64, mimeType }) {
                     packSize: { type: 'NUMBER' },
                     lot: { type: 'STRING' },
                     expiresAt: { type: 'STRING' },
+                    photo: { type: 'NUMBER' },
                   },
                   required: ['name'],
                 },
@@ -522,13 +529,36 @@ function publicItem(row) {
     packSize: row.packSize == null ? 1 : Number(row.packSize),
     lot: String(row.lot || '').trim().slice(0, 60),
     expiresAt: parseDocDate(row.expiresAt),
+    photo: photoNo(row.photo),
   };
+}
+
+/**
+ * Con varias fotos, un producto puede salir en dos (la segunda foto traslapa la primera).
+ * Si el mismo producto sale con los mismos datos en otra foto se cuenta una sola vez; si los datos
+ * cambian se deja y se avisa para que el dueño decida. Siempre devuelve qué encontró.
+ */
+function flagRepeats(items) {
+  const kept = [];
+  const repeats = [];
+  for (const item of items) {
+    const first = item.photo ? kept.find((k) => k.photo && k.photo !== item.photo && sameItem(k.name, item.name)) : null;
+    if (!first) {
+      kept.push(item);
+      continue;
+    }
+    const same = first.packs === item.packs && first.packSize === item.packSize && first.cost === item.cost && first.price === item.price;
+    repeats.push({ name: first.name, photos: [first.photo, item.photo], packs: [first.packs, item.packs], counted: same ? 'once' : 'both' });
+    if (!same) kept.push(item);
+  }
+  return { items: kept, repeats };
 }
 
 module.exports = {
   geminiModel,
   hasGeminiConfig,
   extractPrices,
+  flagRepeats,
   parseItems,
   parsePayload,
   parseLooseList,

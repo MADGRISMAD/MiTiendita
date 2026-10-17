@@ -29,7 +29,7 @@ async function readQuota(tenant) {
   return quotaPayload(plan, used, limit);
 }
 
-function cleanImage(body) {
+function cleanOneImage(body) {
   const raw = String(body?.imageBase64 || '').trim();
   if (!raw) return null;
   const mime = String(body?.mimeType || 'image/jpeg').toLowerCase();
@@ -50,6 +50,26 @@ function cleanImage(body) {
     throw err;
   }
   return { imageBase64: data.replace(/\s/g, ''), mimeType: mime };
+}
+
+const MAX_IMAGES = 4;
+const MAX_IMAGES_TOTAL = 8_000_000; // base64 total; el cuerpo de la petición admite 10 MB
+
+/** Una nota larga puede venir en varias fotos (`images`); se sigue aceptando la foto única de antes. */
+function cleanImages(body) {
+  const list = Array.isArray(body?.images) ? body.images : body?.imageBase64 ? [body] : [];
+  if (list.length > MAX_IMAGES) {
+    const err = new Error(`Máximo ${MAX_IMAGES} fotos por nota.`);
+    err.status = 400;
+    throw err;
+  }
+  const images = list.map(cleanOneImage).filter(Boolean);
+  if (images.reduce((sum, i) => sum + i.imageBase64.length, 0) > MAX_IMAGES_TOTAL) {
+    const err = new Error('Las fotos pesan demasiado juntas. Quita una o toma fotos más sencillas.');
+    err.status = 400;
+    throw err;
+  }
+  return images;
 }
 
 function validMoney(value) {
@@ -121,8 +141,8 @@ async function preview(req, res) {
     }
 
     const text = String(req.body?.text || '').trim().slice(0, 8000);
-    const image = cleanImage(req.body);
-    if (!text && !image) {
+    const images = cleanImages(req.body);
+    if (!text && !images.length) {
       return res.status(400).json({ message: 'Pega la lista de precios o sube una foto.' });
     }
 
@@ -138,10 +158,11 @@ async function preview(req, res) {
 
     const extracted = await gemini.extractPrices({
       text: text || '(sin texto, usa la imagen)',
-      imageBase64: image?.imageBase64,
-      mimeType: image?.mimeType,
+      images,
     });
-    const items = extractedItems(extracted);
+    const found = images.length > 1 ? gemini.flagRepeats(extractedItems(extracted)) : { items: extractedItems(extracted), repeats: [] };
+    const items = found.items;
+    const repeats = found.repeats;
     const supplier = await matchSupplier(tenantId, extracted?.supplier);
 
     if (!items.length) {
@@ -164,6 +185,7 @@ async function preview(req, res) {
     return res.status(200).json({
       charged: true,
       ...matched,
+      repeats,
       supplier,
       quota: quotaPayload(plan, reserved.used, limit),
     });
@@ -340,4 +362,5 @@ module.exports = {
   quota,
   preview,
   apply,
+  cleanImages,
 };
