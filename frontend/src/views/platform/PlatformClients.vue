@@ -53,7 +53,7 @@
         <p v-else class="pf-empty-list">Cargando clientes…</p>
       </section>
 
-      <div class="pf-pane-detail">
+      <div class="pf-pane-detail pf-fixed">
         <ClientPanel
           v-if="id"
           :id="id"

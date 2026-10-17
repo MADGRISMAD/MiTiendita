@@ -59,6 +59,7 @@ html[data-theme="dark"] .pf-avatar { background: hsl(var(--h, 214) 35% 24%); col
 .pf-allclear svg { color: var(--timber-success); flex: 0 0 auto; }
 
 /* ———— Dos paneles (lista | detalle) ———— */
+.pf-tab-body { min-height: 24rem; }
 .pf-split { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.75rem; align-items: start; }
 .pf-split > .pf-pane-detail { display: none; }
 .pf-split.detail > .pf-pane-list { display: none; }
@@ -70,6 +71,14 @@ html[data-theme="dark"] .pf-avatar { background: hsl(var(--h, 214) 35% 24%); col
   .pf-split.detail > .pf-pane-detail { display: block; }
   .pf-pane-list { position: sticky; top: 0.5rem; max-height: calc(100dvh - 9.5rem); overflow-y: auto; }
   .pf-back { display: none !important; }
+  /* Ficha de cliente de tamaño fijo: el alto no depende de la pestaña ni de cuánto texto tenga; el contenido se desplaza adentro */
+  .pf-pane-detail.pf-fixed { position: sticky; top: 0.5rem; height: calc(100dvh - 9.5rem); min-height: 30rem; }
+  .pf-pane-detail.pf-fixed > .pf-card-stack { height: 100%; display: flex; flex-direction: column; gap: 0.75rem; }
+  .pf-pane-detail.pf-fixed > .pf-card-stack > * + * { margin-top: 0; }
+  .pf-pane-detail.pf-fixed > .pf-card-stack > section.adm-card { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 0.75rem; overflow: hidden; }
+  .pf-pane-detail.pf-fixed > .pf-card-stack > section.adm-card > * + * { margin-top: 0; }
+  .pf-pane-detail.pf-fixed > .pf-card-stack > section.adm-card > :not(.pf-tab-body) { flex: 0 0 auto; }
+  .pf-pane-detail.pf-fixed > .pf-card-stack > section.adm-card > .pf-tab-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
 }
 .pf-back { align-self: flex-start; }
 
