@@ -688,12 +688,16 @@ async function GetLowStockFoods(tenantId) {
 async function SearchFoods(tenantId, query) {
   const q = String(query || '').trim();
   if (!q) return [];
-  const regex = { $regex: q, $options: 'i' };
+  // Cada palabra se busca por separado (en cualquier orden) y sin tratar lo escrito como expresión regular
+  const words = q.split(/\s+/).slice(0, 6).map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
   const filter = {
     ...(tenantId ? { tenantId } : {}),
-    $or: [{ name: regex }, { barcode: regex }, { sku: regex }],
+    $and: words.map((w) => {
+      const regex = { $regex: w, $options: 'i' };
+      return { $or: [{ name: regex }, { barcode: regex }, { sku: regex }] };
+    }),
   };
-  return (await dbConnection.collection('foods').find(filter).toArray()).map(withId);
+  return (await dbConnection.collection('foods').find(filter).limit(60).toArray()).map(withId);
 }
 
 async function AddWaiter(data) {

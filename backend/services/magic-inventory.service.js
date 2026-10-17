@@ -25,10 +25,26 @@ function stemToken(token) {
   return token;
 }
 
+/** Tamaño impreso en el nombre, en ml (líquidos) o g (sólidos): "2 L" → 2000, "2.5 L" → 2500, "600 ml" → 600. */
+function sizeOf(value) {
+  const m = String(value || '').toLowerCase().replace(',', '.').match(/(\d+(?:\.\d+)?)\s*(ml|lts?|litros?|l|kg|kilos?|gr|g)\b/);
+  if (!m) return null;
+  const n = Number(m[1]);
+  const u = m[2];
+  if (u === 'ml') return { kind: 'vol', amount: n };
+  if (u === 'kg' || u.startsWith('kilo')) return { kind: 'mass', amount: n * 1000 };
+  if (u === 'g' || u === 'gr') return { kind: 'mass', amount: n };
+  return { kind: 'vol', amount: n * 1000 };
+}
+
 function scoreName(query, name) {
   const q = tokens(query);
   const n = tokens(name);
   if (!q.length || !n.length) return 0;
+  // Tamaños distintos (2 L contra 2.5 L, 1 L contra 1.25 L) son productos distintos aunque se llamen igual
+  const sq = sizeOf(query);
+  const sn = sizeOf(name);
+  if (sq && sn && sq.kind === sn.kind && Math.abs(sq.amount - sn.amount) > sq.amount * 0.01) return 0;
   if (q.join(' ') === n.join(' ')) return 1;
   const set = new Set(n);
   const hit = q.filter((t) => set.has(t)).length;
@@ -288,8 +304,9 @@ function enrichCostAlerts(matched, lastCosts = {}) {
 }
 
 module.exports = {
-  tokens,
+  sizeOf,
   scoreName,
+  tokens,
   matchItems,
   roundPrice,
   suggestSell,

@@ -283,6 +283,25 @@
                     <template v-if="Number(row.cost) > 0"> → <b>{{ money(row.cost) }}</b> por pieza</template>
                     <template v-if="noteGap(row)"><span class="mg-note-warn"> · Ojo: costo × piezas que entran = {{ money(noteGap(row).mine) }} y la nota dice {{ money(row.note.total) }}</span></template>
                   </p>
+                  <div class="mg-rematch">
+                    <button v-if="!row.picking" type="button" class="mg-link" @click="startPicking(row)">¿No es este producto? Cambiarlo</button>
+                    <template v-else>
+                      <label class="mg-field">
+                        <span>Buscar en tu catálogo</span>
+                        <input v-model="row.pickQuery" class="mg-inp" placeholder="Nombre o código" @input="searchPick(row)" />
+                      </label>
+                      <ul v-if="row.pickHits?.length" class="mg-hits">
+                        <li v-for="f in row.pickHits" :key="f.id">
+                          <button type="button" @click="usePick(row, f)">{{ f.name }} <small>· hoy {{ money(f.price) }} · hay {{ f.stock ?? 0 }}</small></button>
+                        </li>
+                      </ul>
+                      <p v-else-if="row.pickQuery && !row.pickBusy" class="mg-was">No encontré nada con eso.</p>
+                      <div class="mg-rematch-acts">
+                        <button type="button" class="mg-link" @click="makeNew(i)">No es ninguno: crearlo como producto nuevo</button>
+                        <button type="button" class="mg-link" @click="row.picking = false">Cancelar</button>
+                      </div>
+                    </template>
+                  </div>
                   <label v-if="row.options" class="mg-field mg-choose">
                     <span>¿Cuál de tus productos es?</span>
                     <select v-model="row.id" class="mg-inp" @change="onChoose(i)">
@@ -986,6 +1005,71 @@ function setStock(row, raw) {
   afterPieces(row);
 }
 
+// Cambiar con qué producto de tu catálogo se compara lo que leyó la nota
+function startPicking(row) {
+  row.picking = true;
+  row.pickQuery = row.from || "";
+  row.pickHits = [];
+  if (row.pickQuery) searchPick(row);
+}
+let pickTimer = null;
+function searchPick(row) {
+  clearTimeout(pickTimer);
+  const q = String(row.pickQuery || "").trim();
+  if (q.length < 2) {
+    row.pickHits = [];
+    return;
+  }
+  pickTimer = setTimeout(async () => {
+    row.pickBusy = true;
+    try {
+      const list = await apiService.searchFoods(q);
+      row.pickHits = (Array.isArray(list) ? list : []).slice(0, 8);
+    } catch {
+      row.pickHits = [];
+    } finally {
+      row.pickBusy = false;
+    }
+  }, 250);
+}
+function usePick(row, food) {
+  row.id = food.id;
+  row.name = food.name;
+  row.oldPrice = Number(food.price) || 0;
+  row.oldCost = Number(food.cost) || 0;
+  row.oldStock = Number(food.stock) || 0;
+  row.options = null;
+  row.costUp = row.oldCost > 0 && Number(row.cost) > row.oldCost;
+  row.costChangePct = row.costUp ? Math.round(((Number(row.cost) - row.oldCost) / row.oldCost) * 100) : 0;
+  row.suggestedPrice = 0;
+  row.checked = true;
+  row.picking = false;
+  row.pickHits = [];
+}
+function makeNew(index) {
+  const row = picks.value[index];
+  if (!row) return;
+  const name = String(row.from || row.name || "").trim();
+  news.value.push({
+    key: `n-from-${row.key}`,
+    note: row.note || null,
+    total: row.total,
+    name,
+    cost: Number(row.cost) || 0,
+    price: 0,
+    barcode: "",
+    stockIn: Number(row.stockIn) || 0,
+    packSize: Number(row.packSize) || 0,
+    packs: Number(row.packs) || 1,
+    isPack: Boolean(row.isPack),
+    lot: row.lot || "",
+    expiresAt: row.expiresAt || "",
+    menuId: menuFor(name),
+    checked: true,
+  });
+  picks.value.splice(index, 1);
+}
+
 function onChoose(index) {
   const row = picks.value[index];
   const opt = row.options?.find((item) => item.id === row.id);
@@ -1445,6 +1529,12 @@ onMounted(async () => {
 @keyframes mg-spin { to { transform: rotate(360deg); } }
 .mg-preview { position: relative; margin: 0; overflow: hidden; border-radius: 1rem; border: 1px solid var(--timber-line); background: var(--timber-surface); }
 .mg-preview img { display: block; width: 100%; max-height: 16rem; object-fit: contain; }
+.mg-rematch { display: grid; gap: 0.5rem; margin: 0.2rem 0 0.4rem; }
+.mg-hits { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.3rem; }
+.mg-hits button { width: 100%; text-align: left; padding: 0.5rem 0.7rem; border-radius: 0.7rem; border: 1px solid var(--timber-line); background: var(--timber-surface); color: inherit; font: inherit; cursor: pointer; }
+.mg-hits button:hover { border-color: var(--timber-primary); }
+.mg-hits small { color: var(--timber-muted); }
+.mg-rematch-acts { display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; }
 .mg-note { margin: 0.4rem 0 0.2rem; font-size: 0.82rem; line-height: 1.4; color: var(--timber-muted); }
 .mg-note b { color: var(--timber-text, inherit); }
 .mg-note-warn { color: var(--timber-danger); font-weight: 700; }

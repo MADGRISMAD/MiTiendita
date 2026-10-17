@@ -159,3 +159,11 @@ test('cada renglón lleva la nota: renglón original, importe total y precio por
   const m = inv.matchItems([{ raw: 'x', name: 'Producto raro', packs: 2, packSize: 1, cost: 10 }], []);
   assert.equal(m.unknown[0].note.total, 20);
 });
+
+test('un tamaño distinto no es el mismo producto (2 L contra 2.5 L, 1 L contra 1.25 L)', () => {
+  assert.equal(inv.scoreName('Coca Cola 2 L', 'Coca-Cola Original NR 2.5 L'), 0);
+  assert.equal(inv.scoreName('Coca Cola 1 L', 'Coca-Cola Original NR 1.25 L'), 0);
+  assert.ok(inv.scoreName('Coca Cola 2 L', 'Coca-Cola Original 2 L') >= 0.55);
+  assert.ok(inv.scoreName('Coca Cola 600 ml', 'Coca-Cola 600 ml NR') >= 0.55);
+  assert.equal(inv.sizeOf('Jabón 1 kg').amount, 1000);
+});
