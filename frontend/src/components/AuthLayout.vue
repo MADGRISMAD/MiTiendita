@@ -15,17 +15,17 @@
           </li>
           <li>
             <span class="tick" aria-hidden="true">✓</span>
-            Inventario, caducidades y Registro mágico de compras
+            Inventario, caducidades, compras y fiado
           </li>
           <li>
             <span class="tick" aria-hidden="true">✓</span>
-            Sigue vendiendo aunque se vaya el internet
+            Funciona sin internet, todo se guarda en tu computadora
           </li>
         </ul>
-        <p class="auth-trial">Prueba gratis de 3 días</p>
+        <p class="auth-trial">Versión permanente · sin mensualidades</p>
       </div>
 
-      <p class="auth-foot">En la nube · celular, tablet y computadora</p>
+      <p class="auth-foot">Instalada en esta computadora</p>
     </aside>
 
     <main class="auth-main">

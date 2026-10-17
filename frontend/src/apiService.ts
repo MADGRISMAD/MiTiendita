@@ -138,6 +138,11 @@ axios.interceptors.response.use(
       return Promise.reject(error);
     }
     if (status === 401 && !isAuthCall) endSessionAndGoToLogin();
+    // Versión instalable: la licencia es de otra computadora o no es válida → pantalla para reactivar
+    const licenseCode = error.response?.data?.code;
+    if (status === 403 && ['LICENSE_DEVICE_MISMATCH', 'LICENSE_INVALID', 'LICENSE_REQUIRED'].includes(licenseCode) && typeof window !== 'undefined' && window.location.pathname !== '/licencia') {
+      window.location.href = licenseCode === 'LICENSE_REQUIRED' ? '/register' : '/licencia';
+    }
     if (status === 403 && error.response?.data?.code === 'MFA_SETUP_REQUIRED') endSessionAndGoToLogin();
     return Promise.reject(error);
   }

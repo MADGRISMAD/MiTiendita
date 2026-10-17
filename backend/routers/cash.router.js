@@ -1,12 +1,12 @@
 const router = require('express').Router();
 const cash = require('../controllers/cash.controller');
-const { requireAuth, requireActiveSubscription, requireRoles } = require('../middleware/auth.middleware');
+const { requireAuth, requireLicense, requireRoles } = require('../middleware/auth.middleware');
 
 const cashRoles = requireRoles('admin', 'cashier');
 
-router.get('/session', requireAuth, requireActiveSubscription, cashRoles, cash.current);
-router.post('/session/open', requireAuth, requireActiveSubscription, cashRoles, cash.open);
-router.post('/session/close', requireAuth, requireActiveSubscription, cashRoles, cash.close);
-router.get('/session/:id', requireAuth, requireActiveSubscription, cashRoles, cash.getById);
+router.get('/session', requireAuth, requireLicense, cashRoles, cash.current);
+router.post('/session/open', requireAuth, requireLicense, cashRoles, cash.open);
+router.post('/session/close', requireAuth, requireLicense, cashRoles, cash.close);
+router.get('/session/:id', requireAuth, requireLicense, cashRoles, cash.getById);
 
 module.exports = router;

@@ -14,6 +14,8 @@ const userSchema = Joi.object({
     .default('admin'),
   businessName: Joi.string().optional().allow(''),
   referralCode: Joi.string().max(20).optional().allow(''),
+  // Versión instalable: código de licencia para activar esta computadora
+  licenseCode: Joi.string().max(40).optional().allow(''),
 });
 
 module.exports = userSchema;

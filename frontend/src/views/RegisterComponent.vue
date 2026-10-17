@@ -1,40 +1,39 @@
 <template>
   <AuthLayout wide>
-    <!-- Solicitud de proveedor enviada -->
-    <section v-if="partnerSent" class="auth-done" role="status">
-      <span class="auth-done-ico" aria-hidden="true">✓</span>
-      <h1>¡Recibimos tu solicitud!</h1>
-      <p>
-        Revisamos tus datos y te escribimos a <strong>{{ email }}</strong>. Mientras, ya puedes entrar a tu portal de proveedor
-        con tu usuario <strong>{{ username }}</strong>: la primera vez activarás la verificación en dos pasos.
-      </p>
-      <p class="auth-note">Tu código para registrar tiendas se activa cuando aprobemos tu solicitud.</p>
-      <router-link class="auth-btn" to="/login">Entrar a mi portal</router-link>
-    </section>
-
-    <template v-else>
     <header class="auth-head">
-      <h1>{{ isPartner ? "Sé proveedor oficial" : "Crea tu tienda" }}</h1>
-      <p v-if="isPartner">Vende Mi Tiendita en tu zona y gana del 10% al 20% de cada cobro de las tiendas que traigas.</p>
-      <p v-else>3 días gratis. Toma menos de un minuto y puedes cobrar hoy mismo.</p>
+      <h1>Activa Mi Tiendita</h1>
+      <p>Escribe tu código de licencia y crea tu usuario. Solo esta vez necesitas internet; después funciona sin conexión.</p>
     </header>
-
-    <div class="auth-kind" role="radiogroup" aria-label="¿Qué quieres crear?">
-      <button type="button" role="radio" :aria-checked="!isPartner" :class="{ on: !isPartner }" @click="setKind('store')">
-        <strong>Mi tienda</strong>
-        <small>Para cobrar y llevar inventario</small>
-      </button>
-      <button type="button" role="radio" :aria-checked="isPartner" :class="{ on: isPartner }" @click="setKind('partner')">
-        <strong>Proveedor oficial</strong>
-        <small>Para vender Mi Tiendita a tiendas</small>
-      </button>
-    </div>
 
     <form class="auth-form" novalidate @submit.prevent="register">
       <p v-if="serverError" class="auth-alert" role="alert">
         <PosIcon name="alert" :size="18" />
         <span>{{ serverError }}</span>
       </p>
+
+      <fieldset class="auth-group">
+        <legend>Tu licencia</legend>
+        <div class="auth-field">
+          <label for="reg-license">Código de licencia</label>
+          <input
+            id="reg-license"
+            :value="licenseCode"
+            class="auth-input license-input"
+            type="text"
+            maxlength="24"
+            placeholder="XXXX-XXXX-XXXX-XXXX-XXXX"
+            autocomplete="off"
+            autocapitalize="characters"
+            spellcheck="false"
+            :aria-invalid="Boolean(shown.license)"
+            aria-describedby="reg-license-err reg-license-note"
+            @input="onLicense"
+            @blur="touch('license')"
+          />
+          <p v-if="shown.license" id="reg-license-err" class="auth-err">{{ shown.license }}</p>
+          <p v-else id="reg-license-note" class="auth-note">Viene en tu comprobante de compra. La licencia queda ligada a esta computadora.</p>
+        </div>
+      </fieldset>
 
       <fieldset class="auth-group">
         <legend>Tus datos</legend>
@@ -69,7 +68,7 @@
           </div>
         </div>
         <div class="auth-row">
-          <div v-if="!isPartner" class="auth-field">
+          <div class="auth-field">
             <label for="reg-shop">Nombre de la tienda <em>(opcional)</em></label>
             <input
               id="reg-shop"
@@ -98,46 +97,6 @@
             />
             <p v-if="shown.phone" id="reg-phone-err" class="auth-err">{{ shown.phone }}</p>
           </div>
-        </div>
-        <div v-if="isPartner" class="auth-row">
-          <div class="auth-field">
-            <label for="reg-state">Estado</label>
-            <input
-              id="reg-state"
-              v-model="partnerState"
-              class="auth-input"
-              type="text"
-              maxlength="60"
-              placeholder="Ej. Sonora"
-              autocomplete="address-level1"
-              :aria-invalid="Boolean(shown.state)"
-              aria-describedby="reg-state-err"
-              @blur="touch('state')"
-            />
-            <p v-if="shown.state" id="reg-state-err" class="auth-err">{{ shown.state }}</p>
-          </div>
-          <div class="auth-field">
-            <label for="reg-city">Ciudad <em>(opcional)</em></label>
-            <input id="reg-city" v-model="partnerCity" class="auth-input" type="text" maxlength="60" autocomplete="address-level2" />
-          </div>
-        </div>
-        <div v-if="!isPartner" class="auth-field">
-          <label for="reg-ref">Código de vendedor <em>(opcional)</em></label>
-          <input
-            id="reg-ref"
-            v-model="referralCode"
-            class="auth-input"
-            type="text"
-            maxlength="12"
-            placeholder="MT-XXXXXX"
-            autocomplete="off"
-            autocapitalize="characters"
-            spellcheck="false"
-            @input="onReferral"
-          />
-          <p v-if="referralState === 'ok'" class="auth-note" role="status">✓ Te atiende {{ referralSeller }}.</p>
-          <p v-else-if="referralState === 'bad'" class="auth-err" role="alert">Ese código no existe o ya no está activo. Revísalo o déjalo vacío.</p>
-          <p v-else class="auth-note">Si te recomendó un vendedor de Mi Tiendita, escribe su código.</p>
         </div>
       </fieldset>
 
@@ -232,25 +191,20 @@
         <input v-model="acceptedTerms" type="checkbox" @change="touch('terms')" />
         <span>
           Acepto los <router-link to="/terminos" target="_blank">términos</router-link> y el
-          <router-link to="/privacidad" target="_blank">aviso de privacidad</router-link>.
+          <router-link to="/privacidad" target="_blank">aviso de privacidad</router-link>, y que se envíen los datos de esta computadora para ligarle la licencia.
         </span>
       </label>
       <p v-if="shown.terms" class="auth-err">{{ shown.terms }}</p>
 
       <button type="submit" class="auth-btn" :disabled="loading">
         <span v-if="loading" class="auth-spin" aria-hidden="true"></span>
-        <template v-if="isPartner">{{ loading ? 'Enviando…' : 'Enviar mi solicitud' }}</template>
-        <template v-else>{{ loading ? 'Creando tu tienda…' : 'Crear mi tienda' }}</template>
+        {{ loading ? 'Activando…' : 'Activar y crear mi tienda' }}
       </button>
     </form>
 
-    </template>
-
     <div class="auth-alt compact">
       <span>
-        ¿Ya tienes cuenta? <router-link to="/login" class="inline">Inicia sesión</router-link>
-        <span aria-hidden="true"> · </span>
-        <router-link to="/" class="inline muted">Volver al inicio</router-link>
+        ¿Ya activaste esta computadora? <router-link to="/login" class="inline">Inicia sesión</router-link>
       </span>
     </div>
   </AuthLayout>
@@ -260,6 +214,7 @@
 import { apiService } from "../apiService";
 import { setSession } from "../authStore";
 import { fetchVenueSettings } from "../venueStore";
+import { loadDesktopStatus } from "../desktopStore";
 import AuthLayout from "../components/AuthLayout.vue";
 import PosIcon from "../components/PosIcon.js";
 import { isNetworkError } from "../net";
@@ -268,12 +223,14 @@ import "../auth.css";
 import { MIN_PASSWORD, passwordProblem } from "../passwordPolicy";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-const FIELD_ORDER = ["firstName", "lastName", "phone", "state", "email", "username", "password", "confirm", "terms"];
+const FIELD_ORDER = ["license", "firstName", "lastName", "phone", "email", "username", "password", "confirm", "terms"];
+// Crockford Base32: 20 caracteres en grupos de 4
+const LICENSE_RE = /^[0-9A-HJKMNP-TV-Z]{20}$/;
 const FIELD_ID = {
+  license: "reg-license",
   firstName: "reg-name",
   lastName: "reg-last",
   phone: "reg-phone",
-  state: "reg-state",
   email: "reg-email",
   username: "reg-user",
   password: "reg-pass",
@@ -284,14 +241,8 @@ export default {
   components: { AuthLayout, PosIcon },
   data() {
     return {
-      kind: "store",
-      partnerState: "",
-      partnerCity: "",
-      partnerSent: false,
+      licenseCode: "",
       businessName: "",
-      referralCode: "",
-      referralState: "",
-      referralSeller: "",
       firstName: "",
       lastName: "",
       phone: "",
@@ -309,33 +260,15 @@ export default {
       loading: false,
     };
   },
-  mounted() {
-    if (["proveedor", "partner"].includes(String(this.$route?.query?.tipo || ""))) this.kind = "partner";
-    // El enlace de un vendedor (?ref=MT-XXXXXX) se recuerda por si el cliente antes recorre la página
-    let code = String(this.$route?.query?.ref || "");
-    try {
-      if (code) localStorage.setItem("mt_ref", code);
-      else code = localStorage.getItem("mt_ref") || "";
-    } catch {
-      /* sin almacenamiento: solo vale lo de la dirección */
-    }
-    if (code) {
-      this.referralCode = code.toUpperCase().slice(0, 12);
-      this.onReferral();
-    }
-  },
-  beforeUnmount() {
-    clearTimeout(this.referralTimer);
-  },
   computed: {
-    isPartner() {
-      return this.kind === "partner";
-    },
     phoneDisplay() {
       return formatMxPhone(this.phone);
     },
     errors() {
       const e = {};
+      const lic = this.licenseCode.replace(/-/g, "");
+      if (!lic) e.license = "Escribe tu código de licencia.";
+      else if (!LICENSE_RE.test(lic)) e.license = "Revisa el código: son 20 letras y números.";
       if (!this.firstName.trim()) e.firstName = "Escribe tu nombre.";
       if (!this.lastName.trim()) e.lastName = "Escribe tu apellido.";
       if (this.phone.length !== 10) e.phone = "El celular debe tener 10 dígitos.";
@@ -349,7 +282,6 @@ export default {
       });
       if (weak) e.password = weak;
       if (this.confirmPassword !== this.password) e.confirm = "Las contraseñas no coinciden.";
-      if (this.isPartner && this.partnerState.trim().length < 2) e.state = "Escribe tu estado.";
       if (!this.acceptedTerms) e.terms = "Acepta los términos para continuar.";
       return { ...e, ...this.serverErrors };
     },
@@ -384,11 +316,6 @@ export default {
     },
   },
   methods: {
-    setKind(kind) {
-      this.kind = kind;
-      this.serverError = "";
-      this.$router.replace({ query: { ...this.$route.query, tipo: kind === "partner" ? "proveedor" : undefined } }).catch(() => {});
-    },
     touch(field) {
       this.touched = { ...this.touched, [field]: true };
     },
@@ -405,20 +332,12 @@ export default {
       this.username = this.cleanUsername(e.target.value);
       e.target.value = this.username;
     },
-    onReferral() {
-      this.referralCode = String(this.referralCode || "").toUpperCase();
-      clearTimeout(this.referralTimer);
-      this.referralState = "";
-      if (this.referralCode.replace(/[^A-Z0-9]/g, "").length < 4) return;
-      this.referralTimer = setTimeout(async () => {
-        try {
-          const res = await apiService.checkReferralCode(this.referralCode);
-          this.referralState = res.valid ? "ok" : "bad";
-          this.referralSeller = res.seller || "";
-        } catch {
-          this.referralState = "";
-        }
-      }, 400);
+    onLicense(e) {
+      // Mayúsculas, O→0 e I/L→1 (como en el código), con guion cada 4
+      const raw = String(e.target.value || "").toUpperCase().replace(/O/g, "0").replace(/[IL]/g, "1").replace(/[^0-9A-Z]/g, "").slice(0, 20);
+      this.licenseCode = raw.match(/.{1,4}/g)?.join("-") || "";
+      e.target.value = this.licenseCode;
+      delete this.serverErrors.license;
     },
     onPhone(e) {
       // Se guardan solo los 10 dígitos; acepta pegar "+52 1 55 1234 5678"
@@ -437,7 +356,7 @@ export default {
       if (/nombre de usuario/i.test(msg)) return { field: "username", text: "Ese usuario ya existe. Prueba con otro." };
       if (/correo ya registrado/i.test(msg)) return { field: "email", text: "Ya hay una cuenta con ese correo. Inicia sesión o recupera tu contraseña." };
       if (/"email"/.test(msg)) return { field: "email", text: "Ese correo no parece válido." };
-      if (/código de referido|propio código/i.test(msg)) return { field: "", text: msg };
+      if (/licencia|código/i.test(msg)) return { field: "license", text: msg };
       if (/"cellphone"/.test(msg)) return { field: "phone", text: "El celular debe tener 10 dígitos." };
       return { field: "", text: msg || "No se pudo crear la cuenta. Inténtalo de nuevo." };
     },
@@ -458,20 +377,9 @@ export default {
           password: this.password,
           cellphone: this.phone,
         };
-        if (this.isPartner) {
-          await apiService.registerPartner({ ...payload, state: this.partnerState.trim(), city: this.partnerCity.trim() });
-          this.partnerSent = true;
-          window.scrollTo?.(0, 0);
-          return;
-        }
         if (this.businessName.trim()) payload.businessName = this.businessName.trim();
-        if (this.referralCode.trim()) payload.referralCode = this.referralCode.trim();
+        payload.licenseCode = this.licenseCode;
         const res = await apiService.register(payload);
-        try {
-          localStorage.removeItem("mt_ref");
-        } catch {
-          /* nada */
-        }
         setSession({
           token: res.token,
           role: res.role,
@@ -481,13 +389,18 @@ export default {
         });
         // Así el asistente de configuración ya trae el nombre de la tienda
         if (payload.businessName) await fetchVenueSettings().catch(() => {});
+        await loadDesktopStatus({ force: true }); // ya hay tienda: el arranque deja de pedir activación
         this.$router.push("/setup");
       } catch (e) {
         if (isNetworkError(e)) {
-          this.serverError = "No hay conexión con el servidor. Revisa tu internet e inténtalo de nuevo.";
+          this.serverError = "No se pudo hablar con la app. Ciérrala y vuelve a abrirla.";
           return;
         }
         const data = e.response?.data;
+        if (data?.code === "STORE_EXISTS") {
+          this.$router.push("/login");
+          return;
+        }
         const { field, text } = this.mapServerError(typeof data === "string" ? data : data?.message);
         if (field) {
           this.serverErrors = { ...this.serverErrors, [field]: text };
@@ -502,3 +415,7 @@ export default {
   },
 };
 </script>
+
+<style scoped>
+.license-input { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 0.08em; text-transform: uppercase; }
+</style>

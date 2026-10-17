@@ -149,11 +149,6 @@
       </button>
     </form>
 
-    <div class="auth-alt">
-      <span>¿Aún no tienes cuenta?</span>
-      <router-link to="/register" class="auth-btn ghost">Crear mi tienda gratis</router-link>
-    </div>
-    <router-link to="/" class="auth-back">← Volver al inicio</router-link>
     </template>
   </AuthLayout>
 </template>

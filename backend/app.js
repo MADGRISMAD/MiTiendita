@@ -62,6 +62,7 @@ app.use(async (_req, _res, next) => {
 // Límite global por IP (después de conectar: el conteo vive en la base)
 app.use(limits.global());
 
+app.use('/desktop', require('./routers/desktop.router'));
 app.use('/usuarios', require('./routers/usuarios.router'));
 app.use('/menus', require('./routers/menus.router'));
 app.use('/foods', require('./routers/foods.router'));

@@ -2,7 +2,7 @@ const router = require('express').Router();
 const multer = require('multer');
 const upload = multer();
 const settingsController = require('../controllers/settings.controller');
-const { requireAuth, requireActiveSubscription, requireRoles } = require('../middleware/auth.middleware');
+const { requireAuth, requireLicense, requireRoles } = require('../middleware/auth.middleware');
 
 // Lectura permitida aunque el trial haya vencido (banner / billing)
 router.get('/', requireAuth, upload.none(), settingsController.GetSettings);
@@ -11,7 +11,7 @@ router.post('/onboarding/dismiss', requireAuth, requireRoles('admin'), settingsC
 router.post(
   '/',
   requireAuth,
-  requireActiveSubscription,
+  requireLicense,
   requireRoles('admin'),
   upload.none(),
   settingsController.SaveSettings
@@ -19,7 +19,7 @@ router.post(
 router.put(
   '/',
   requireAuth,
-  requireActiveSubscription,
+  requireLicense,
   requireRoles('admin'),
   upload.none(),
   settingsController.SaveSettings

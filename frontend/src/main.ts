@@ -20,6 +20,7 @@ import {
   isAuthenticated,
 } from "./authStore";
 import "./apiService";
+import { desktopStore, loadDesktopStatus } from "./desktopStore";
 import { startOfflineRuntime } from "./offlineSync";
 import { startErrorReporting } from "./errorReport";
 import { startPrintStation } from "./printStation";
@@ -38,6 +39,7 @@ const routes: RouteRecordRaw[] = [
   // Versión instalable: la app abre directo en el inicio de sesión.
   { path: "/", name: "login", component: Login, alias: "/login" },
   { path: "/register", name: "register", component: () => import("./views/RegisterComponent.vue") },
+  { path: "/licencia", name: "license", component: () => import("./views/LicenseView.vue") },
   { path: "/forgot", name: "forgot", component: () => import("./views/ForgotPasswordView.vue") },
   { path: "/reset/:token", name: "reset", component: () => import("./views/ResetPasswordView.vue") },
   { path: "/invite/:token", name: "invite", component: () => import("./views/InviteAcceptView.vue") },
@@ -96,6 +98,7 @@ const router = createRouter({
 const publicNames = new Set([
   "login",
   "register",
+  "license",
   "forgot",
   "reset",
   "invite",
@@ -105,6 +108,15 @@ const publicNames = new Set([
 ]);
 
 router.beforeEach(async (to) => {
+  // Versión instalable: sin activar → Activar; licencia de otra computadora → Reactivar
+  await loadDesktopStatus();
+  if (desktopStore.required) {
+    const blocked = desktopStore.status === "other_device" || desktopStore.status === "invalid";
+    if (blocked && to.name !== "license") return { name: "license" };
+    if (!blocked && to.name === "license") return { name: "login" };
+    if (!desktopStore.hasStore && !blocked && !["register", "terms", "privacy"].includes(String(to.name))) return { name: "register" };
+    if (desktopStore.hasStore && desktopStore.status === "ok" && to.name === "register") return { name: "login" };
+  }
   if (publicNames.has(String(to.name))) {
     if (isAuthenticated() && (to.name === "login" || to.name === "register")) {
       return { name: homeForRole() };

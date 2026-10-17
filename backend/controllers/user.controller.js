@@ -13,6 +13,7 @@ const {
 const { resolveAppUrl } = require('../utils/app-url.utils');
 const { passwordProblem } = require('../utils/password-policy');
 const sessions = require('../services/session.service');
+const licenses = require('../services/license.service');
 const totp = require('../utils/totp');
 const secretBox = require('../utils/secret-box');
 
@@ -67,6 +68,31 @@ const CreateUser = async (req, res) => {
     }
 
     delete value.referralCode;
+
+    // Versión instalable: una sola tienda por computadora, y solo con la licencia activada
+    const licenseCode = value.licenseCode;
+    delete value.licenseCode;
+    if (licenses.enforced()) {
+      if ((await db.ListTenants()).length) {
+        return res.status(409).json({ code: 'STORE_EXISTS', message: 'Esta computadora ya tiene su tienda. Inicia sesión.' });
+      }
+      if (licenses.state().status !== 'ok') {
+        try {
+          await licenses.activateOnline({ code: licenseCode, email: value.email, ownerName: `${value.name} ${value.lastName}`.trim(), businessName: value.businessName || '' });
+        } catch (err) {
+          if (err.status) return res.status(err.status).json({ code: err.code, message: err.message });
+          throw err;
+        }
+      }
+      // Marca de instalación: si dos altas llegaran juntas, solo una crea la tienda
+      try {
+        await db.getCollection('app_install').insertOne({ _id: 'store', at: new Date() });
+      } catch (err) {
+        if (err.code !== 11000 || (await db.ListTenants()).length) {
+          return res.status(409).json({ code: 'STORE_EXISTS', message: 'Esta computadora ya tiene su tienda. Inicia sesión.' });
+        }
+      }
+    }
 
     const tenant = await db.CreateTenant({
       ...createTenantDoc(value.businessName || `${value.name} ${value.lastName}`),

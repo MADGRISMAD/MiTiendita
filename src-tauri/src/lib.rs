@@ -14,6 +14,8 @@ use std::time::{Duration, Instant};
 
 use tauri::{Manager, RunEvent, WebviewUrl, WebviewWindowBuilder};
 
+mod device_fingerprint;
+
 const PORT: u16 = 17841;
 
 struct Backend(Mutex<Option<Child>>);
@@ -87,6 +89,8 @@ fn start_backend(app: &tauri::AppHandle) -> Result<Child, String> {
     .env("SQLITE_PATH", data.join("data").join("mitiendita.db"))
     .env("FRONTEND_DIST", &ui)
     .env("APP_DATA_DIR", &data)
+    .env("DESKTOP_DEVICE_INFO", device_fingerprint::collect().to_json())
+    .env("APP_VERSION", app.package_info().version.to_string())
     .stdin(Stdio::null())
     .stdout(Stdio::from(log))
     .stderr(Stdio::from(err));

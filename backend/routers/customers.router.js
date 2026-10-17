@@ -4,12 +4,12 @@ const creditDb = require('../database/credit.db');
 const credit = require('../services/credit.service');
 const insights = require('../services/customer-insights.service');
 const { rateLimit } = require('../services/rate-limit.service');
-const { requireAuth, requireActiveSubscription, requireRoles } = require('../middleware/auth.middleware');
+const { requireAuth, requireLicense, requireRoles } = require('../middleware/auth.middleware');
 
 // Listar clientes (con búsqueda opcional por query ?q=)
 router.get(
   '/',
-  requireAuth, requireActiveSubscription, requireRoles('admin', 'cashier'),
+  requireAuth, requireLicense, requireRoles('admin', 'cashier'),
   async (req, res) => {
     try {
       const q = req.query.q;
@@ -24,7 +24,7 @@ router.get(
   }
 );
 
-const staff = [requireAuth, requireActiveSubscription, requireRoles('admin', 'cashier')];
+const staff = [requireAuth, requireLicense, requireRoles('admin', 'cashier')];
 const failCredit = (res, err) => {
   if (!err.status) console.error(err);
   return res.status(err.status || 500).json({ message: err.message || 'Error en cuentas por cobrar', code: err.code });
@@ -118,7 +118,7 @@ router.post('/:id/payments', ...staff, paymentLimit, async (req, res) => {
 });
 
 // Fijar el límite de fiado (solo administrador)
-router.put('/:id/credit-limit', requireAuth, requireActiveSubscription, requireRoles('admin'), async (req, res) => {
+router.put('/:id/credit-limit', requireAuth, requireLicense, requireRoles('admin'), async (req, res) => {
   try {
     const limit = Number(req.body?.creditLimit);
     if (!Number.isFinite(limit) || limit < 0 || limit > 1_000_000) {
@@ -135,7 +135,7 @@ router.put('/:id/credit-limit', requireAuth, requireActiveSubscription, requireR
 // Obtener cliente por id
 router.get(
   '/:id',
-  requireAuth, requireActiveSubscription, requireRoles('admin', 'cashier'),
+  requireAuth, requireLicense, requireRoles('admin', 'cashier'),
   async (req, res) => {
     try {
       const customer = await db.GetCustomerById(req.params.id, req.tenantId);
@@ -151,7 +151,7 @@ router.get(
 // Crear cliente
 router.post(
   '/',
-  requireAuth, requireActiveSubscription, requireRoles('admin', 'cashier'),
+  requireAuth, requireLicense, requireRoles('admin', 'cashier'),
   async (req, res) => {
     try {
       const { name, phone, email, notes } = req.body || {};
@@ -179,7 +179,7 @@ router.post(
 // Actualizar cliente
 router.put(
   '/:id',
-  requireAuth, requireActiveSubscription, requireRoles('admin', 'cashier'),
+  requireAuth, requireLicense, requireRoles('admin', 'cashier'),
   async (req, res) => {
     try {
       const { name, phone, email, notes } = req.body || {};
@@ -202,7 +202,7 @@ router.put(
 // Solo el administrador: el cliente lleva su historial y su libro de fiado
 router.delete(
   '/:id',
-  requireAuth, requireActiveSubscription, requireRoles('admin'),
+  requireAuth, requireLicense, requireRoles('admin'),
   async (req, res) => {
     try {
       const customer = await creditDb.getCustomer(req.tenantId, req.params.id);

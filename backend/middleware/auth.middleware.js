@@ -5,9 +5,7 @@ const {
   isPlatformStaff,
   isPartnerRole,
   isOutsideTenant,
-  isSubscriptionActive,
 } = require('../models/tenant.model');
-const db = require('../database/mongodb');
 const sessions = require('../services/session.service');
 
 /**
@@ -94,48 +92,23 @@ function requireRoles(...allowed) {
   };
 }
 
-async function requireActiveSubscription(req, res, next) {
-  try {
-    if (isPlatformStaff(req.user?.role)) return next();
-    if (!req.tenantId) {
-      return res.status(403).json({
-        code: 'SUBSCRIPTION_REQUIRED',
-        message: 'Suscripción requerida',
-      });
-    }
-
-    const tenant = await db.GetTenantById(req.tenantId);
-    if (!tenant) {
-      return res.status(403).json({
-        code: 'SUBSCRIPTION_REQUIRED',
-        message: 'Negocio no encontrado',
-      });
-    }
-
-    if (!isSubscriptionActive(tenant)) {
-      return res.status(403).json({
-        code: 'SUBSCRIPTION_REQUIRED',
-        message: tenant.overPlan
-          ? 'El plan de tu matriz ya no incluye esta sucursal. Tus datos se conservan: pasa a un plan con sucursales para volver a usarla.'
-          : 'Tu prueba o suscripción no está activa. Ve a Facturación.',
-        billingStatus: tenant.billingStatus,
-        trialEndsAt: tenant.trialEndsAt,
-        plan: tenant.plan,
-      });
-    }
-
-    req.tenant = tenant;
-    return next();
-  } catch (err) {
-    console.error(err);
-    return res.status(500).send(err.message || 'Error de suscripción');
-  }
+/** Versión instalable: la tienda opera solo con la licencia de ESTA computadora. */
+async function requireLicense(req, res, next) {
+  const { status } = require('../services/license.service').state();
+  if (status === 'ok') return next();
+  const message =
+    status === 'none'
+      ? 'Activa Mi Tiendita con tu código de licencia.'
+      : status === 'other_device'
+        ? 'Esta licencia es de otra computadora. Reactívala en línea o contacta a soporte.'
+        : 'La licencia de esta computadora no es válida. Reactívala en línea.';
+  return res.status(403).json({ code: status === 'none' ? 'LICENSE_REQUIRED' : status === 'other_device' ? 'LICENSE_DEVICE_MISMATCH' : 'LICENSE_INVALID', message });
 }
 
 module.exports = {
   requireAuth,
   requireRoles,
-  requireActiveSubscription,
+  requireLicense,
   ROLES,
   TENANT_ROLES,
 };

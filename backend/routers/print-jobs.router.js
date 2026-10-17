@@ -3,12 +3,12 @@ const db = require('../database/mongodb');
 const queue = require('../services/print-queue.service');
 const { rateLimit } = require('../services/rate-limit.service');
 const { hideCostsFromCashiers } = require('../middleware/cost-guard');
-const { requireAuth, requireActiveSubscription, requireRoles } = require('../middleware/auth.middleware');
+const { requireAuth, requireLicense, requireRoles } = require('../middleware/auth.middleware');
 
 // El cajero que hace de estación recibe la venta completa: sin costos (ver middleware/cost-guard.js)
 router.use(hideCostsFromCashiers);
 
-const staff = [requireAuth, requireActiveSubscription, requireRoles('admin', 'cashier')];
+const staff = [requireAuth, requireLicense, requireRoles('admin', 'cashier')];
 const byUser = (req) => req.user?.username || req.ip;
 const sendLimit = rateLimit({ name: 'print-send', windowMs: 10 * 60 * 1000, max: 300, key: byUser });
 const claimLimit = rateLimit({ name: 'print-claim', windowMs: 5 * 60 * 1000, max: 600, key: byUser });
