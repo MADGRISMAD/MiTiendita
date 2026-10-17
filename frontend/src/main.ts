@@ -14,6 +14,7 @@ import {
 import "./apiService";
 import { startOfflineRuntime } from "./offlineSync";
 import { startErrorReporting } from "./errorReport";
+import { startPrintStation } from "./printStation";
 import { applySeo } from "./seo/apply";
 import { VERTICALS } from "./seo/site.mjs";
 
@@ -226,6 +227,7 @@ router.afterEach((to) => applySeo(to.path));
 app.use(router);
 app.mount("#app");
 startErrorReporting();
+startPrintStation();
 
 startOfflineRuntime();
 

@@ -341,6 +341,33 @@
           <!-- ======= Impresora ======= -->
           <template v-else-if="section === 'impresora'">
             <section class="adm-card cfg-card">
+              <h3>¿Dónde se imprime lo que cobras aquí?</h3>
+              <p class="adm-hint">Se guarda solo en este dispositivo. Sirve para cobrar desde el celular e imprimir en la computadora de la caja.</p>
+              <div class="adm-choices printer-modes">
+                <button v-for="r in PRINT_ROUTES" :key="r.id" type="button" class="adm-choice" :aria-pressed="printRoute.mode === r.id" @click="setPrintRoute(r.id)">
+                  <strong>{{ r.label }}</strong>
+                  <small>{{ r.hint }}</small>
+                </button>
+              </div>
+              <template v-if="printRoute.mode === 'remote'">
+                <p class="state-line" :class="stationInfo?.online ? 'on' : 'off'">
+                  <i></i>{{ stationInfo == null ? 'Revisando la computadora de la caja…' : stationInfo.online ? `Computadora de la caja conectada${stationInfo.name ? ` (${stationInfo.name})` : ''}` : 'La computadora de la caja no está conectada' }}
+                </p>
+                <p class="adm-hint">En la computadora, entra a Configuración → Impresora y elige «Esta computadora imprime los tickets de los otros dispositivos». Debe quedar con MiTiendita abierta.</p>
+                <button type="button" class="adm-btn" @click="checkStation">Volver a revisar</button>
+              </template>
+              <template v-else-if="printRoute.mode === 'station'">
+                <p class="state-line" :class="stationState.running && !stationState.error ? 'on' : 'off'">
+                  <i></i>{{ stationState.error || (stationState.running ? 'Esperando tickets de los otros dispositivos' : 'Detenida') }}
+                </p>
+                <p v-if="!directPrinting()" class="adm-banner warn">Esta computadora aún no tiene impresora térmica configurada: elige abajo «Térmica USB», «puerto COM» o «Bluetooth», conecta la impresora y haz una prueba.</p>
+                <p class="adm-hint">
+                  Deja esta pestaña abierta (puede estar en segundo plano) y con la sesión iniciada.
+                  <template v-if="stationState.printed">Tickets impresos desde que abriste la app: <b>{{ stationState.printed }}</b>.</template>
+                </p>
+              </template>
+            </section>
+            <section v-if="printRoute.mode !== 'remote'" class="adm-card cfg-card">
               <h3>Cómo sale el ticket</h3>
               <p class="adm-hint">Se guarda solo en este dispositivo: cada caja elige su impresora. No necesita «Guardar cambios».</p>
               <div class="adm-choices printer-modes">
@@ -358,7 +385,7 @@
                 </button>
               </div>
             </section>
-            <section v-if="printerStore.mode !== 'browser'" class="adm-card cfg-card">
+            <section v-if="printRoute.mode !== 'remote' && printerStore.mode !== 'browser'" class="adm-card cfg-card">
               <h3>Impresora térmica</h3>
               <p class="state-line" :class="printerStore.connected ? 'on' : 'off'">
                 <i></i>{{ printerStore.connected ? `Conectada: ${printerStore.deviceName}` : printerStore.deviceName ? `Elegida: ${printerStore.deviceName} (se conecta al imprimir)` : 'Sin impresora elegida' }}
@@ -684,7 +711,9 @@ import { authStore, isPlatformStaff, setSession } from "../authStore";
 import QRCode from "qrcode";
 import { closingLine } from "../ticketShell";
 import { prettyPhone } from "../phone";
-import { printerStore, printerSupport, printTestPage, savePrinterSettings, connectPrinter } from "../thermalPrinter";
+import { directPrinting, printerStore, printerSupport, printTestPage, savePrinterSettings, connectPrinter } from "../thermalPrinter";
+import { printRoute, savePrintRoute } from "../printRoute";
+import { stationState, syncPrintStation } from "../printStation";
 import { SCALE_COMMANDS, connectScale, disconnectScale, saveScaleSettings, scaleLive, scaleStore, scaleSupported } from "../scale";
 import { errText as sharedErrText, money } from "../textUtils";
 import { useFlash } from "../useFlash";
@@ -695,6 +724,22 @@ const PRINTER_MODES = [
   { id: "serial", label: "Térmica USB (puerto COM)", hint: "Para impresoras que Windows muestra como puerto COM. Chrome o Edge en PC." },
   { id: "bluetooth", label: "Térmica Bluetooth", hint: "Sale directo, sin diálogo. Chrome en Android o PC con Bluetooth." },
 ];
+const PRINT_ROUTES = [
+  { id: "local", label: "En este dispositivo", hint: "Sale en la impresora de este equipo, o en el diálogo de imprimir. Es como funciona siempre." },
+  { id: "remote", label: "En la impresora de la caja", hint: "Cobras aquí y el ticket sale en la computadora de la caja, que debe tener MiTiendita abierta." },
+  { id: "station", label: "Esta computadora imprime los tickets de los otros dispositivos", hint: "Para la computadora que tiene la impresora. Los tickets que cobren los celulares salen aquí." },
+];
+const stationInfo = ref(null);
+async function checkStation() {
+  stationInfo.value = null;
+  stationInfo.value = (await apiService.printStationStatus().catch(() => null)) || { online: false, name: "" };
+}
+function setPrintRoute(mode) {
+  savePrintRoute({ mode });
+  syncPrintStation();
+  if (mode === "remote") checkStation();
+}
+if (printRoute.mode === "remote") checkStation();
 const printerErr = ref("");
 // Báscula: el reloj hace que «en vivo» se apague si deja de mandar peso
 const scaleTick = ref(Date.now());

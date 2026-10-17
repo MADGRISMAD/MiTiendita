@@ -279,21 +279,21 @@
                 <div v-if="printIssue" class="print-issue" role="alert">
                   <p><strong>No se imprimió el ticket.</strong> {{ printIssue }} La venta sí quedó registrada.</p>
                   <div>
-                    <button type="button" class="soft-btn" :disabled="printerStore.busy" @click="retryPrint">
-                      {{ printerStore.busy ? 'Imprimiendo…' : 'Reintentar' }}
+                    <button type="button" class="soft-btn" :disabled="printerStore.busy || remoteBusy" @click="retryPrint">
+                      {{ printerStore.busy || remoteBusy ? 'Imprimiendo…' : 'Reintentar' }}
                     </button>
                     <button type="button" class="soft-btn" @click="printLastInBrowser">Imprimir con el navegador</button>
                   </div>
                 </div>
                 <button
-                  v-else-if="lastTicketId && directPrinting()"
+                  v-else-if="lastTicketId && (directPrinting() || remotePrinting)"
                   type="button"
                   class="soft-btn"
-                  :disabled="printerStore.busy"
+                  :disabled="printerStore.busy || remoteBusy"
                   @click="retryPrint"
                 >
                   <PosIcon name="printer" :size="18" />
-                  {{ printerStore.busy ? 'Imprimiendo…' : 'Reimprimir ticket' }}
+                  {{ printerStore.busy || remoteBusy ? 'Imprimiendo…' : 'Reimprimir ticket' }}
                 </button>
                 <a v-else-if="lastTicketId" :href="reprintHref" target="_blank" rel="noopener" class="soft-btn">
                   <PosIcon name="printer" :size="18" />
@@ -1606,6 +1606,7 @@ import {
   saleToPrintOrder,
 } from "../offlineDb";
 import { directPrinting, printReceiptDirect, printerStore } from "../thermalPrinter";
+import { printRoute } from "../printRoute";
 import { flushOfflineSales, offlineStore, queueSale } from "../offlineSync";
 
 const vSelectOnFocus = {
@@ -2131,14 +2132,46 @@ export default {
         printIssue.value = error.message || "La impresora no respondió.";
       }
     }
+    // Con «imprimir en la impresora de la caja» el ticket se manda a la computadora (solo con internet)
+    const remotePrinting = computed(() => printRoute.mode === "remote" && offlineStore.online);
+    const remoteBusy = ref(false);
+    async function printRemote(job) {
+      printIssue.value = "";
+      remoteBusy.value = true;
+      try {
+        const sent = await apiService.sendPrintJob(job.order.id, Boolean(job.cash));
+        // Espera hasta 10 s a que la computadora confirme que imprimió
+        for (let i = 0; i < 10; i += 1) {
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+          const state = await apiService.getPrintJob(sent.id);
+          if (state.status === "done") return;
+          if (state.status === "failed") {
+            printIssue.value = state.error || "La computadora no pudo imprimir el ticket.";
+            return;
+          }
+        }
+        printIssue.value = "La computadora de la caja no confirmó la impresión. Revisa que tenga MiTiendita abierta y la impresora lista.";
+      } catch (error) {
+        const data = error?.response?.data;
+        printIssue.value =
+          data?.code === "STATION_OFFLINE"
+            ? "La computadora de la caja no está conectada (debe tener MiTiendita abierta)."
+            : (typeof data === "object" && data?.message) || "No se pudo mandar el ticket a la computadora.";
+      } finally {
+        remoteBusy.value = false;
+      }
+    }
     function printReceipt(order, offline = false, cash = false) {
       if (!order?.id) return;
       lastPrint = { order, offline, cash };
-      if (directPrinting()) printDirect(lastPrint, { drawer: true });
+      if (remotePrinting.value && !offline) printRemote(lastPrint);
+      else if (directPrinting()) printDirect(lastPrint, { drawer: true });
       else printInBrowser(order.id, offline);
     }
     function retryPrint() {
-      if (lastPrint) printDirect(lastPrint);
+      if (!lastPrint) return;
+      if (remotePrinting.value && !lastPrint.offline) printRemote(lastPrint);
+      else printDirect(lastPrint);
     }
     function printLastInBrowser() {
       printIssue.value = "";
@@ -4567,6 +4600,8 @@ export default {
       printIssue,
       printerStore,
       directPrinting,
+      remotePrinting,
+      remoteBusy,
       retryPrint,
       printLastInBrowser,
       money,

@@ -741,6 +741,24 @@ export const apiService = {
   getExpiringLots(days = 30) {
     return axios.get('/inventory/lots/expiring', { params: { days } }).then((r) => r.data);
   },
+  /** ¿Está conectada la computadora de la caja (estación de impresión)? */
+  printStationStatus() {
+    return axios.get('/print-jobs/station').then((r) => r.data);
+  },
+  /** Manda un ticket cobrado a imprimir en la estación. */
+  sendPrintJob(orderId: string, openDrawer = false) {
+    return axios.post('/print-jobs', { orderId, kind: 'receipt', openDrawer }).then((r) => r.data);
+  },
+  getPrintJob(id: string) {
+    return axios.get(`/print-jobs/${id}`).then((r) => r.data);
+  },
+  /** La estación pide su siguiente ticket (petición larga: el servidor contesta en cuanto hay uno o a los ~12 s). */
+  claimPrintJob(stationId: string, name: string) {
+    return axios.post('/print-jobs/claim', { stationId, name }, { timeout: 25000 }).then((r) => r.data);
+  },
+  reportPrintResult(id: string, body: { stationId: string; ok: boolean; error?: string }) {
+    return axios.post(`/print-jobs/${id}/result`, body).then((r) => r.data);
+  },
   getPurchaseSuggestions() {
     return axios.get('/inventory/suggestions').then((r) => r.data);
   },

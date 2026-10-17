@@ -62,6 +62,7 @@ app.use('/platform', require('./routers/platform.router'));
 app.use('/partner', require('./routers/partner.router'));
 app.use('/point', require('./routers/point.router'));
 app.use('/client-errors', require('./routers/client-errors.router'));
+app.use('/print-jobs', require('./routers/print-jobs.router'));
 
 const { verifyMailConfig } = require('./utils/mail.utils');
 verifyMailConfig().catch(() => {});

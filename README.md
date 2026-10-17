@@ -57,6 +57,14 @@ En **Configuración → Impresora** cada caja elige cómo sale el ticket (se gua
 - **Bluetooth clásico (SPP):** las impresoras que solo tienen Bluetooth clásico no funcionan con Web Bluetooth; usa una con Bluetooth LE (BLE) o el modo Navegador.
 - Comandos ESC/POS en `frontend/src/escpos.js`; conexión en `frontend/src/thermalPrinter.js`.
 
+### Cobrar en el celular e imprimir en la computadora
+Por omisión cada dispositivo imprime lo que cobra. Para que el celular mande el ticket a la impresora de la computadora de la caja:
+
+1. **En la computadora** (la que tiene la impresora): entra a *Configuración → Impresora*, configura y prueba la impresora térmica y elige **«Esta computadora imprime los tickets de los otros dispositivos»**. Deja MiTiendita abierta con la sesión iniciada (puede estar en segundo plano).
+2. **En el celular**: *Configuración → Impresora* → **«En la impresora de la caja»**. Ahí mismo se ve si la computadora está conectada.
+
+Al cobrar, el celular manda el ticket y espera hasta 10 s la confirmación; si la computadora no está conectada o no pudo imprimir, avisa con «Reintentar» e «Imprimir con el navegador». Detalles: la computadora recibe los tickets con una petición larga (`POST /print-jobs/claim`), un ticket lo imprime una sola estación, y uno que espera más de 10 minutos ya no se imprime. Ventas hechas sin internet y reimpresiones desde Caja siguen imprimiendo en el dispositivo. Lógica en `backend/services/print-queue.service.js` y `frontend/src/printStation.js`.
+
 ### Báscula
 En **Configuración → Báscula** se conecta la báscula de la caja (Web Serial: Chrome/Edge en PC). Se elige cómo manda el peso (continuo, o pedirlo con «P», «W» o ENQ), la velocidad del puerto (9600 casi siempre) y en qué unidad viene si no la dice. Ahí mismo se ve el peso en vivo para probar. Lectura en `frontend/src/scale.js`; la regla de los 2 segundos en `frontend/src/bulk.js` (`createStableWeigh`).
 - Si la impresora (modo puerto COM) y la báscula usan el mismo adaptador USB-serie (mismo fabricante y modelo), el navegador no las distingue: conecta una por USB directo o usa otro adaptador.

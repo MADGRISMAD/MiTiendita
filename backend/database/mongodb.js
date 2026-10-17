@@ -69,9 +69,13 @@ async function ensureIndexes() {
     ['foods', { tenantId: 1, barcode: 1 }],
     ['foods', { tenantId: 1, sku: 1 }],
     ['cash_sessions', { tenantId: 1, status: 1 }],
+    ['print_jobs', { tenantId: 1, status: 1, createdAt: 1 }],
+    ['print_stations', { tenantId: 1, stationId: 1 }],
   ]) {
     await dbConnection.collection(col).createIndex(keys).catch(() => {});
   }
+  // Los trabajos de impresión no se guardan más de 3 días
+  await dbConnection.collection('print_jobs').createIndex({ createdAt: 1 }, { expireAfterSeconds: 3 * 24 * 60 * 60 }).catch(() => {});
   await dbConnection.collection('suppliers').createIndex({ tenantId: 1, name: 1 }).catch(() => {});
   await dbConnection.collection('purchases').createIndex({ tenantId: 1, date: -1 }).catch(() => {});
   await dbConnection.collection('lots').createIndex({ tenantId: 1, foodId: 1, expiresAt: 1 }).catch(() => {});
@@ -791,6 +795,51 @@ async function GetClosedCashSessionsBetween(tenantId, from, to) {
     .find({ tenantId, status: 'closed', closedAt: { $gte: new Date(from), $lte: new Date(to) } })
     .toArray()).map(withId);
 }
+// —— Cola de impresión: tickets que un dispositivo (celular) manda a imprimir en otro (la computadora con la impresora) ——
+async function CreatePrintJob(data) {
+  const result = await dbConnection.collection('print_jobs').insertOne(data);
+  return withId(await dbConnection.collection('print_jobs').findOne({ _id: result.insertedId }));
+}
+/**
+ * Toma, de forma atómica, el trabajo más viejo pendiente. También rescata uno «imprimiendo» cuya estación no
+ * respondió a tiempo (`claimTimeoutMs`). Los trabajos más viejos que `ttlMs` ya no se imprimen.
+ */
+async function ClaimPrintJob(tenantId, stationId, { ttlMs, claimTimeoutMs, now = new Date() }) {
+  const doc = await dbConnection.collection('print_jobs').findOneAndUpdate(
+    {
+      tenantId: String(tenantId),
+      createdAt: { $gte: new Date(now.getTime() - ttlMs) },
+      $or: [{ status: 'pending' }, { status: 'printing', claimedAt: { $lt: new Date(now.getTime() - claimTimeoutMs) } }],
+    },
+    { $set: { status: 'printing', stationId: String(stationId), claimedAt: now }, $inc: { attempts: 1 } },
+    { sort: { createdAt: 1 }, returnDocument: 'after' }
+  );
+  return withId(doc);
+}
+/** Cierra un trabajo, solo si lo tiene esa estación. */
+async function FinishPrintJob(id, tenantId, stationId, { ok, error = null }) {
+  if (!ObjectId.isValid(id)) return false;
+  const r = await dbConnection.collection('print_jobs').updateOne(
+    { _id: new ObjectId(id), tenantId: String(tenantId), status: 'printing', stationId: String(stationId) },
+    { $set: { status: ok ? 'done' : 'failed', error: ok ? null : String(error || 'error').slice(0, 200), finishedAt: new Date() } }
+  );
+  return r.modifiedCount === 1;
+}
+async function GetPrintJob(id, tenantId) {
+  if (!ObjectId.isValid(id)) return null;
+  return withId(await dbConnection.collection('print_jobs').findOne({ _id: new ObjectId(id), tenantId: String(tenantId) }));
+}
+/** Latido de la estación: sirve para saber desde el celular si la computadora está conectada. */
+async function TouchPrintStation(tenantId, stationId, name) {
+  await dbConnection
+    .collection('print_stations')
+    .updateOne({ tenantId: String(tenantId), stationId: String(stationId) }, { $set: { name: String(name || '').slice(0, 60), lastSeenAt: new Date() } }, { upsert: true });
+}
+async function GetPrintStation(tenantId) {
+  const rows = await dbConnection.collection('print_stations').find({ tenantId: String(tenantId) }).sort({ lastSeenAt: -1 }).limit(1).toArray();
+  return rows[0] ? { stationId: rows[0].stationId, name: rows[0].name || '', lastSeenAt: rows[0].lastSeenAt } : null;
+}
+
 /**
  * Candado de una tarea programada: solo quien lo toma la ejecuta (útil con varias instancias).
  * El candado vence solo (`ttlMs`) por si la instancia que lo tenía se cae a medio trabajo.
@@ -1495,7 +1544,7 @@ async function Ping() {
 }
 
 module.exports = {
-  Ping, AcquireJobLock, FinishJob, ListJobRuns, ClaimDunningNotice, ReleaseDunningNotice, CustomerOrderStats, GetOrdersByCustomer, ApplyOrderReturn, GetClosedCashSessionsBetween, ListSettingsWithDailySummary, ClaimDailySummary, ReleaseDailySummary,
+  Ping, CreatePrintJob, ClaimPrintJob, FinishPrintJob, GetPrintJob, TouchPrintStation, GetPrintStation, AcquireJobLock, FinishJob, ListJobRuns, ClaimDunningNotice, ReleaseDunningNotice, CustomerOrderStats, GetOrdersByCustomer, ApplyOrderReturn, GetClosedCashSessionsBetween, ListSettingsWithDailySummary, ClaimDailySummary, ReleaseDailySummary,
   ensureConnection,
   CreateTenant, GetTenantById, UpdateTenant, ListTenants, CountUsersByTenant, CountPendingInvites, ListUsersByTenant, GetTenantByMpPreapprovalId,
   CreateUser, FindUserByEmail, LoginUsuario, FindUserByUsername, UpdateUserById, FindUserByResetToken,
