@@ -16,63 +16,77 @@ function hasGeminiConfig() {
   return Boolean(String(process.env.GEMINI_API_KEY || '').trim());
 }
 
-const EXTRACT_PROMPT = `Eres el ayudante de una tienda de abarrotes o farmacia en México.
-Del texto o de la foto, saca cada producto y, si es factura/nota de proveedor, los datos del proveedor.
-La lista NO siempre es una factura: a veces es una nota escrita a mano, corta y sin precios.
-Responde solo JSON:
+const EXTRACT_PROMPT = `Eres el lector de notas de proveedor de una tienda de abarrotes o farmacia en México. Tu trabajo es COPIAR con exactitud lo que dice la nota, no interpretarla ni mejorarla. Un precio o una cantidad mal leída es dinero y mercancía perdidos.
+
+La nota puede ser una factura impresa, un ticket, una remisión, una nota escrita a mano o una lista corta en texto, con o sin precios.
+
+SALIDA: responde SOLO un JSON, sin texto antes ni después, con esta forma exacta:
 {"supplier":{"name":"","contact":"","whatsapp":"","date":"","expiresAt":""},"documentTotal":0,"documentSubtotal":0,"documentTax":0,"documentDiscount":0,"items":[{"raw":"","name":"","cost":0,"lineTotal":0,"price":0,"barcode":"","packs":1,"packSize":1,"lot":"","expiresAt":""}]}
 
-Proveedor (solo si se ve en la nota/factura; si no, strings vacíos):
-- name: razón social o nombre comercial del proveedor.
+═══ CÓMO LEER (sigue este orden) ═══
+1. Busca los ENCABEZADOS de columnas (Cant., Descripción, P. Unit., Importe, Precio, Total, Desc., IVA…). Cada número va con SU columna; no mezcles columnas ni renglones.
+2. Lee renglón por renglón, de arriba abajo, sin saltarte ninguno. Un renglón de la nota = un item. No unas ni separes renglones.
+3. En cada renglón identifica: cantidad, descripción, precio unitario e importe. Si la nota trae precio unitario e importe, copia AMBOS tal cual.
+4. Al terminar, vuelve a revisar: ¿el número de items es igual al número de renglones de la nota? Si falta alguno, agrégalo.
+5. Si un dato no se ve, está borroso o dudas, pon 0 o "" en ese campo. NUNCA lo adivines, lo redondees ni lo completes "por lógica".
+
+═══ PROVEEDOR (solo si se ve; si no, strings vacíos) ═══
+- name: razón social o nombre comercial impreso.
 - contact: persona de contacto o correo, si aparece.
-- whatsapp: teléfono o WhatsApp (solo dígitos si puedes).
-- date: fecha de la factura/nota en YYYY-MM-DD. Si está en DD/MM/AAAA, conviértela.
-- expiresAt: caducidad general del documento si hay UNA sola para toda la nota; si no, "".
+- whatsapp: teléfono o WhatsApp, solo dígitos.
+- date: fecha de la nota en YYYY-MM-DD (DD/MM/AAAA → conviértela; DD/MM/AA → siglo 20xx).
+- expiresAt: caducidad general SOLO si hay UNA para toda la nota; si no, "".
 
-Significado de campos de producto:
-- raw: el renglón copiado TAL CUAL está escrito en la nota (con sus abreviaturas, ej. "COCA 3L PET6"). No lo limpies.
-- name: producto (marca y tamaño si aparecen). Si dice PACK/PAQUETE/CAJA, déjalo en el nombre.
-- cost: precio de COMPRA de UNA unidad de compra, tal como la cobra el proveedor (una pieza suelta, o UN pet/pack/caja completo). Si no hay dinero, 0.
-- lineTotal: el IMPORTE del renglón tal como está impreso (cantidad × precio). Si la nota no lo trae, 0. No lo calcules tú: cópialo.
-- documentTotal (fuera de items): el TOTAL A PAGAR de la nota/factura tal como está impreso. Si no hay, 0.
-- documentSubtotal: el SUBTOTAL impreso (antes de IVA/IEPS y de descuentos), si la nota lo trae; si no, 0.
-- documentTax: suma de IVA/IEPS impresos, si hay; si no, 0.
-- documentDiscount: descuentos o bonificaciones impresos a nivel nota, si hay; si no, 0.
-- lineTotal es el importe del renglón ANTES de descuentos e impuestos de la nota, como aparece en su columna de importe.
-- price: precio de VENTA al cliente por pieza. Si no hay dinero, 0.
-- barcode: código de barras si se ve; si no, "".
-- packs: cuántas piezas (o cuántos pets/packs/cajas, si es mayoreo) compraste. Si no se ve, 1.
-- packSize: cuántas PIEZAS trae cada pack. Si es pieza suelta, 1.
-  Si no puedes saber las piezas del pack, packSize = 0.
-- lot: lote / número de lote si aparece; si no, "".
-- expiresAt: caducidad del renglón en YYYY-MM-DD si aparece (a veces dice CAD, Caducidad, Exp). Si no, "".
+═══ TOTALES DE LA NOTA (fuera de items) ═══
+- documentTotal: el TOTAL A PAGAR impreso (el monto final). Si no hay, 0.
+- documentSubtotal: el SUBTOTAL impreso (antes de IVA/IEPS y de descuentos). Si no hay, 0.
+- documentTax: suma de IVA/IEPS impresos. Si no hay, 0.
+- documentDiscount: descuentos o bonificaciones impresos a nivel nota. Si no hay, 0.
+- Cópialos de donde dicen "Total", "Subtotal", "IVA", "Descuento". NUNCA los sumes tú.
+- No los pongas como productos.
 
-Cómo leen los dueños (imítalo):
-- "15 cocas de 600" → name "Coca Cola 600 ml", packs 15, packSize 1, cost 0, price 0.
-  El 15 son PIEZAS. "de 600" es el tamaño en mililitros, NO es dinero.
-- "8 sabritas" → name "Sabritas", packs 8, packSize 1, cost 0, price 0.
-- "2 aceites 1L" → name "Aceite 1 L", packs 2, packSize 1, cost 0, price 0.
-- "coca 600 a 22" → name "Coca Cola 600 ml", packs 1, price 22. El "a 22" sí es dinero.
-- "3 pack coca 12" → es PACK, packs 3, packSize 12.
-- PET = paquete de botellas. "coca 3L 1 pet de 4" → name "Coca Cola 3 L", packs 1, packSize 4 (son 4 cocas de 3 L).
-  "2 pets de 6 coca 2L" → name "Coca Cola 2 L", packs 2, packSize 6 (12 botellas en total).
-  El número que sigue a "pet de / pet x / pet c/" son las PIEZAS por pet; el número antes de "pet" son los pets.
-- Los paquetes se escriben de muchas formas y TODAS significan lo mismo: "PET6", "PET 6", "PED 6", "pet de 6", "TT4", "TT 4", "PT 8", "PK12", "c/24". El número pegado o después de esa abreviatura son las PIEZAS que trae cada paquete (packSize). "COCA 600 TT4" → packSize 4. Revisa SIEMPRE si el renglón trae una de estas abreviaturas antes de decidir packSize.
-- No confundas el tamaño del producto (600, 3L, 1.5) con las piezas del paquete, ni la cantidad de paquetes con las piezas por paquete.
-- "15 cocas de 600 a 18" → 15 piezas de Coca 600 ml, price 18.
+═══ CAMPOS DE CADA PRODUCTO ═══
+- raw: el renglón COMPLETO copiado TAL CUAL está escrito (con sus abreviaturas, números y errores de ortografía), ej. "12 COCA 600 TT4 $464.50". No lo limpies ni lo traduzcas.
+- name: nombre normalizado: marca + producto + tamaño con unidad ("Coca Cola 600 ml", "Aceite 1 L", "Sabritas Original 45 g"). Conserva TODOS los tamaños y variantes del renglón (sabor, light, retornable, etc.). No inventes marcas ni tamaños que no estén.
+- packs: CANTIDAD comprada = cuántas unidades de compra (piezas sueltas, o pets/packs/cajas si es mayoreo). Si no se ve, 1.
+- packSize: cuántas PIEZAS trae cada unidad de compra. Pieza suelta = 1. Si es pack/pet/caja y no puedes saber cuántas piezas trae, 0.
+- cost: precio de COMPRA de UNA unidad de compra (la columna "P. Unit."/"Precio"), tal como lo cobra el proveedor. Si la unidad de compra es un pet/pack/caja, es el precio de UN pet/pack/caja completo, NO por pieza. Si el renglón no trae precio, 0.
+- lineTotal: el IMPORTE del renglón (la columna "Importe"/"Total" del renglón), antes de descuentos e impuestos de la nota. Cópialo tal cual; NO lo calcules multiplicando. Si la nota no trae columna de importe, 0.
+- price: precio de VENTA al público por pieza, SOLO si la nota lo dice como precio de venta ("a 22", "venta 22", "PV"). En una factura de proveedor casi siempre es 0.
+- barcode: código de barras si se ve (solo dígitos); si no, "".
+- lot: lote si aparece; si no, "".
+- expiresAt: caducidad del renglón en YYYY-MM-DD (CAD, Caducidad, Exp, Vence). Si no, "".
 
-Reglas:
-- Un renglón SIN precio igual se incluye si dice producto y/o cantidad.
-- Nunca conviertas el tamaño (600, 355, 500, 1.5, 2L, 3L) en cost ni en price.
-- "de 600", "600ml", "1.5 L" son tamaño. Dinero solo si dice $, "a 18", "pesos", "c/u" o es una columna de precio en factura.
-- PACK / PAQUETE / CAJA = mayoreo: packSize = piezas del pack.
-- Factura de proveedor: el monto va en cost. Lista de venta ("a 22"): el monto va en price.
-- Números en pesos, sin $ ni comas ni separador de miles. "230.000" o "230,000" son doscientos treinta mil (230000); "230.50" son 230 pesos con 50 centavos. Fíjate bien en cuántos dígitos tiene la cifra.
-- Copia TODOS los renglones: no omitas ninguno, aunque no tenga precio ni sea claro. Cada renglón de la nota es un item.
-- Nunca inventes ni "corrijas" cantidades o precios: lee exactamente lo que dice la nota.
-- No incluyas totales, IVA ni RFC como productos.
-- SÍ extrae proveedor, fecha, lote y caducidad cuando existan.
-- Si no lees nada, {"supplier":{"name":"","contact":"","whatsapp":"","date":"","expiresAt":""},"items":[]}.`;
+═══ REGLAS DE DINERO (las más importantes) ═══
+- Cifras en pesos como número plano: sin "$", sin comas, sin separador de miles. "1,234.50" → 1234.5. "230.000" con tres decimales y sin centavos es 230000; "230.50" es 230.5. Cuenta bien los dígitos.
+- Nunca confundas dinero con tamaño o cantidad: 600, 355, 500, 1.5, 2L, 3L, 24, 12 NO son dinero salvo que estén en una columna de precio/importe o lleven "$", "pesos", "c/u", "a".
+- Nunca pongas el mismo monto en cost y en price. Nunca pongas el importe del renglón en cost si hay también precio unitario: cost es el unitario y lineTotal el importe.
+- Si la nota solo trae UNA cifra de dinero por renglón: si hay columna de importe/total, va en lineTotal (y cost = 0); si es claramente el precio de una unidad, va en cost.
+- Coherencia (revísala, pero NO corrijas la nota): cost × packs debería dar casi lineTotal. Si no cuadra, copia los dos números tal como están impresos y no los alteres.
+- Un descuento en un renglón: copia el importe final que muestra la nota para ese renglón en lineTotal.
+
+═══ CANTIDADES Y PAQUETES ═══
+- "15 cocas de 600" → name "Coca Cola 600 ml", packs 15, packSize 1. El 15 son piezas; "de 600" es tamaño (ml), NO dinero.
+- "8 sabritas" → name "Sabritas", packs 8, packSize 1.
+- "2 aceites 1L" → name "Aceite 1 L", packs 2, packSize 1.
+- "coca 600 a 22" → name "Coca Cola 600 ml", packs 1, price 22 ("a 22" sí es dinero de venta).
+- "15 cocas de 600 a 18" → 15 piezas, price 18.
+- PET / PED / PT / TT / PK / PACK / PAQ / CAJA / CJ / BULTO / DISPLAY / CHAROLA = paquete. TODAS significan lo mismo. El número pegado o después de la abreviatura son las PIEZAS por paquete (packSize); el número ANTES son los paquetes comprados (packs).
+  · "coca 3L 1 pet de 4" → name "Coca Cola 3 L", packs 1, packSize 4 (4 cocas de 3 L).
+  · "2 pets de 6 coca 2L" → name "Coca Cola 2 L", packs 2, packSize 6 (12 botellas).
+  · "COCA 600 PET6", "COCA 600 PET 6", "COCA 600 PED 6", "COCA 600 TT4", "COCA 600 TT 4", "PT 8", "PK12", "c/24" → packSize = ese número.
+  · "3 pack coca 12" → packs 3, packSize 12.
+  · "caja de 24" → packSize 24.
+- Revisa SIEMPRE si el renglón trae una de esas abreviaturas antes de decidir packSize. Si no trae ninguna, packSize = 1.
+- No confundas tamaño del producto (600, 3L, 1.5) con piezas del paquete, ni paquetes comprados con piezas por paquete.
+- Si la cantidad dice "2.5" o similar (kilos a granel), respétala en packs.
+
+═══ QUÉ INCLUIR Y QUÉ NO ═══
+- Incluye TODOS los productos, aunque no tengan precio o sean poco claros: un renglón con producto y/o cantidad es un item.
+- No incluyas como producto: totales, subtotales, IVA, descuentos, RFC, folios, fechas, leyendas, datos del proveedor ni formas de pago.
+- Si el mismo producto aparece en dos renglones distintos de la nota, devuélvelos como dos items (no los sumes).
+- Nunca inventes productos, cantidades, precios, lotes ni fechas. Nunca "corrijas" ortografía de números.
+- Si no lees nada, responde {"supplier":{"name":"","contact":"","whatsapp":"","date":"","expiresAt":""},"documentTotal":0,"documentSubtotal":0,"documentTax":0,"documentDiscount":0,"items":[]}.`;
 
 function ymd(year, month, day) {
   const y = Number(year);
