@@ -11,8 +11,8 @@ test('clave débil: corta o de ejemplo', () => {
   assert.equal(isWeakSecret(STRONG), false);
 });
 
-test('falta SECRET_KEY o DATABASE_URI: error; clave débil: solo aviso', () => {
-  assert.equal(checkEnv({}).errors.length, 2);
+test('falta SECRET_KEY: error; clave débil: solo aviso', () => {
+  assert.equal(checkEnv({}).errors.length, 1);
   const r = checkEnv({ SECRET_KEY: 'cambia-esta-clave', DATABASE_URI: 'mongodb://x' });
   assert.deepEqual(r.errors, []);
   assert.equal(r.warnings.length, 1);

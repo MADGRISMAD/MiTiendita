@@ -1,7 +1,7 @@
 require('dotenv').config();
 // La versión instalable no tiene sucursales: ninguna queda bloqueada por plan.
 const blockedByPlan = () => new Set();
-const { MongoClient, ObjectId } = require('mongodb');
+const { MongoClient, ObjectId } = require('./sqlite-store');
 const { createTenantDoc } = require('../models/tenant.model');
 const { reserveSaleStock } = require('../services/sale-stock.service');
 const { withPriceFlag } = require('../utils/needs-price');

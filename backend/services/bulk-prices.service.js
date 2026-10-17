@@ -2,7 +2,7 @@
  * Carga masiva de precios (catálogo maestro): el dueño captura precio (y costo) de muchos productos de una vez.
  * Aquí solo se valida y se limpia lo que manda el cliente; guardar y registrar en bitácora lo hace el controlador.
  */
-const { ObjectId } = require('mongodb');
+const { ObjectId } = require('../database/sqlite-store');
 
 const MAX_ROWS = 300;
 const MAX_PRICE = 1000000;

@@ -1,7 +1,7 @@
 const db = require('../database/mongodb');
 const { roundQty, saleUnitOf } = require('../utils/units');
 const limits = require('../services/plan-limits.service');
-const { ObjectId } = require('mongodb');
+const { ObjectId } = require('../database/sqlite-store');
 const saleAudit = require('../services/sale-audit.service');
 const { sanitizePriceRows, MAX_ROWS } = require('../services/bulk-prices.service');
 

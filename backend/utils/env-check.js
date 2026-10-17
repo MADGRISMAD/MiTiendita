@@ -1,6 +1,6 @@
 /**
  * Revisión de variables de entorno al arrancar.
- *  - Falta SECRET_KEY o DATABASE_URI → error (el servidor no debe arrancar a medias).
+ *  - Falta SECRET_KEY → error (el servidor no debe arrancar a medias).
  *  - Clave débil (corta, de ejemplo) o falta una llave de la terminal Mercado Pago → aviso fuerte; solo detiene el arranque si REQUIRE_STRONG_SECRETS=1,
  *    para no tumbar un servidor que hoy funciona con una clave vieja. Cambiar la clave cierra todas las sesiones.
  */
@@ -21,7 +21,6 @@ function checkEnv(env = process.env) {
   } else if (isWeakSecret(env.SECRET_KEY)) {
     warnings.push(`SECRET_KEY es débil (usa al menos ${MIN_LENGTH} caracteres al azar: «openssl rand -hex 32»).`);
   }
-  if (!String(env.DATABASE_URI || '').trim()) errors.push('Falta DATABASE_URI.');
   // Terminal Mercado Pago: guarda tokens de cada tienda cifrados con estas llaves
   if (String(env.MP_CLIENT_ID || '').trim()) {
     for (const key of ['TOKEN_ENC_KEY', 'OAUTH_STATE_SECRET']) {

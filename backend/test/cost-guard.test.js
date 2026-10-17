@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('node:http');
 const express = require('express');
-const { ObjectId } = require('mongodb');
+const { ObjectId } = require('../database/sqlite-store');
 const { stripCosts, hideCostsFromCashiers } = require('../middleware/cost-guard');
 
 const food = { id: 'f1', name: 'Coca', price: 20, cost: 12, stock: 5 };
