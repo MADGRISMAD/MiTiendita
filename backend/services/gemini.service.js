@@ -401,6 +401,14 @@ async function extractPrices({ text, images = [] }) {
     throw err;
   }
 
+  // Varias fotos: cada una se lee por separado (en paralelo) para saber con certeza de cuál salió cada renglón
+  if (images.length > 1) {
+    const reads = await Promise.all(images.map((img, i) => extractPrices({ text: i === 0 ? text : '', images: [img] })));
+    const items = reads.flatMap((r, i) => r.items.map((it) => ({ ...it, photo: i + 1 })));
+    const supplier = reads.map((r) => r.supplier).find((sup) => sup && sup.name) || reads[0].supplier || emptySupplier();
+    return { items: items.slice(0, 80), supplier };
+  }
+
   const hasImage = images.length > 0;
   const loose = parseLooseList(text);
   if (!hasImage && loose.complete && !looksLikeInvoice(text)) {
@@ -412,9 +420,6 @@ async function extractPrices({ text, images = [] }) {
       text: `${EXTRACT_PROMPT}\n\nTexto del usuario:\n${text || '(sin texto, usa la imagen)'}`,
     },
   ];
-  if (images.length > 1) {
-    parts[0].text += `\n\nSon ${images.length} fotos de la MISMA nota, en orden (foto 1, foto 2…). Lista TODOS los renglones que veas en cada foto, aunque un renglón se vea en dos fotos porque se traslapan: NO los unas ni los quites. En "photo" pon el número de la foto donde lo leíste.`;
-  }
   images.forEach((img) => {
     parts.push({ inlineData: { mimeType: img.mimeType || 'image/jpeg', data: img.imageBase64 } });
   });
