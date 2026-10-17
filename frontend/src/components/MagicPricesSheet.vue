@@ -164,7 +164,16 @@
               <PosIcon name="alert" :size="17" />
               <span>
                 <b>La suma no cuadra con la nota.</b> Leí {{ money(totals.read) }} y la nota dice {{ money(totals.document) }}
+                <template v-if="totals.basis === 'subtotal'">de subtotal</template><template v-else-if="totals.printedTotal && totals.printedTotal !== totals.document">(total {{ money(totals.printedTotal) }} sin impuestos)</template>
                 ({{ totals.diff > 0 ? "me pasé" : "me faltan" }} {{ money(Math.abs(totals.diff)) }}). Puede faltar un renglón o haberse leído mal un precio o una cantidad: compara con la nota antes de guardar.
+                <details class="mg-sum-how">
+                  <summary>Ver cómo sumé</summary>
+                  <ul class="mg-repeats">
+                    <li v-for="(l, i) in totals.lines" :key="i">
+                      {{ l.name }} · {{ l.packs }}<template v-if="l.packSize > 1"> × {{ l.packSize }} pzas</template>: {{ money(l.amount) }}
+                    </li>
+                  </ul>
+                </details>
               </span>
             </div>
             <div v-if="repeats.length" class="mg-msg warn" role="status">
@@ -1350,6 +1359,8 @@ onMounted(async () => {
 @keyframes mg-spin { to { transform: rotate(360deg); } }
 .mg-preview { position: relative; margin: 0; overflow: hidden; border-radius: 1rem; border: 1px solid var(--timber-line); background: var(--timber-surface); }
 .mg-preview img { display: block; width: 100%; max-height: 16rem; object-fit: contain; }
+.mg-sum-how { margin-top: 0.35rem; font-weight: 500; }
+.mg-sum-how summary { cursor: pointer; font-weight: 700; }
 .mg-repeats { margin: 0.3rem 0 0; padding-left: 1.1rem; font-weight: 500; }
 .mg-previews { display: grid; grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr)); gap: 0.6rem; }
 .mg-previews .mg-preview img { max-height: 11rem; }

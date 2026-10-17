@@ -72,14 +72,44 @@ function cleanImages(body) {
   return images;
 }
 
-/** Compara lo que se leyó con el total impreso en la nota: si no cuadra, falta o se leyó mal algún renglón. */
-function checkTotals(items, documentTotal) {
-  const read = magic.roundPrice(
-    items.map((it) => magic.enrichItem(it)).reduce((sum, e) => sum + (e.lineTotal > 0 ? e.lineTotal : e.lineCost * e.packs), 0)
-  );
-  const document = magic.roundPrice(documentTotal || 0);
-  const diff = document > 0 ? magic.roundPrice(read - document) : 0;
-  return { read, document, diff, mismatch: document > 0 && read > 0 && Math.abs(diff) > Math.max(1, document * 0.01) };
+/** Lo que debería sumar la lista según lo impreso: el subtotal si lo hay; si no, el total sin impuestos y con los descuentos devueltos. */
+function expectedBase(doc) {
+  const total = Number(doc?.documentTotal) || 0;
+  const subtotal = Number(doc?.documentSubtotal) || 0;
+  if (subtotal > 0) return { target: subtotal, basis: 'subtotal' };
+  if (total > 0) return { target: magic.roundPrice(total - (Number(doc?.documentTax) || 0) + (Number(doc?.documentDiscount) || 0)), basis: 'total' };
+  return { target: 0, basis: '' };
+}
+
+const lineAmount = (e) => (e.lineTotal > 0 ? e.lineTotal : e.lineCost * e.packs);
+const sumLines = (items) => magic.roundPrice(items.map((it) => magic.enrichItem(it)).reduce((sum, e) => sum + lineAmount(e), 0));
+const closeEnough = (a, b) => Math.abs(a - b) <= Math.max(1, b * 0.01);
+
+/**
+ * Los renglones sin importe impreso son ambiguos: el monto que se leyó puede ser el precio de UNA unidad de compra
+ * o el importe de todo el renglón. Si leerlo como importe hace que la nota cuadre y como precio no, se toma como importe.
+ */
+function reconcileLines(items, doc) {
+  const { target } = expectedBase(doc);
+  if (!target || closeEnough(sumLines(items), target)) return items;
+  const asTotal = items.map((it) => (!(it.lineTotal > 0) && it.cost > 0 && it.packs > 1 ? { ...it, lineTotal: it.cost } : it));
+  return closeEnough(sumLines(asTotal), target) ? asTotal : items;
+}
+
+/** Compara lo que se leyó con lo impreso en la nota: si no cuadra, falta o se leyó mal algún renglón. */
+function checkTotals(items, doc) {
+  const read = sumLines(items);
+  const { target, basis } = expectedBase(doc);
+  const diff = target > 0 ? magic.roundPrice(read - target) : 0;
+  return {
+    read,
+    document: target,
+    basis,
+    printedTotal: magic.roundPrice(doc?.documentTotal || 0),
+    diff,
+    mismatch: target > 0 && read > 0 && !closeEnough(read, target),
+    lines: items.map((it) => magic.enrichItem(it)).map((e) => ({ name: e.name, packs: e.packs, packSize: e.packSize, amount: magic.roundPrice(lineAmount(e)) })),
+  };
 }
 
 function validMoney(value) {
@@ -171,7 +201,7 @@ async function preview(req, res) {
       images,
     });
     const found = gemini.flagRepeats(extractedItems(extracted));
-    const items = found.items;
+    const items = reconcileLines(found.items, extracted);
     const repeats = found.repeats;
     const supplier = await matchSupplier(tenantId, extracted?.supplier);
 
@@ -196,7 +226,7 @@ async function preview(req, res) {
       charged: true,
       ...matched,
       repeats,
-      totals: checkTotals(items, extracted?.documentTotal),
+      totals: checkTotals(items, extracted),
       supplier,
       quota: quotaPayload(plan, reserved.used, limit),
     });
@@ -374,4 +404,6 @@ module.exports = {
   preview,
   apply,
   cleanImages,
+  reconcileLines,
+  checkTotals,
 };

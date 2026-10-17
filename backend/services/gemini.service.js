@@ -20,7 +20,7 @@ const EXTRACT_PROMPT = `Eres el ayudante de una tienda de abarrotes o farmacia e
 Del texto o de la foto, saca cada producto y, si es factura/nota de proveedor, los datos del proveedor.
 La lista NO siempre es una factura: a veces es una nota escrita a mano, corta y sin precios.
 Responde solo JSON:
-{"supplier":{"name":"","contact":"","whatsapp":"","date":"","expiresAt":""},"documentTotal":0,"items":[{"raw":"","name":"","cost":0,"lineTotal":0,"price":0,"barcode":"","packs":1,"packSize":1,"lot":"","expiresAt":""}]}
+{"supplier":{"name":"","contact":"","whatsapp":"","date":"","expiresAt":""},"documentTotal":0,"documentSubtotal":0,"documentTax":0,"documentDiscount":0,"items":[{"raw":"","name":"","cost":0,"lineTotal":0,"price":0,"barcode":"","packs":1,"packSize":1,"lot":"","expiresAt":""}]}
 
 Proveedor (solo si se ve en la nota/factura; si no, strings vacíos):
 - name: razón social o nombre comercial del proveedor.
@@ -34,7 +34,11 @@ Significado de campos de producto:
 - name: producto (marca y tamaño si aparecen). Si dice PACK/PAQUETE/CAJA, déjalo en el nombre.
 - cost: precio de COMPRA de UNA unidad de compra, tal como la cobra el proveedor (una pieza suelta, o UN pet/pack/caja completo). Si no hay dinero, 0.
 - lineTotal: el IMPORTE del renglón tal como está impreso (cantidad × precio). Si la nota no lo trae, 0. No lo calcules tú: cópialo.
-- documentTotal (fuera de items): el TOTAL de la nota/factura tal como está impreso. Si no hay, 0.
+- documentTotal (fuera de items): el TOTAL A PAGAR de la nota/factura tal como está impreso. Si no hay, 0.
+- documentSubtotal: el SUBTOTAL impreso (antes de IVA/IEPS y de descuentos), si la nota lo trae; si no, 0.
+- documentTax: suma de IVA/IEPS impresos, si hay; si no, 0.
+- documentDiscount: descuentos o bonificaciones impresos a nivel nota, si hay; si no, 0.
+- lineTotal es el importe del renglón ANTES de descuentos e impuestos de la nota, como aparece en su columna de importe.
 - price: precio de VENTA al cliente por pieza. Si no hay dinero, 0.
 - barcode: código de barras si se ve; si no, "".
 - packs: cuántas piezas (o cuántos pets/packs/cajas, si es mayoreo) compraste. Si no se ve, 1.
@@ -385,7 +389,10 @@ function parsePayload(text) {
         .slice(0, 80)
     : [];
   const supplier = normalizeSupplier(Array.isArray(parsed) ? null : parsed?.supplier);
-  return { items, supplier, documentTotal: num(Array.isArray(parsed) ? 0 : parsed?.documentTotal) };
+  return { items, supplier, documentTotal: num(Array.isArray(parsed) ? 0 : parsed?.documentTotal),
+    documentSubtotal: num(Array.isArray(parsed) ? 0 : parsed?.documentSubtotal),
+    documentTax: num(Array.isArray(parsed) ? 0 : parsed?.documentTax),
+    documentDiscount: num(Array.isArray(parsed) ? 0 : parsed?.documentDiscount) };
 }
 
 function parseItems(text) {
@@ -450,7 +457,8 @@ async function extractPrices({ text, images = [] }) {
     const supplier = reads.map((r) => r.supplier).find((sup) => sup && sup.name) || reads[0].supplier || emptySupplier();
     // El total impreso sale en una sola foto (normalmente la última): se toma el más grande que se haya leído
     const documentTotal = Math.max(0, ...reads.map((r) => Number(r.documentTotal) || 0));
-    return { items: items.slice(0, 80), supplier, documentTotal };
+    const top = (k) => Math.max(0, ...reads.map((r) => Number(r[k]) || 0));
+    return { items: items.slice(0, 80), supplier, documentTotal, documentSubtotal: top('documentSubtotal'), documentTax: top('documentTax'), documentDiscount: top('documentDiscount') };
   }
 
   const hasImage = images.length > 0;
@@ -499,6 +507,9 @@ async function extractPrices({ text, images = [] }) {
                 },
               },
               documentTotal: { type: 'NUMBER' },
+              documentSubtotal: { type: 'NUMBER' },
+              documentTax: { type: 'NUMBER' },
+              documentDiscount: { type: 'NUMBER' },
               items: {
                 type: 'ARRAY',
                 items: {
@@ -569,6 +580,9 @@ async function extractPrices({ text, images = [] }) {
     items: mergeItems(loose.items, payload.items).map(publicItem),
     supplier: payload.supplier || emptySupplier(),
     documentTotal: payload.documentTotal || 0,
+    documentSubtotal: payload.documentSubtotal || 0,
+    documentTax: payload.documentTax || 0,
+    documentDiscount: payload.documentDiscount || 0,
   };
 }
 

@@ -128,3 +128,26 @@ test('el renglón original manda sobre un nombre que la IA limpió', () => {
 test('el nombre solo con PET6 también se entiende al meter la existencia', () => {
   assert.equal(inv.enrichItem({ name: 'Coca Cola 3 L PET6', packs: 2, packSize: 1 }).stockIn, 12);
 });
+
+const { reconcileLines, checkTotals } = require('../controllers/ai.controller');
+
+test('si leer el monto como importe del renglón hace cuadrar la nota, se toma como importe', () => {
+  const items = [
+    { name: 'Sabritas', packs: 10, packSize: 1, cost: 120 }, // 120 es el importe, no el precio de una
+    { name: 'Coca Cola 600 ml', packs: 5, packSize: 1, cost: 100 },
+  ];
+  const fixed = reconcileLines(items, { documentTotal: 220 });
+  assert.equal(checkTotals(fixed, { documentTotal: 220 }).mismatch, false);
+  // Sin total impreso no se toca nada
+  assert.equal(reconcileLines(items, {}), items);
+});
+
+test('el subtotal impreso es contra lo que se compara, no el total con IVA', () => {
+  const items = [{ name: 'Jabón', packs: 2, packSize: 1, cost: 50, lineTotal: 100 }];
+  assert.equal(checkTotals(items, { documentTotal: 116, documentSubtotal: 100, documentTax: 16 }).mismatch, false);
+  assert.equal(checkTotals(items, { documentTotal: 116, documentTax: 16 }).mismatch, false);
+  const bad = checkTotals(items, { documentTotal: 300, documentSubtotal: 300 });
+  assert.equal(bad.mismatch, true);
+  assert.equal(bad.diff, -200);
+  assert.equal(bad.lines[0].amount, 100);
+});
