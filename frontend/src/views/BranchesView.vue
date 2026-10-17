@@ -35,8 +35,11 @@
           </div>
 
           <!-- Lista -->
+          <p v-if="ov.organization && ov.branches.some((b) => b.overPlan)" class="adm-banner warn" role="status">
+            Tu plan actual permite {{ ov.limit }} {{ ov.limit === 1 ? "tienda" : "sucursales" }} (contando la matriz). Las demás se quedaron sin acceso, pero sus datos se conservan: al volver a un plan con más sucursales, las recuperas.
+          </p>
           <section v-if="ov.organization" class="br-list">
-            <article v-for="b in ov.branches" :key="b.id" class="adm-card br-card" :class="{ current: b.current, off: b.suspended }">
+            <article v-for="b in ov.branches" :key="b.id" class="adm-card br-card" :class="{ current: b.current, off: b.suspended || b.overPlan }">
               <div class="br-top">
                 <span class="adm-avatar" :style="hueStyle(b.name)">{{ initials(b.name) }}</span>
                 <div class="br-name">
@@ -45,14 +48,15 @@
                     <span v-if="b.isMatrix" class="adm-pill">Matriz</span>
                     <span v-if="b.current" class="adm-pill ok">Estás aquí</span>
                     <span v-if="b.suspended" class="adm-pill warn">De baja</span>
+                    <span v-if="b.overPlan" class="adm-pill warn">Sin acceso: tu plan ya no la incluye</span>
                   </small>
                 </div>
               </div>
               <div class="br-acts">
-                <button v-if="!b.current && !b.suspended" type="button" class="adm-btn primary sm" :disabled="busy" @click="enter(b)">
+                <button v-if="!b.current && !b.suspended && !b.overPlan" type="button" class="adm-btn primary sm" :disabled="busy" @click="enter(b)">
                   <PosIcon name="store" :size="16" /> Entrar
                 </button>
-                <button v-if="!b.isMatrix && !b.suspended && !b.current" type="button" class="adm-btn danger-ghost sm" :disabled="busy" @click="askSuspend(b)">
+                <button v-if="!b.isMatrix && !b.suspended && !b.current && !b.overPlan" type="button" class="adm-btn danger-ghost sm" :disabled="busy" @click="askSuspend(b)">
                   Dar de baja
                 </button>
                 <button v-if="b.suspended" type="button" class="adm-btn sm" :disabled="busy" @click="reactivate(b)">Reactivar</button>

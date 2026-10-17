@@ -1,4 +1,5 @@
 require('dotenv').config();
+const { blockedByPlan } = require('../services/branch-plan');
 const { MongoClient, ObjectId } = require('mongodb');
 const { createTenantDoc } = require('../models/tenant.model');
 const { reserveSaleStock } = require('../services/sale-stock.service');
@@ -168,7 +169,7 @@ const MATRIX_BILLING_FIELDS = [
   'plan', 'billingStatus', 'billingInterval', 'trialEndsAt', 'mpPreapprovalId', 'mpPayerEmail',
   'currentPeriodEnd', 'cancelAtPeriodEnd', 'suspendedAt', 'suspendedReason', 'promoEligible',
 ];
-function overlayMatrix(branch, matrix) {
+function overlayMatrix(branch, matrix, { overPlan = false } = {}) {
   if (!branch || !branch.isBranch || !matrix) return branch;
   const patch = {};
   for (const f of MATRIX_BILLING_FIELDS) if (matrix[f] !== undefined) patch[f] = matrix[f];
@@ -178,14 +179,23 @@ function overlayMatrix(branch, matrix) {
     patch.suspendedAt = branch.branchSuspendedAt;
     patch.suspendedReason = 'Sucursal dada de baja por el dueño';
   }
-  return { ...branch, ...patch, billedByMatrix: true };
+  // Si el plan de la matriz ya no alcanza para esta sucursal, se bloquea (sin borrar nada)
+  if (overPlan && !branch.branchSuspendedAt && !patch.suspendedAt) {
+    patch.billingStatus = 'suspended';
+    patch.suspendedAt = new Date();
+    patch.suspendedReason = 'El plan de tu matriz ya no incluye esta sucursal';
+  }
+  return { ...branch, ...patch, billedByMatrix: true, overPlan };
 }
 async function GetTenantById(id) {
   if (!ObjectId.isValid(id)) return null;
   const col = dbConnection.collection('tenants');
   const doc = await col.findOne({ _id: new ObjectId(id) });
   if (doc && doc.isBranch && doc.matrixTenantId && ObjectId.isValid(String(doc.matrixTenantId))) {
-    return withId(overlayMatrix(doc, await col.findOne({ _id: new ObjectId(String(doc.matrixTenantId)) })));
+    const matrix = await col.findOne({ _id: new ObjectId(String(doc.matrixTenantId)) });
+    const siblings = doc.organizationId ? await col.find({ organizationId: doc.organizationId, isBranch: true }).project({ createdAt: 1, branchSuspendedAt: 1 }).toArray() : [];
+    const overPlan = Boolean(matrix) && blockedByPlan(siblings.map((b) => ({ ...b, id: String(b._id) })), matrix.plan).has(String(doc._id));
+    return withId(overlayMatrix(doc, matrix, { overPlan }));
   }
   return withId(doc);
 }
@@ -204,9 +214,16 @@ async function UpdateTenant(id, data) {
 async function ListTenants({ includeBranches = true } = {}) {
   const list = await dbConnection.collection('tenants').find({}).sort({ createdAt: -1 }).toArray();
   const byId = new Map(list.map((t) => [String(t._id), t]));
+  const blocked = new Set();
+  const byOrg = new Map();
+  for (const t of list) if (t.isBranch && t.organizationId) byOrg.set(t.organizationId, [...(byOrg.get(t.organizationId) || []), { ...t, id: String(t._id) }]);
+  for (const [, kids] of byOrg) {
+    const matrix = byId.get(String(kids[0].matrixTenantId));
+    if (matrix) blockedByPlan(kids, matrix.plan).forEach((id) => blocked.add(id));
+  }
   return list
     .filter((t) => includeBranches || !t.isBranch)
-    .map((t) => withId(t.isBranch ? overlayMatrix(t, byId.get(String(t.matrixTenantId))) : t));
+    .map((t) => withId(t.isBranch ? overlayMatrix(t, byId.get(String(t.matrixTenantId)), { overPlan: blocked.has(String(t._id)) }) : t));
 }
 /** Cuentas que ocupan un lugar del plan: las desactivadas lo liberan. */
 async function CountUsersByTenant(tenantId) {

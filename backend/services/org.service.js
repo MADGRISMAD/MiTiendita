@@ -14,6 +14,7 @@
  */
 const { branchLimitOf } = require('./plans.catalog');
 const { isSubscriptionActive } = require('../models/tenant.model');
+const { blockedByPlan } = require('./branch-plan');
 const { httpError } = require('../utils/http-error');
 
 const errNotOwner = () => httpError(403, 'Solo el dueño de la organización puede hacer esto.', 'NOT_ORG_OWNER');
@@ -49,7 +50,8 @@ async function overview(store, principal) {
     const { org, tenants } = found;
     const matrix = await store.getEffectiveTenant(org.matrixTenantId);
     const limit = planOf(matrix);
-    const active = tenants.filter(inService).length;
+    const over = blockedByPlan(tenants.filter((t) => String(t.id) !== String(org.matrixTenantId)), matrix?.plan);
+    const active = tenants.filter((t) => inService(t) && !over.has(String(t.id))).length;
     return {
       organization: { id: org.id, name: org.name },
       isOwner: true,
@@ -63,6 +65,7 @@ async function overview(store, principal) {
         name: t.name,
         isMatrix: String(t.id) === String(org.matrixTenantId),
         suspended: Boolean(t.branchSuspendedAt),
+        overPlan: over.has(String(t.id)),
         current: String(t.id) === String(principal.tenantId),
       })),
     };
@@ -181,6 +184,12 @@ async function switchTarget(store, principal, branchId) {
   if (!target) throw httpError(404, 'Sucursal no encontrada.');
   if (target.branchSuspendedAt) throw httpError(409, 'Esta sucursal está dada de baja. Reactívala para entrar.', 'BRANCH_SUSPENDED');
   const isMatrix = String(target.id) === String(found.org.matrixTenantId);
+  if (!isMatrix) {
+    const matrix = await store.getEffectiveTenant(found.org.matrixTenantId);
+    if (blockedByPlan(found.tenants.filter((t) => String(t.id) !== String(found.org.matrixTenantId)), matrix?.plan).has(String(target.id))) {
+      throw httpError(409, 'El plan actual ya no incluye esta sucursal. Pasa a un plan con más sucursales para volver a usarla; tus datos se conservan.', 'BRANCH_OVER_PLAN');
+    }
+  }
   const user = isMatrix ? await store.getUser(found.ownerUsername) : await store.findLinkedUser(target.id, found.ownerUsername);
   if (!user || user.disabled) throw httpError(409, 'Esta sucursal no tiene cuenta de acceso. Contacta a soporte.', 'NO_BRANCH_ACCOUNT');
   await store.log(String(target.id), { type: 'branch_switch', message: `${found.ownerUsername} entró a «${target.name}»`, meta: { from: String(principal.tenantId) }, user: found.ownerUsername });

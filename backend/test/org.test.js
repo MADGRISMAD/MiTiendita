@@ -227,3 +227,40 @@ test('resumen: quién puede fundar y qué ve el dueño', async () => {
   assert.equal(b.canCreate, false, 'en Básico no hay sucursales');
   assert.equal(b.limit, 1);
 });
+
+test('si la matriz baja de plan, las sucursales que ya no caben pierden acceso (sin borrarse) y lo recuperan al subir', async () => {
+  const w = world({ plan: 'pro' });
+  const P = w.P('lupita', w.matrix.id);
+  const a = (await org.createBranch(w.store, P, { name: 'Centro' })).branch;
+  const b = (await org.createBranch(w.store, P, { name: 'Norte' })).branch;
+  const c = (await org.createBranch(w.store, P, { name: 'Sur' })).branch;
+
+  w.tenants.get(w.matrix.id).plan = 'basic';
+  const ov = await org.overview(w.store, P);
+  assert.deepEqual(ov.branches.map((x) => [x.name, x.overPlan]), [['Abarrotes Lupita', false], ['Centro', true], ['Norte', true], ['Sur', true]]);
+  assert.equal(ov.active, 1);
+  assert.equal(ov.canCreate, false);
+  await assert.rejects(org.switchTarget(w.store, P, a.id), (e) => e.code === 'BRANCH_OVER_PLAN');
+  assert.equal(w.tenants.size, 5, 'no se borró nada');
+
+  // Con Crecimiento sigue siendo una sola tienda; con Pro vuelven todas
+  w.tenants.get(w.matrix.id).plan = 'pro';
+  const back = await org.overview(w.store, P);
+  assert.ok(back.branches.every((x) => !x.overPlan));
+  assert.equal((await org.switchTarget(w.store, P, c.id)).tenant.id, c.id);
+  assert.ok(b.id);
+});
+
+test('los lugares del plan los ocupan las sucursales más antiguas; las dadas de baja no ocupan lugar', () => {
+  const { blockedByPlan } = require('../services/branch-plan');
+  const kids = [
+    { id: 'a', createdAt: new Date(2026, 0, 1) },
+    { id: 'b', createdAt: new Date(2026, 0, 2), branchSuspendedAt: new Date() },
+    { id: 'c', createdAt: new Date(2026, 0, 3) },
+    { id: 'd', createdAt: new Date(2026, 0, 4) },
+  ];
+  // Pro: 5 en total → 4 lugares para sucursales: caben todas
+  assert.equal(blockedByPlan(kids, 'pro').size, 0);
+  // Plan de 1 tienda: ninguna sucursal cabe, y la dada de baja no se marca
+  assert.deepEqual([...blockedByPlan(kids, 'basic')].sort(), ['a', 'c', 'd']);
+});
