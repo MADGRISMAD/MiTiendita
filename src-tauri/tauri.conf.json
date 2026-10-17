@@ -14,11 +14,17 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["app", "dmg", "nsis"],
+    "targets": [
+      "app",
+      "dmg",
+      "nsis"
+    ],
     "category": "Business",
     "shortDescription": "Punto de venta para tiendas de abarrotes",
-    "copyright": "© Mi Tiendita",
-    "externalBin": ["binaries/node"],
+    "copyright": "\u00a9 Mi Tiendita",
+    "externalBin": [
+      "binaries/node"
+    ],
     "resources": {
       "staging/backend/": "backend/",
       "staging/ui/": "ui/"
@@ -31,11 +37,14 @@
       "icons/icon.ico"
     ],
     "macOS": {
-      "minimumSystemVersion": "11.0"
+      "minimumSystemVersion": "11.0",
+      "signingIdentity": "-"
     },
     "windows": {
       "nsis": {
-        "languages": ["Spanish"],
+        "languages": [
+          "Spanish"
+        ],
         "installMode": "currentUser"
       }
     }

@@ -1,0 +1,93 @@
+# Instaladores de Mi Tiendita de escritorio (versión permanente).
+# Se publican en GitHub Releases al subir una etiqueta «escritorio-v*» desde la rama mitiendita-instalable.
+# La página mitiendita.software/descargar enlaza a «latest/download/MiTiendita-Windows.exe» y «MiTiendita-Mac.dmg».
+name: Instaladores de escritorio
+
+on:
+  push:
+    tags:
+      - "escritorio-v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            name: Windows
+          - os: macos-14
+            name: Mac
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      # La misma versión de Node compila better-sqlite3 y es la que va dentro del instalador
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.23.3"
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Dependencias
+        run: npm ci
+
+      - name: Pruebas
+        run: |
+          npm test --workspace frontend
+          node --test backend/test/sqlite-store.test.js backend/test/desktop-license.core.test.js
+
+      - name: Preparar instalador (interfaz, backend y Node)
+        run: npm run desktop:prepare
+
+      - name: Compilar (Windows)
+        if: runner.os == 'Windows'
+        run: npx tauri build --bundles nsis
+
+      - name: Compilar (Mac)
+        if: runner.os == 'macOS'
+        run: npx tauri build --bundles app
+
+      - name: Empaquetar
+        shell: bash
+        run: |
+          mkdir -p out
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            cp src-tauri/target/release/bundle/nsis/*-setup.exe out/MiTiendita-Windows.exe
+          else
+            APP="src-tauri/target/release/bundle/macos/Mi Tiendita.app"
+            codesign --force --deep --sign - "$APP"
+            mkdir dmg && cp -R "$APP" dmg/ && ln -s /Applications dmg/Aplicaciones
+            hdiutil create -volname "Mi Tiendita" -srcfolder dmg -ov -format UDZO out/MiTiendita-Mac.dmg
+          fi
+
+      - name: Publicar en Releases
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: out/*
+          make_latest: true
+          name: Mi Tiendita para computadora ${{ github.ref_name }}
+          body: |
+            Instaladores de Mi Tiendita (versión permanente para computadora).
+            Descárgalos desde https://www.mitiendita.software/descargar
+            - Windows 10/11 de 64 bits: MiTiendita-Windows.exe
+            - Mac con chip Apple: MiTiendita-Mac.dmg (la primera vez: clic derecho → Abrir)
+
+      - uses: actions/upload-artifact@v4
+        if: "!startsWith(github.ref, 'refs/tags/')"
+        with:
+          name: MiTiendita-${{ matrix.name }}
+          path: out/*
