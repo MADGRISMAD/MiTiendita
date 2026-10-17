@@ -101,3 +101,30 @@ test('si cost y lineTotal cuadran no se toca nada', () => {
   assert.equal(e.cost, 12);
   assert.equal(e.costFixed, false);
 });
+
+test('reconoce PET6, PET 6, PED 6, TT4 y TT 4 como piezas por paquete', () => {
+  const casos = [
+    ['coca 3L PET6', 1, 6],
+    ['coca 3L PET 6', 1, 6],
+    ['coca 3L PED  6', 1, 6],
+    ['Coca 600 TT4', 1, 4],
+    ['Coca 600 TT 4', 1, 4],
+    ['12 coca 600 tt 4', 12, 4],
+    ['2 pets de 6 coca 2L', 2, 6],
+  ];
+  for (const [line, packs, packSize] of casos) {
+    const r = gem.parseLooseLine(line);
+    assert.deepEqual([r.packs, r.packSize], [packs, packSize], line);
+  }
+});
+
+test('el renglón original manda sobre un nombre que la IA limpió', () => {
+  const out = gem.parseItems(JSON.stringify({ items: [{ raw: 'COCA 600 TT4', name: 'Coca Cola 600 ml', packs: 5, packSize: 1, cost: 60 }] }));
+  assert.equal(out[0].packSize, 4);
+  assert.equal(out[0].packs, 5);
+  assert.equal(inv.enrichItem(out[0]).stockIn, 20);
+});
+
+test('el nombre solo con PET6 también se entiende al meter la existencia', () => {
+  assert.equal(inv.enrichItem({ name: 'Coca Cola 3 L PET6', packs: 2, packSize: 1 }).stockIn, 12);
+});

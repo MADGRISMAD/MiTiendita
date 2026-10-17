@@ -3,6 +3,7 @@
  * REST directo para no agregar SDK. Modelo por defecto: gemini-3.5-flash-lite.
  */
 
+const { parsePackNotation, mentionsPack, WORDS: PACK_WORDS } = require('../utils/pack-notation');
 const DEFAULT_MODEL = 'gemini-3.5-flash-lite';
 const TEXT_TIMEOUT_MS = 60_000;
 const IMAGE_TIMEOUT_MS = 120_000;
@@ -19,7 +20,7 @@ const EXTRACT_PROMPT = `Eres el ayudante de una tienda de abarrotes o farmacia e
 Del texto o de la foto, saca cada producto y, si es factura/nota de proveedor, los datos del proveedor.
 La lista NO siempre es una factura: a veces es una nota escrita a mano, corta y sin precios.
 Responde solo JSON:
-{"supplier":{"name":"","contact":"","whatsapp":"","date":"","expiresAt":""},"documentTotal":0,"items":[{"name":"","cost":0,"lineTotal":0,"price":0,"barcode":"","packs":1,"packSize":1,"lot":"","expiresAt":""}]}
+{"supplier":{"name":"","contact":"","whatsapp":"","date":"","expiresAt":""},"documentTotal":0,"items":[{"raw":"","name":"","cost":0,"lineTotal":0,"price":0,"barcode":"","packs":1,"packSize":1,"lot":"","expiresAt":""}]}
 
 Proveedor (solo si se ve en la nota/factura; si no, strings vacíos):
 - name: razón social o nombre comercial del proveedor.
@@ -29,6 +30,7 @@ Proveedor (solo si se ve en la nota/factura; si no, strings vacíos):
 - expiresAt: caducidad general del documento si hay UNA sola para toda la nota; si no, "".
 
 Significado de campos de producto:
+- raw: el renglón copiado TAL CUAL está escrito en la nota (con sus abreviaturas, ej. "COCA 3L PET6"). No lo limpies.
 - name: producto (marca y tamaño si aparecen). Si dice PACK/PAQUETE/CAJA, déjalo en el nombre.
 - cost: precio de COMPRA de UNA unidad de compra, tal como la cobra el proveedor (una pieza suelta, o UN pet/pack/caja completo). Si no hay dinero, 0.
 - lineTotal: el IMPORTE del renglón tal como está impreso (cantidad × precio). Si la nota no lo trae, 0. No lo calcules tú: cópialo.
@@ -51,6 +53,8 @@ Cómo leen los dueños (imítalo):
 - PET = paquete de botellas. "coca 3L 1 pet de 4" → name "Coca Cola 3 L", packs 1, packSize 4 (son 4 cocas de 3 L).
   "2 pets de 6 coca 2L" → name "Coca Cola 2 L", packs 2, packSize 6 (12 botellas en total).
   El número que sigue a "pet de / pet x / pet c/" son las PIEZAS por pet; el número antes de "pet" son los pets.
+- Los paquetes se escriben de muchas formas y TODAS significan lo mismo: "PET6", "PET 6", "PED 6", "pet de 6", "TT4", "TT 4", "PT 8", "PK12", "c/24". El número pegado o después de esa abreviatura son las PIEZAS que trae cada paquete (packSize). "COCA 600 TT4" → packSize 4. Revisa SIEMPRE si el renglón trae una de estas abreviaturas antes de decidir packSize.
+- No confundas el tamaño del producto (600, 3L, 1.5) con las piezas del paquete, ni la cantidad de paquetes con las piezas por paquete.
 - "15 cocas de 600 a 18" → 15 piezas de Coca 600 ml, price 18.
 
 Reglas:
@@ -176,7 +180,7 @@ function brandName(words) {
     .replace(/\b([a-záéíóúñ])/gi, (ch) => ch.toUpperCase());
 }
 
-const PACK_WORD = /\b(packs?|pets?|paq\.?|paquetes?|cjs?|cajas?|bultos?|displays?)\b/i;
+const PACK_WORD = new RegExp(`(?:^|[^a-z0-9])(?:${PACK_WORDS})(?![a-z])`, 'i');
 
 /** Nota suelta: "15 cocas de 600" = 15 piezas de Coca 600 ml, sin precio. */
 function parseLooseLine(line) {
@@ -205,13 +209,16 @@ function parseLooseLine(line) {
   let explicitQty = false;
   let qty = 1;
   let petPacks = 0;
-  // "1 pet de 4", "2 cajas x 24": el primer número son los paquetes y el segundo las piezas de cada uno
-  raw = raw.replace(/\b(\d{1,3})\s*(?:pets?|packs?|paq\.?|paquetes?|cjs?|cajas?|bultos?|displays?)\s*(?:de|x|c\/)?\s*(\d{1,3})\b/i, (_, n, per) => {
-    if (Number(per) >= 2 && Number(per) <= 200) petPacks = Number(per);
-    qty = Number(n) || 1;
-    explicitQty = true;
-    return ' ';
-  });
+  // "PET6", "PET 6", "PED 6", "TT4", "2 pet de 6", "caja c/24": cuántos paquetes y cuántas piezas trae cada uno
+  const notation = parsePackNotation(raw);
+  if (notation) {
+    petPacks = notation.packSize;
+    if (notation.packs) {
+      qty = notation.packs;
+      explicitQty = true;
+    }
+    raw = notation.rest;
+  }
   const lead = explicitQty ? null : raw.match(/^(\d{1,4})\s+(?=[a-záéíóúñ])/i);
   if (lead && Number(lead[1]) >= 1 && Number(lead[1]) <= 5000) {
     qty = Number(lead[1]);
@@ -260,11 +267,11 @@ function parseLooseLine(line) {
     }
   }
 
-  const isPack = PACK_WORD.test(line);
+  const isPack = Boolean(petPacks) || mentionsPack(line);
   let packSize = isPack ? 0 : 1;
   if (petPacks) packSize = petPacks;
   if (isPack && !petPacks) {
-    raw = raw.replace(/\b(packs?|pets?|paq\.?|paquetes?|cjs?|cajas?|bultos?|displays?)\b/gi, ' ');
+    raw = raw.replace(new RegExp(`(?:^|[^a-z0-9])(?:${PACK_WORDS})(?![a-z])`, 'gi'), ' ');
     const ps = raw.match(/\b(\d{1,3})\b/);
     if (ps && Number(ps[1]) >= 2 && Number(ps[1]) <= 48) {
       packSize = Number(ps[1]);
@@ -315,7 +322,18 @@ function photoNo(value) {
   return Number.isFinite(n) && n > 0 && n <= 9 ? n : 0;
 }
 
+/** Si el renglón original trae PET6 / TT4 / PED 6…, esas piezas por paquete mandan sobre lo que haya leído la IA. */
+function withRawPack(out, row) {
+  const n = parsePackNotation(row?.raw);
+  if (!n) return out;
+  return { ...out, packSize: n.packSize, packs: n.packs || out.packs };
+}
+
 function absorbLoose(row) {
+  return withRawPack(absorbLooseRow(row), row);
+}
+
+function absorbLooseRow(row) {
   const lot = String(row?.lot || row?.lote || '').trim().slice(0, 60);
   const expiresAt = parseDocDate(row?.expiresAt || row?.caducidad || row?.expiry);
   const loose = parseLooseLine(row?.name);
@@ -495,6 +513,7 @@ async function extractPrices({ text, images = [] }) {
                     packSize: { type: 'NUMBER' },
                     lot: { type: 'STRING' },
                     expiresAt: { type: 'STRING' },
+                    raw: { type: 'STRING' },
                     photo: { type: 'NUMBER' },
                   },
                   required: ['name'],

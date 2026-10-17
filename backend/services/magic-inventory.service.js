@@ -42,6 +42,8 @@ function scoreName(query, name) {
   return score;
 }
 
+const { parsePackNotation, mentionsPack } = require('../utils/pack-notation');
+
 function roundPrice(value) {
   return Math.round(Number(value) * 100) / 100;
 }
@@ -53,11 +55,14 @@ function suggestSell(cost) {
 }
 
 function looksLikePack(name) {
-  return /\b(pack|pets?|paq\.?|paquete|cjs?|caja|bulto|display)\b/i.test(String(name || ''));
+  return mentionsPack(name);
 }
 
 /** Intenta sacar piezas por pack del nombre si la IA no lo mandó. */
 function inferPackSize(name, aiPackSize) {
+  // Lo que dice la nota (PET6, TT4…) manda sobre lo que haya deducido la IA
+  const notation = parsePackNotation(name);
+  if (notation) return Math.min(5000, notation.packSize);
   const fromAi = Math.floor(Number(aiPackSize) || 0);
   if (fromAi > 1) return Math.min(5000, fromAi);
   if (fromAi === 1 && !looksLikePack(name)) return 1;
