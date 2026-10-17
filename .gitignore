@@ -23,3 +23,10 @@ tmp-mail-preview
 # Local Netlify folder
 .netlify
 .vercel
+
+# Escritorio (se generan con npm run desktop:prepare)
+src-tauri/staging/
+src-tauri/binaries/
+src-tauri/target/
+src-tauri/gen/
+backend/data/local/

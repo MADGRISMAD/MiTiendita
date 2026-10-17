@@ -18,6 +18,24 @@ process.on('unhandledRejection', (reason) => {
 const { securityHeaders } = require('./middleware/security.middleware');
 const { limits } = require('./services/rate-limit.service');
 app.use(securityHeaders);
+// Escritorio: este mismo servidor entrega la interfaz (frontend/dist) en 127.0.0.1, con su propia CSP
+if (process.env.FRONTEND_DIST) {
+  const path = require('path');
+  const dist = path.resolve(process.env.FRONTEND_DIST);
+  const uiCsp = "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; connect-src 'self'; script-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'";
+  const ui = express.static(dist, { index: false, maxAge: '1h', setHeaders: (res) => res.setHeader('Content-Security-Policy', uiCsp) });
+  app.use((req, res, next) => {
+    if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+    if (req.path === '/api' || req.path.startsWith('/api/') || req.path.startsWith('/health')) return next();
+    return ui(req, res, () => {
+      // Rutas de la app (historial del navegador): siempre index.html
+      if (path.extname(req.path)) return next();
+      res.setHeader('Content-Security-Policy', uiCsp);
+      res.setHeader('Cache-Control', 'no-cache');
+      return res.sendFile(path.join(dist, 'index.html'));
+    });
+  });
+}
 app.use((req, _res, next) => {
   if (req.url === '/api') req.url = '/';
   else if (req.url.startsWith('/api/')) req.url = req.url.slice(4) || '/';
@@ -69,8 +87,10 @@ app.use((err, req, res, _next) => {
 });
 
 if (!process.env.VERCEL) {
-  server.listen(process.env.PORT, () => {
-    console.log(`Server listening on port ${process.env.PORT}`);
+  // Escritorio: HOST=127.0.0.1 para que solo esta computadora pueda entrar al servidor
+  const host = process.env.HOST || undefined;
+  server.listen(process.env.PORT, host, () => {
+    console.log(`Server listening on ${host || '*'}:${process.env.PORT}`);
   });
 
   // Catálogo maestro: las tiendas que ya existían lo reciben al arrancar (una sola vez cada una).

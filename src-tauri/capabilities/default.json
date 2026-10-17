@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Ventanas locales: sin acceso a la API de Tauri desde la página",
+  "windows": ["splash"],
+  "permissions": ["core:default"]
+}

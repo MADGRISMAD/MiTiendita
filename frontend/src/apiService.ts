@@ -7,12 +7,7 @@ function resolveApiBase() {
   if (envUrl) return envUrl.endsWith('/') ? envUrl : `${envUrl}/`;
   // En desarrollo el proxy de Vite (/api → :8081) funciona en localhost y en la LAN del celular.
   if ((import.meta as { env?: Record<string, unknown> }).env?.DEV) return '/api/';
-  if (
-    typeof window !== 'undefined' &&
-    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
-  ) {
-    return 'http://localhost:8081/';
-  }
+  // Versión instalable: la interfaz y la API viven en el mismo servidor local (127.0.0.1)
   return '/api/';
 }
 

@@ -14,7 +14,7 @@ function securityHeaders(req, res, next) {
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('X-Permitted-Cross-Domain-Policies', 'none');
   res.setHeader('X-XSS-Protection', '0');
-  if (req.secure || process.env.NODE_ENV === 'production') {
+  if (req.secure || (process.env.NODE_ENV === 'production' && process.env.DESKTOP !== '1')) {
     res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
   }
   next();

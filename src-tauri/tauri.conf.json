@@ -1,0 +1,43 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "Mi Tiendita",
+  "version": "1.0.0",
+  "identifier": "mx.mitiendita.pos",
+  "build": {
+    "frontendDist": "./splash"
+  },
+  "app": {
+    "windows": [],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["app", "dmg", "nsis"],
+    "category": "Business",
+    "shortDescription": "Punto de venta para tiendas de abarrotes",
+    "copyright": "© Mi Tiendita",
+    "externalBin": ["binaries/node"],
+    "resources": {
+      "staging/backend/": "backend/",
+      "staging/ui/": "ui/"
+    },
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "macOS": {
+      "minimumSystemVersion": "11.0"
+    },
+    "windows": {
+      "nsis": {
+        "languages": ["Spanish"],
+        "installMode": "currentUser"
+      }
+    }
+  }
+}

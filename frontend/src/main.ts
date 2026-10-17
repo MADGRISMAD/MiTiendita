@@ -1,6 +1,14 @@
 import { createApp } from "vue";
 import { createRouter, createWebHistory, RouteRecordRaw } from "vue-router";
 import App from "./App.vue";
+// Fuentes dentro del instalador (sin Google Fonts: la app funciona sin internet)
+import "@fontsource/figtree/400.css";
+import "@fontsource/figtree/400-italic.css";
+import "@fontsource/figtree/500.css";
+import "@fontsource/figtree/600.css";
+import "@fontsource/figtree/700.css";
+import "@fontsource/figtree/800.css";
+import "@fontsource/caveat/700.css";
 import "./index.css";
 import "./breakpoints.css";
 import { fetchVenueSettings, isSetupComplete } from "./venueStore";

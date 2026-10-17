@@ -36,7 +36,9 @@ function parseCookies(header) {
 }
 
 function cookieFlags(req) {
-  const secure = process.env.NODE_ENV === 'production' || Boolean(req?.secure);
+  // Escritorio: la app habla con su propio servidor en 127.0.0.1 por HTTP, así que la cookie no puede exigir HTTPS
+  const desktop = process.env.DESKTOP === '1';
+  const secure = desktop ? Boolean(req?.secure) : process.env.NODE_ENV === 'production' || Boolean(req?.secure);
   return `Path=/; HttpOnly; SameSite=Lax${secure ? '; Secure' : ''}`;
 }
 

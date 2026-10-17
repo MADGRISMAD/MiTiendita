@@ -1,0 +1,21 @@
+[package]
+name = "mitiendita"
+version = "1.0.0"
+description = "Mi Tiendita — punto de venta instalable"
+authors = ["Mi Tiendita"]
+license = ""
+repository = ""
+edition = "2021"
+rust-version = "1.77"
+
+[lib]
+name = "app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.7.3", features = [] }
+
+[dependencies]
+tauri = { version = "2.12.4", features = [] }
+tauri-plugin-single-instance = "2"
+getrandom = "0.2"
