@@ -21,7 +21,20 @@ const EXTRACT_PROMPT = `Eres el lector de notas de proveedor de una tienda de ab
 La nota puede ser una factura impresa, un ticket, una remisión, una nota escrita a mano o una lista corta en texto, con o sin precios.
 
 SALIDA: responde SOLO un JSON, sin texto antes ni después, con esta forma exacta:
-{"supplier":{"name":"","contact":"","whatsapp":"","date":"","expiresAt":""},"documentTotal":0,"documentSubtotal":0,"documentTax":0,"documentDiscount":0,"items":[{"raw":"","name":"","cost":0,"lineTotal":0,"price":0,"barcode":"","packs":1,"packSize":1,"lot":"","expiresAt":""}]}
+{"supplier":{"name":"","contact":"","whatsapp":"","date":"","expiresAt":""},"documentTotal":0,"documentSubtotal":0,"documentTax":0,"documentDiscount":0,"items":[{"raw":"","code":"","name":"","cost":0,"lineTotal":0,"price":0,"barcode":"","packs":1,"packSize":1,"lot":"","expiresAt":""}]}
+
+═══ FORMATO MUY COMÚN: notas de distribuidora (PRO / DESCRIPCION / CAJAS / IMPORTE) ═══
+Cada producto ocupa DOS líneas impresas:
+   línea 1:  <CÓDIGO> <DESCRIPCIÓN>            ej. "29 COCA-COLA 600 PET 24"
+   línea 2:  <CAJAS (cantidad)>   <IMPORTE>    ej. "1        464.50"
+- El PRIMER número de la línea 1 es el CÓDIGO del producto (columna PRO). NO es cantidad ni precio. Va en "code".
+- La CANTIDAD es la columna CAJAS: el número chico de la línea 2 (1, 2, 4…). Va en "packs".
+- El IMPORTE es el monto de la línea 2 y es el TOTAL del renglón (todas las cajas). Va en "lineTotal". Si la nota no trae precio unitario, cost = 0.
+- El número al FINAL de la descripción son las PIEZAS por caja (packSize): "PET 24" → 24, "PET6" → 6, "PET 24U" → 24, "TT4" → 4, "LA 4" (lata) → 4, "RP 8" (retornable pack) → 8, "250 6" (250 ml, caja de 6) → 6.
+- Ejemplo completo: "1220 COCA-COLA 300ML PET 24" / "1 256.00" → code "1220", name "Coca Cola 300 ml", packs 1, packSize 24, lineTotal 256, cost 0.
+- Ejemplo con 2 cajas: "34 COCA-COLA 3L PET 6" / "2 635.00" → code "34", name "Coca Cola 3 L", packs 2, packSize 6, lineTotal 635 (cada caja cuesta 317.5, pero NO lo calcules: copia 635).
+- El mismo CÓDIGO es el mismo producto. Un código no se repite dentro de una misma nota.
+- Los renglones con código distinto son productos distintos aunque se parezcan (sabores, tamaños).
 
 ═══ CÓMO LEER (sigue este orden) ═══
 1. Busca los ENCABEZADOS de columnas (Cant., Descripción, P. Unit., Importe, Precio, Total, Desc., IVA…). Cada número va con SU columna; no mezcles columnas ni renglones.
@@ -46,7 +59,8 @@ SALIDA: responde SOLO un JSON, sin texto antes ni después, con esta forma exact
 - No los pongas como productos.
 
 ═══ CAMPOS DE CADA PRODUCTO ═══
-- raw: el renglón COMPLETO copiado TAL CUAL está escrito (con sus abreviaturas, números y errores de ortografía), ej. "12 COCA 600 TT4 $464.50". No lo limpies ni lo traduzcas.
+- code: el código/clave del producto si la nota lo trae (columna PRO, SKU, clave), solo el texto del código; si no hay, "".
+- raw: el renglón COMPLETO copiado TAL CUAL está escrito (las dos líneas juntas si el producto ocupa dos) (con sus abreviaturas, números y errores de ortografía), ej. "12 COCA 600 TT4 $464.50". No lo limpies ni lo traduzcas.
 - name: nombre normalizado: marca + producto + tamaño con unidad ("Coca Cola 600 ml", "Aceite 1 L", "Sabritas Original 45 g"). Conserva TODOS los tamaños y variantes del renglón (sabor, light, retornable, etc.). No inventes marcas ni tamaños que no estén.
 - packs: CANTIDAD comprada = cuántas unidades de compra (piezas sueltas, o pets/packs/cajas si es mayoreo). Si no se ve, 1.
 - packSize: cuántas PIEZAS trae cada unidad de compra. Pieza suelta = 1. Si es pack/pet/caja y no puedes saber cuántas piezas trae, 0.
@@ -367,6 +381,7 @@ function absorbLooseRow(row) {
       expiresAt,
       lineTotal: num(row?.lineTotal),
       raw: String(row?.raw || '').trim().slice(0, 160),
+      code: String(row?.code || '').trim().slice(0, 40),
       photo: photoNo(row?.photo),
       fromLoose: false,
     };
@@ -391,6 +406,7 @@ function absorbLooseRow(row) {
     expiresAt: expiresAt || loose.expiresAt || '',
     lineTotal: num(row?.lineTotal),
     raw: String(row?.raw || '').trim().slice(0, 160),
+    code: String(row?.code || '').trim().slice(0, 40),
     fromLoose: true,
   };
 }
@@ -541,6 +557,7 @@ async function extractPrices({ text, images = [] }) {
                     lot: { type: 'STRING' },
                     expiresAt: { type: 'STRING' },
                     raw: { type: 'STRING' },
+                    code: { type: 'STRING' },
                     photo: { type: 'NUMBER' },
                   },
                   required: ['name'],
@@ -614,6 +631,7 @@ function publicItem(row) {
     expiresAt: parseDocDate(row.expiresAt),
     lineTotal: Number(row.lineTotal) > 0 ? Number(row.lineTotal) : 0,
     raw: String(row.raw || '').trim().slice(0, 160),
+    code: String(row.code || '').trim().slice(0, 40),
     photo: photoNo(row.photo),
   };
 }
@@ -629,7 +647,8 @@ function flagRepeats(items) {
   const kept = [];
   const repeats = [];
   for (const item of items) {
-    const first = kept.find((k) => sameItem(k.name, item.name));
+    // Con el código de la nota (columna PRO) basta: mismo código = mismo producto, código distinto = otro producto
+    const first = kept.find((k) => (k.code && item.code ? k.code === item.code : sameItem(k.name, item.name)));
     if (!first) {
       kept.push({ ...item });
       continue;

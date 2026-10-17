@@ -167,3 +167,27 @@ test('un tamaño distinto no es el mismo producto (2 L contra 2.5 L, 1 L contra 
   assert.ok(inv.scoreName('Coca Cola 600 ml', 'Coca-Cola 600 ml NR') >= 0.55);
   assert.equal(inv.sizeOf('Jabón 1 kg').amount, 1000);
 });
+
+test('con código de la nota: mismo código = mismo producto aunque la IA lo lea con otro nombre; otro código = otro producto', () => {
+  const r = (code, name, photo, extra = {}) => ({ code, name, photo, packs: 1, packSize: 24, cost: 0, price: 0, lineTotal: 256, ...extra });
+  const out = flagRepeats([
+    r('19', 'Coca Cola 2.5 L RP 8', 1, { packs: 4, packSize: 8, lineTotal: 1128.04 }),
+    r('1220', 'Coca Cola 300 ml', 1),
+    r('19', 'Coca-Cola 2.5L Retornable', 2, { packs: 4, packSize: 8, lineTotal: 1128.04 }),
+    r('1220', 'Coca Cola 300ml PET', 2),
+    r('2879', 'Santa Clara Choco 180 ml', 2),
+    r('2880', 'Santa Clara Fresa 180 ml', 2),
+  ]);
+  assert.deepEqual(out.items.map((i) => i.code), ['19', '1220', '2879', '2880']);
+  assert.equal(out.repeats.length, 2);
+  const total = out.items.reduce((s, i) => s + i.lineTotal, 0);
+  assert.equal(Math.round(total * 100) / 100, 1128.04 + 256 * 3);
+});
+
+test('"RP 8", "PET 24U" y "TT4" dan las piezas por caja', () => {
+  const { parsePackNotation } = require('../utils/pack-notation');
+  assert.equal(parsePackNotation('COCA-COLA 2.5L RP 8').packSize, 8);
+  assert.equal(parsePackNotation('COCA COLA 450 ML PET 24U').packSize, 24);
+  assert.equal(parsePackNotation('SANTA CLARA CHOCO 180ML TT4').packSize, 4);
+  assert.equal(parsePackNotation('pasta la fina'), null);
+});

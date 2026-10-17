@@ -2,7 +2,7 @@
  * Las notas de proveedor escriben los paquetes de muchas formas: "PET6", "PET 6", "PED  6", "pet de 6", "TT4", "TT 4",
  * "2 pet x 6", "caja c/24", "6 pack". Este módulo las reconoce todas y devuelve cuántos paquetes y cuántas piezas trae cada uno.
  */
-const WORDS = 'pets?|peds?|pt|tts?|pks?|packs?|paq\\.?|paquetes?|cjs?|cajas?|bultos?|displays?|charolas?';
+const WORDS = 'pets?|peds?|pt|tts?|rp|pks?|packs?|paq\\.?|paquetes?|cjs?|cajas?|bultos?|displays?|charolas?';
 const SEP = '\\s*(?:de|x|c\\/|\\/|-|=)?\\s*';
 // Antes del texto no debe haber letra/número pegado ("mantequilla4" no es un paquete); después, el número no se corta ("tt45" sí es 45)
 const LEAD = '(?:^|[^a-z0-9áéíóúñ])';
