@@ -274,6 +274,14 @@
                       <span v-if="row.costUp" class="mg-pill warn">Costo +{{ row.costChangePct || '?' }}%</span>
                     </span>
                   </div>
+                  <p v-if="row.note && (row.note.total > 0 || row.note.raw)" class="mg-note">
+                    <b>En la nota:</b>
+                    <template v-if="row.note.raw">«{{ row.note.raw }}» · </template>
+                    <template v-if="row.note.total > 0">total del renglón <b>{{ money(row.note.total) }}</b></template>
+                    <template v-if="row.note.total > 0 && row.note.unit > 0 && row.packs > 1"> ({{ row.packs }} × {{ money(row.note.unit) }})</template>
+                    <template v-if="Number(row.cost) > 0"> → <b>{{ money(row.cost) }}</b> por pieza</template>
+                    <template v-if="noteGap(row)"><span class="mg-note-warn"> · Ojo: costo × piezas que entran = {{ money(noteGap(row).mine) }} y la nota dice {{ money(row.note.total) }}</span></template>
+                  </p>
                   <label v-if="row.options" class="mg-field mg-choose">
                     <span>¿Cuál de tus productos es?</span>
                     <select v-model="row.id" class="mg-inp" @change="onChoose(i)">
@@ -329,6 +337,14 @@
                       Ganas {{ money(row.price - row.cost) }} ({{ Math.round(((row.price - row.cost) / row.price) * 100) }}%)
                     </span>
                   </div>
+                  <p v-if="row.note && (row.note.total > 0 || row.note.raw)" class="mg-note">
+                    <b>En la nota:</b>
+                    <template v-if="row.note.raw">«{{ row.note.raw }}» · </template>
+                    <template v-if="row.note.total > 0">total del renglón <b>{{ money(row.note.total) }}</b></template>
+                    <template v-if="row.note.total > 0 && row.note.unit > 0 && row.packs > 1"> ({{ row.packs }} × {{ money(row.note.unit) }})</template>
+                    <template v-if="Number(row.cost) > 0"> → <b>{{ money(row.cost) }}</b> por pieza</template>
+                    <template v-if="noteGap(row)"><span class="mg-note-warn"> · Ojo: costo × piezas que entran = {{ money(noteGap(row).mine) }} y la nota dice {{ money(row.note.total) }}</span></template>
+                  </p>
                   <label class="mg-field">
                     <span>Nombre</span>
                     <input v-model="row.name" class="mg-inp" placeholder="Coca-Cola 600 ml" />
@@ -546,6 +562,15 @@ const saveCount = computed(() => {
 });
 
 const totals = computed(() => result.value?.totals || null);
+// Si lo que va a guardarse (costo × piezas que entran) ya no coincide con el importe de la nota, se avisa en el renglón
+function noteGap(row) {
+  const total = Number(row?.note?.total) || 0;
+  const qty = Math.max(0, Math.floor(Number(row.stockIn) || 0));
+  const cost = Number(row.cost) || 0;
+  if (!total || !qty || !cost) return null;
+  const mine = Math.round(cost * qty * 100) / 100;
+  return Math.abs(mine - total) > Math.max(1, total * 0.02) ? { mine } : null;
+}
 const repeats = computed(() => (Array.isArray(result.value?.repeats) ? result.value.repeats : []));
 const costAlerts = computed(() => picks.value.filter((row) => row.costUp));
 const picksChecked = computed(() => picks.value.filter((row) => row.checked).length);
@@ -802,6 +827,7 @@ function fillPicks(data) {
       lot: String(row.lot || "").trim(),
       expiresAt: String(row.expiresAt || "").slice(0, 10),
       from: row.from,
+      note: row.note || null,
       checked: true,
       options: null,
       costUp: Boolean(row.costChanged && row.costDelta > 0),
@@ -829,6 +855,7 @@ function fillPicks(data) {
       lot: String(row.lot || "").trim(),
       expiresAt: String(row.expiresAt || "").slice(0, 10),
       from: row.from,
+      note: row.note || null,
       checked: false,
       options: row.options,
       costUp: Boolean(row.costChanged && row.costDelta > 0),
@@ -859,6 +886,7 @@ function fillPicks(data) {
     }
     return {
       key: `n-${i}-${row.name}`,
+      note: row.note || null,
       name: row.name,
       cost: Number(row.cost) || 0,
       price: Number(row.price) || 0,
@@ -1359,6 +1387,9 @@ onMounted(async () => {
 @keyframes mg-spin { to { transform: rotate(360deg); } }
 .mg-preview { position: relative; margin: 0; overflow: hidden; border-radius: 1rem; border: 1px solid var(--timber-line); background: var(--timber-surface); }
 .mg-preview img { display: block; width: 100%; max-height: 16rem; object-fit: contain; }
+.mg-note { margin: 0.4rem 0 0.2rem; font-size: 0.82rem; line-height: 1.4; color: var(--timber-muted); }
+.mg-note b { color: var(--timber-text, inherit); }
+.mg-note-warn { color: var(--timber-danger); font-weight: 700; }
 .mg-sum-how { margin-top: 0.35rem; font-weight: 500; }
 .mg-sum-how summary { cursor: pointer; font-weight: 700; }
 .mg-repeats { margin: 0.3rem 0 0; padding-left: 1.1rem; font-weight: 500; }

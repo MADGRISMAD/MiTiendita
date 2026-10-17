@@ -352,6 +352,7 @@ function absorbLooseRow(row) {
       lot,
       expiresAt,
       lineTotal: num(row?.lineTotal),
+      raw: String(row?.raw || '').trim().slice(0, 160),
       photo: photoNo(row?.photo),
       fromLoose: false,
     };
@@ -375,6 +376,7 @@ function absorbLooseRow(row) {
     lot: lot || loose.lot || '',
     expiresAt: expiresAt || loose.expiresAt || '',
     lineTotal: num(row?.lineTotal),
+    raw: String(row?.raw || '').trim().slice(0, 160),
     fromLoose: true,
   };
 }
@@ -597,6 +599,7 @@ function publicItem(row) {
     lot: String(row.lot || '').trim().slice(0, 60),
     expiresAt: parseDocDate(row.expiresAt),
     lineTotal: Number(row.lineTotal) > 0 ? Number(row.lineTotal) : 0,
+    raw: String(row.raw || '').trim().slice(0, 160),
     photo: photoNo(row.photo),
   };
 }

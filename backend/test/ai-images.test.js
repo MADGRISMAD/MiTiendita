@@ -151,3 +151,11 @@ test('el subtotal impreso es contra lo que se compara, no el total con IVA', () 
   assert.equal(bad.diff, -200);
   assert.equal(bad.lines[0].amount, 100);
 });
+
+test('cada renglón lleva la nota: renglón original, importe total y precio por unidad', () => {
+  const e = inv.enrichItem({ raw: 'FRUTSI UVA 250 PET6', name: 'Frutsi Uva 250 ml', packs: 1, packSize: 6, cost: 0, lineTotal: 49.5 });
+  assert.deepEqual(e.note, { raw: 'FRUTSI UVA 250 PET6', total: 49.5, unit: 49.5 });
+  assert.equal(e.cost, 8.25);
+  const m = inv.matchItems([{ raw: 'x', name: 'Producto raro', packs: 2, packSize: 1, cost: 10 }], []);
+  assert.equal(m.unknown[0].note.total, 20);
+});

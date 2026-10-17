@@ -127,6 +127,8 @@ function enrichItem(item) {
     isPack: pack.isPack,
     lineCost,
     lineTotal,
+    // Lo que dice la nota para este renglón: primero el importe total, luego el precio por unidad de compra
+    note: { raw: String(item.raw || '').trim().slice(0, 160), total: lineTotal > 0 ? lineTotal : roundPrice(lineCost * pack.packs), unit: lineCost },
     costFixed,
     cost,
     price: sell > 0 ? sell : suggestSell(cost),
@@ -202,6 +204,7 @@ function matchItems(items, foods) {
         lot: item.lot,
         expiresAt: item.expiresAt,
         from: item.name,
+        note: item.note,
         sellChanged,
         costChanged,
       });
@@ -229,6 +232,7 @@ function matchItems(items, foods) {
         isPack: item.isPack,
         lot: item.lot,
         expiresAt: item.expiresAt,
+        note: item.note,
         options,
       });
     } else if (!ranked.length) {
@@ -236,6 +240,7 @@ function matchItems(items, foods) {
         name: item.name,
         cost: item.cost,
         lineCost: item.lineCost,
+        note: item.note,
         price: item.price,
         barcode,
         stockIn: item.stockIn,
