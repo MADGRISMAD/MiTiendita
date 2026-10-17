@@ -15,6 +15,7 @@ import "./apiService";
 import { startOfflineRuntime } from "./offlineSync";
 import { startErrorReporting } from "./errorReport";
 import { startPrintStation } from "./printStation";
+import { initAppUpdate } from "./appUpdate";
 import { applySeo } from "./seo/apply";
 import { VERTICALS } from "./seo/site.mjs";
 
@@ -231,13 +232,7 @@ startPrintStation();
 
 startOfflineRuntime();
 
-if (import.meta.env.PROD) {
-  import("virtual:pwa-register")
-    .then(({ registerSW }) => {
-      registerSW({ immediate: true });
-    })
-    .catch(() => {});
-}
+initAppUpdate();
 
 export { clearSession };
 export { apiClient as default } from "./apiService";

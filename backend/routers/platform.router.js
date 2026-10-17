@@ -2,6 +2,11 @@ const router = require('express').Router();
 const platform = require('../controllers/platform.controller');
 const { requireAuth, requireRoles } = require('../middleware/auth.middleware');
 const { rateLimit } = require('../services/rate-limit.service');
+const { refuseBranch } = require('../middleware/refuse-branch');
+const db = require('../database/mongodb');
+
+// Las sucursales se consultan pero no se modifican desde la plataforma
+const notBranch = refuseBranch(db);
 
 const staff = [requireAuth, requireRoles('platform_admin', 'platform_support')];
 const adminOnly = [requireAuth, requireRoles('platform_admin')];
@@ -29,12 +34,12 @@ router.get('/tenants/:id/mail', ...staff, platform.clientMail);
 router.get('/tenants/:id/activity', ...staff, platform.tenantActivity);
 router.post('/tenants/:id/mail', ...staff, writeLimit, platform.sendClientMail);
 
-router.patch('/tenants/:id', ...adminOnly, writeLimit, platform.updateTenant);
-router.post('/tenants/:id/suspend', ...adminOnly, writeLimit, platform.suspend);
-router.post('/tenants/:id/reactivate', ...adminOnly, writeLimit, platform.reactivate);
-router.patch('/tenants/:id/plan', ...adminOnly, writeLimit, platform.setPlan);
-router.put('/tenants/:id/referrer', ...adminOnly, writeLimit, platform.setTenantReferrer);
-router.post('/tenants/:id/manual-payment', ...adminOnly, writeLimit, platform.manualPayment);
+router.patch('/tenants/:id', ...adminOnly, writeLimit, notBranch, platform.updateTenant);
+router.post('/tenants/:id/suspend', ...adminOnly, writeLimit, notBranch, platform.suspend);
+router.post('/tenants/:id/reactivate', ...adminOnly, writeLimit, notBranch, platform.reactivate);
+router.patch('/tenants/:id/plan', ...adminOnly, writeLimit, notBranch, platform.setPlan);
+router.put('/tenants/:id/referrer', ...adminOnly, writeLimit, notBranch, platform.setTenantReferrer);
+router.post('/tenants/:id/manual-payment', ...adminOnly, writeLimit, notBranch, platform.manualPayment);
 
 router.get('/referrers', ...adminOnly, platform.listReferrers);
 router.post('/referrers', ...adminOnly, writeLimit, platform.createReferrer);

@@ -123,7 +123,13 @@ async function clientCard(tenant, { withUsers = false, pre = null } = {}) {
 async function listTenants(req, res) {
   try {
     const staffEmail = await currentStaffEmail(req);
-    const [tenants, inbox] = await Promise.all([db.ListTenants({ includeBranches: false }), supportMail.waitingInbox(staffEmail)]);
+    const [everyTenant, inbox] = await Promise.all([db.ListTenants(), supportMail.waitingInbox(staffEmail)]);
+    // Las sucursales no son clientes aparte: se cuentan dentro de su matriz
+    const tenants = everyTenant.filter((t) => !t.isBranch);
+    const branchCount = new Map();
+    for (const t of everyTenant) {
+      if (t.isBranch && t.matrixTenantId) branchCount.set(String(t.matrixTenantId), (branchCount.get(String(t.matrixTenantId)) || 0) + 1);
+    }
     const waiting = new Map();
     for (const item of inbox.items || []) {
       const current = waiting.get(item.tenantId) || { count: 0, at: null };
@@ -141,7 +147,8 @@ async function listTenants(req, res) {
     const enriched = await Promise.all(tenants.map(async (tenant) => {
       const card = await clientCard(tenant, { pre });
       const open = waiting.get(tenant.id) || { count: 0, at: null };
-      return { ...card, waiting: open.count, waitingAt: open.at };
+      const branches = branchCount.get(String(tenant.id)) || 0;
+      return { ...card, waiting: open.count, waitingAt: open.at, isMatrix: branches > 0, branchCount: branches };
     }));
     return res.status(200).json(enriched);
   } catch (err) {
@@ -150,16 +157,51 @@ async function listTenants(req, res) {
   }
 }
 
+/**
+ * Sucursales de una matriz (solo lectura) o, si la tienda es una sucursal, de qué matriz depende.
+ * El panel de la plataforma las ve pero no las modifica (ver middleware/refuse-branch.js).
+ */
+async function branchInfo(tenant) {
+  const all = await db.ListTenants();
+  if (tenant.isBranch) {
+    const matrix = all.find((t) => String(t.id) === String(tenant.matrixTenantId));
+    const settings = matrix ? await db.GetSettings(matrix.id) : null;
+    return { isBranch: true, isMatrix: false, branchCount: 0, branches: [], matrix: matrix ? { id: matrix.id, businessName: settings?.businessName || matrix.name || 'Sin nombre' } : null };
+  }
+  const mine = all.filter((t) => t.isBranch && String(t.matrixTenantId) === String(tenant.id));
+  if (!mine.length) return { isBranch: false, isMatrix: false, branchCount: 0, branches: [] };
+  const ids = mine.map((b) => b.id);
+  const [settings, users] = await Promise.all([db.GetSettingsMany(ids), db.ListUsersByTenants(ids)]);
+  const branches = mine
+    .map((b) => {
+      const people = users.get(b.id) || [];
+      return {
+        id: b.id,
+        businessName: settings.get(b.id)?.businessName || b.name || 'Sin nombre',
+        createdAt: b.createdAt || null,
+        usersCount: people.length,
+        lastSeenAt: people.reduce((latest, u) => {
+          const at = u.lastLoginAt ? new Date(u.lastLoginAt) : null;
+          return at && (!latest || at > latest) ? at : latest;
+        }, null),
+        suspended: Boolean(b.branchSuspendedAt),
+      };
+    })
+    .sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
+  return { isBranch: false, isMatrix: true, branchCount: branches.length, branches };
+}
+
 async function getTenant(req, res) {
   try {
     const tenant = await db.GetTenantById(req.params.id);
     if (!tenant) return res.status(404).send('No encontré ese cliente.');
-    const [card, usage, referrer] = await Promise.all([
+    const [card, usage, referrer, relatives] = await Promise.all([
       clientCard(tenant, { withUsers: true }),
       limits.usageFor(tenant.id, tenant.plan || 'basic').catch(() => null),
       referrals.brief(tenant.referrerId).catch(() => null),
+      branchInfo(tenant),
     ]);
-    return res.status(200).json({ ...card, usage, referrer });
+    return res.status(200).json({ ...card, usage, referrer, ...relatives });
   } catch (err) {
     console.error(err);
     return res.status(500).send(err.message || 'No pude abrir ese cliente.');

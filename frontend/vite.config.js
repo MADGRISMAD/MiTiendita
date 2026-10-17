@@ -3,6 +3,7 @@ import vue from '@vitejs/plugin-vue'
 import { VitePWA } from 'vite-plugin-pwa'
 import seoPlugin from './seo-plugin.mjs'
 import os from 'node:os'
+import { readFileSync } from 'node:fs'
 
 /** Primera IPv4 de la LAN (Wi‑Fi/Ethernet), para abrir desde el celular. */
 function lanHost() {
@@ -25,13 +26,18 @@ function lanHost() {
 
 const lan = lanHost()
 
+// Versión de esta compilación: la del paquete + el commit que la generó (Vercel o GitHub) para reconocerla en Configuración
+const pkgVersion = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')).version
+const commit = String(process.env.VERCEL_GIT_COMMIT_SHA || process.env.GITHUB_SHA || '').slice(0, 7)
+const APP_VERSION = commit ? `${pkgVersion}+${commit}` : pkgVersion
+
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [
     vue(),
     seoPlugin(),
     VitePWA({
-      registerType: 'autoUpdate',
+      registerType: 'prompt', // la versión nueva espera a que la persona toque «Actualizar» (ver src/appUpdate.js)
       includeAssets: ['logo.svg', 'icons/apple-touch-icon.png', 'icons/favicon-32.png'],
       manifest: {
         id: '/pos',
@@ -84,6 +90,8 @@ export default defineConfig({
   ],
   define: {
     'import.meta.env.VITE_LAN_HOST': JSON.stringify(lan),
+    __APP_VERSION__: JSON.stringify(APP_VERSION),
+    __APP_BUILT_AT__: JSON.stringify(new Date().toISOString()),
   },
   server: {
     host: true,

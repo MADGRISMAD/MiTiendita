@@ -17,7 +17,7 @@
               <span class="pf-chip">{{ lastSeen(detail) === "nunca ha entrado" ? "Nunca ha entrado" : `Entró ${lastSeen(detail)}` }}</span>
             </div>
           </div>
-          <div v-if="canEdit" class="acts">
+          <div v-if="editable" class="acts">
             <button v-if="detail.billingStatus !== 'suspended'" type="button" class="adm-btn sm danger-ghost" @click="openSuspend">
               Suspender
             </button>
@@ -40,8 +40,8 @@
         <p v-if="error" class="pf-err" role="alert">{{ error }}</p>
         <p v-if="ok" class="pf-ok" role="status">{{ ok }}</p>
 
-        <ClientSummaryTab v-if="tab === 'resumen'" :detail="detail" :can-edit="canEdit" @changed="reloadQuiet()" />
-        <ClientLicenseTab v-else-if="tab === 'licencia'" :detail="detail" :can-edit="canEdit" @saved="onSaved" />
+        <ClientSummaryTab v-if="tab === 'resumen'" :detail="detail" :can-edit="editable" @changed="reloadQuiet()" />
+        <ClientLicenseTab v-else-if="tab === 'licencia'" :detail="detail" :can-edit="editable" @saved="onSaved" />
         <ClientPeopleTab v-else-if="tab === 'personas'" :detail="detail" />
         <ClientMailTab v-else-if="tab === 'correo'" :detail="detail" :initial-ticket="initialTicket" @waiting="onWaiting" />
         <ClientActivityTab v-else :detail="detail" />
@@ -121,6 +121,9 @@ const emit = defineEmits(["updated", "close"]);
 
 const route = useRoute();
 const router = useRouter();
+
+// Una sucursal se consulta pero no se modifica desde aquí: su plan y sus cobros son los de su matriz
+const editable = computed(() => props.canEdit && !detail.value?.isBranch);
 
 const TABS = [
   { id: "resumen", label: "Resumen" },

@@ -37,6 +37,9 @@
                 <span class="meta">
                   <StatusPill :client="c" />
                   <span class="pf-chip">{{ c.planName }}</span>
+                  <span v-if="c.isMatrix" class="pf-chip info" :title="`Matriz con ${c.branchCount} ${c.branchCount === 1 ? 'sucursal' : 'sucursales'}`">
+                    Matriz · {{ c.branchCount }} {{ c.branchCount === 1 ? "sucursal" : "sucursales" }}
+                  </span>
                   <span class="pf-chip" :class="quiet(c) ? 'warn' : ''">{{ lastSeen(c) === "nunca ha entrado" ? "sin entrar" : lastSeen(c) }}</span>
                 </span>
               </span>

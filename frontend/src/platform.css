@@ -220,6 +220,7 @@ html[data-theme="dark"] .pf-viz { --series-1: #3987e5; --series-2: #d95926; }
 
 /* ———— Pequeños ———— */
 .pf-chip { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.1rem 0.5rem; border-radius: 99px; background: var(--timber-panel-elevated); border: 1px solid var(--timber-line); font-size: 0.74rem; font-weight: 700; color: var(--timber-muted); }
+.pf-chip.info { color: var(--timber-primary); border-color: color-mix(in srgb, var(--timber-primary) 35%, var(--timber-line)); }
 .pf-chip.bad { color: var(--timber-danger); border-color: color-mix(in srgb, var(--timber-danger) 35%, var(--timber-line)); }
 .pf-chip.warn { color: var(--timber-warning); border-color: color-mix(in srgb, var(--timber-warning) 35%, var(--timber-line)); }
 .pf-hello { margin: 0; font-size: 0.95rem; color: var(--timber-muted); font-weight: 600; }

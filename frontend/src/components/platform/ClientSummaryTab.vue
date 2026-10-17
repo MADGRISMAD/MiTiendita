@@ -30,6 +30,35 @@
       </div>
     </dl>
 
+    <p v-if="detail.isBranch" class="adm-banner warn" role="note">
+      Esta tienda es una <strong>sucursal</strong><template v-if="detail.matrix">
+        de <router-link :to="{ name: 'platformClient', params: { id: detail.matrix.id } }">{{ detail.matrix.businessName }}</router-link></template>.
+      Su plan y sus cobros son los de la matriz; desde aquí solo se puede consultar.
+    </p>
+
+    <section v-if="detail.isMatrix" class="pf-card-stack" aria-labelledby="branches-title">
+      <h3 id="branches-title" class="pf-section-title">
+        Matriz · {{ detail.branchCount }} {{ detail.branchCount === 1 ? "sucursal" : "sucursales" }}
+      </h3>
+      <p class="pf-muted">Las sucursales las administra el dueño de la cuenta; aquí solo se consultan. El plan y el cobro son los de esta matriz.</p>
+      <div class="pf-table-wrap">
+        <table class="pf-table">
+          <thead>
+            <tr><th scope="col">Sucursal</th><th scope="col">Alta</th><th scope="col" class="num">Personas</th><th scope="col">Última vez que entraron</th><th scope="col">Estado</th></tr>
+          </thead>
+          <tbody>
+            <tr v-for="b in detail.branches" :key="b.id">
+              <td>{{ b.businessName }}</td>
+              <td>{{ shortDate(b.createdAt) }}</td>
+              <td class="num">{{ b.usersCount }}</td>
+              <td>{{ lastSeen(b) }}</td>
+              <td>{{ b.suspended ? "Dada de baja" : "Activa" }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
     <ClientReferralCard v-if="canEdit" :detail="detail" @changed="$emit('changed')" />
 
     <section v-if="detail.usage" class="pf-card-stack" aria-labelledby="usage-title">

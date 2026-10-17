@@ -629,6 +629,23 @@
           <!-- ======= Soporte ======= -->
           <template v-else-if="section === 'soporte'">
             <section class="adm-card cfg-card">
+              <h3>Versión de la app</h3>
+              <p class="state-line" :class="updateState.available ? 'off' : 'on'">
+                <i></i>{{ updateState.available ? 'Hay una versión nueva disponible' : 'Tienes la última versión' }}
+              </p>
+              <p class="adm-hint">
+                Versión <b>{{ appVersion }}</b><template v-if="appBuiltAt"> · compilada el {{ new Date(appBuiltAt).toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' }) }}</template>.
+                La app busca actualizaciones sola, pero solo se actualiza cuando tú lo decides.
+              </p>
+              <p v-if="updateState.error" class="adm-banner warn">{{ updateState.error }}</p>
+              <div class="printer-acts">
+                <button v-if="updateState.available" type="button" class="adm-btn primary" @click="applyUpdate">Actualizar ahora</button>
+                <button type="button" class="adm-btn" :disabled="updateState.checking" @click="checkForUpdate({ force: true })">
+                  {{ updateState.checking ? 'Buscando…' : 'Buscar actualizaciones' }}
+                </button>
+              </div>
+            </section>
+            <section class="adm-card cfg-card">
               <h3>Ayuda por WhatsApp</h3>
               <p class="adm-hint">La forma más rápida. El mensaje ya lleva el nombre de tu tienda y tu plan para atenderte sin preguntas.</p>
               <WhatsAppHelp />
@@ -717,6 +734,7 @@ import { stationState, syncPrintStation } from "../printStation";
 import { SCALE_COMMANDS, connectScale, disconnectScale, saveScaleSettings, scaleLive, scaleStore, scaleSupported } from "../scale";
 import { errText as sharedErrText, money } from "../textUtils";
 import { useFlash } from "../useFlash";
+import { appBuiltAt, appVersion, applyUpdate, checkForUpdate, updateState } from "../appUpdate";
 
 const PRINTER_MODES = [
   { id: "browser", label: "Navegador (actual)", hint: "Abre el ticket y el diálogo de imprimir de Chrome. Sirve con cualquier impresora." },

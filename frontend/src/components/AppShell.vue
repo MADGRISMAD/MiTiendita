@@ -50,6 +50,10 @@
     </header>
 
     <div class="pos-body">
+      <div v-if="updateState.available" class="billing-banner info" role="status">
+        <span>Hay una nueva versión de Mi Tiendita. Termina la venta en curso y actualiza para tener lo último.</span>
+        <span class="banner-acts"><button type="button" @click="applyUpdate">Actualizar ahora</button></span>
+      </div>
       <div v-if="billingBanner" class="billing-banner" :class="billingBanner.tone">
         <span>{{ billingBanner.text }}</span>
         <router-link to="/billing">Facturación</router-link>
@@ -163,6 +167,7 @@ import { applyBillingStatus } from "../billingStore";
 import { offlineStore } from "../offlineFlags";
 import { platformStore } from "../platform/platformStore";
 import { flushOfflineSales } from "../offlineSync";
+import { applyUpdate, updateState } from "../appUpdate";
 import { orgStore, loadOrg, enterBranch } from "../orgStore";
 
 const route = useRoute();
@@ -437,6 +442,10 @@ onUnmounted(() => clearInterval(timer));
   padding: 0.45rem 0.85rem;
   font-size: 0.85rem;
   font-weight: 600;
+}
+.billing-banner.info {
+  background: color-mix(in srgb, var(--timber-primary) 14%, var(--timber-panel));
+  color: var(--timber-ink);
 }
 .billing-banner.warn {
   background: color-mix(in srgb, var(--timber-accent) 28%, var(--timber-panel));

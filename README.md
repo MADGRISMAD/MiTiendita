@@ -37,6 +37,9 @@ Pensada para abarrotes, farmacia y ferretería. A la izquierda el buscador y el 
 - **Cobrar** (**F12**): efectivo con billetes sugeridos y cambio, tarjeta, transferencia (con folio SPEI opcional), mixto u otro. Enter o F12 confirman.
 - Otros atajos: **F2** quitar renglón, **F4** consultar precio, **F9** descuento, **Esc** cerrar o limpiar la búsqueda.
 
+### Actualizaciones de la app
+Cuando se publica una versión nueva, la app la descarga sola en segundo plano y muestra arriba el aviso **«Hay una nueva versión… Actualizar ahora»**; no se aplica hasta que la persona lo decide, para no cortar una venta a medias. Busca versiones nuevas al volver a la pestaña, al recuperar internet y cada 30 minutos (así también se entera la computadora de la caja que se deja abierta todo el día). En *Configuración → Ayuda* se ve la versión instalada y hay un botón «Buscar actualizaciones». Código en `frontend/src/appUpdate.js`; el service worker se registra en modo `prompt` (`vite.config.js`).
+
 ### Sin internet
 La caja sigue cobrando sin conexión: las ventas se guardan en el dispositivo y se suben solas al volver la red, sin duplicarse. Las que el servidor rechace quedan en Caja → «Ventas de este dispositivo sin subir». Cómo funciona y cómo probarlo: [docs/modo-sin-internet.md](docs/modo-sin-internet.md).
 
@@ -122,6 +125,7 @@ cd backend && npm run seed:platform-admin
 
 - **Admin** — `platform` / `Platform123!` → `/platform`. Números, licencias (incluida **Perpetua**), gastos y **Equipo**.
 - **Cobros y mi parte** (`/platform` → Finanzas, **solo los 3 socios**, es decir los admins permanentes de `backend/configurations/platform-owners.js`; ni el soporte ni otros admins ven la pestaña, y el servidor lo exige): lista los cobros reales del mes (de Mercado Pago o registrados a mano, sin repetirse), lo comparan con el estimado por planes y muestran la parte de cada socio en partes iguales —del ingreso cobrado y de la utilidad después de IA y gastos—. Se puede descargar en CSV. El número de socios es el de admins permanentes; no descuenta comisiones de vendedores ni de Mercado Pago.
+- **Matrices y sucursales:** en Clientes una tienda con sucursales sale marcada como **Matriz · N sucursales** y en su ficha se listan las sucursales (solo lectura). Una sucursal no cuenta como cliente aparte y desde el panel no se le puede cambiar plan, estado, cobros ni vendedor: el servidor lo rechaza (`middleware/refuse-branch.js`); todo eso es de la matriz.
 - **Soporte** — lo crea un admin en `/platform/equipo`. Solo ve clientes y responde correo.
 
 ## Seguridad de las cuentas
