@@ -106,18 +106,18 @@ function newTenant(referrer, name) {
   return t;
 }
 
-test('escalera: 10% al inicio, sube con las ventas cerradas y topa en 20%', () => {
-  assert.equal(tiers.rateFor(0), 0.1);
-  assert.equal(tiers.rateFor(4), 0.1);
-  assert.equal(tiers.rateFor(5), 0.12);
-  assert.equal(tiers.rateFor(10), 0.14);
-  assert.equal(tiers.rateFor(20), 0.16);
-  assert.equal(tiers.rateFor(35), 0.18);
-  assert.equal(tiers.rateFor(50), 0.2);
-  assert.equal(tiers.rateFor(500), 0.2);
-  assert.deepEqual(tiers.nextTierFor(7), { from: 10, rate: 0.14, missing: 3 });
+test('escalera: 15% al inicio, sube con las ventas cerradas y topa en 25%', () => {
+  assert.equal(tiers.rateFor(0), 0.15);
+  assert.equal(tiers.rateFor(4), 0.15);
+  assert.equal(tiers.rateFor(5), 0.17);
+  assert.equal(tiers.rateFor(10), 0.19);
+  assert.equal(tiers.rateFor(20), 0.21);
+  assert.equal(tiers.rateFor(35), 0.23);
+  assert.equal(tiers.rateFor(50), 0.25);
+  assert.equal(tiers.rateFor(500), 0.25);
+  assert.deepEqual(tiers.nextTierFor(7), { from: 10, rate: 0.19, missing: 3 });
   assert.equal(tiers.nextTierFor(50), null);
-  assert.equal(tiers.commissionFor(349, 0).commission, 34.9);
+  assert.equal(tiers.commissionFor(349, 0).commission, 52.35);
 });
 
 test('alta de vendedor: código MT-XXXXXX único; no repite correo', async () => {
@@ -146,12 +146,12 @@ test('cada cobro genera comisión; el mismo cobro no paga dos veces', async () =
   const seller = await svc.createReferrer({ name: 'Luis Vega', email: 'luis@mail.com' });
   const tenant = newTenant(seller, 'Abarrotes Uno');
   const c1 = await svc.recordPayment({ tenant, amount: 349, source: 'authorized_payment', key: 'ap:1', mpPaymentId: 1 });
-  assert.equal(c1.rate, 0.1);
-  assert.equal(c1.commission, 34.9);
+  assert.equal(c1.rate, 0.15);
+  assert.equal(c1.commission, 52.35);
   assert.equal(c1.status, 'pending');
   assert.equal(await svc.recordPayment({ tenant, amount: 349, source: 'authorized_payment', key: 'ap:1', mpPaymentId: 1 }), null);
   const c2 = await svc.recordPayment({ tenant, amount: 349, source: 'authorized_payment', key: 'ap:2', mpPaymentId: 2 });
-  assert.equal(c2.commission, 34.9, 'el mes siguiente de la misma tienda paga otra vez');
+  assert.equal(c2.commission, 52.35, 'el mes siguiente de la misma tienda paga otra vez');
   // tienda sin vendedor o monto inválido: nada
   assert.equal(await svc.recordPayment({ tenant: { id: 'tx', name: 'Sin vendedor' }, amount: 100, source: 'manual', key: 'k' }), null);
   assert.equal(await svc.recordPayment({ tenant, amount: 0, source: 'manual', key: 'k0' }), null);
@@ -161,7 +161,7 @@ test('la activación y el primer pago autorizado son el mismo dinero (no se dupl
   const seller = await svc.createReferrer({ name: 'Eva Mora', email: 'eva@mail.com' });
   const tenant = newTenant(seller, 'Tienda Eva');
   const act = await svc.recordPayment({ tenant, amount: 599, source: 'activation', key: 'act:pre1:2026-11-04' });
-  assert.equal(act.commission, 59.9);
+  assert.equal(act.commission, 89.85);
   assert.equal(await svc.recordPayment({ tenant, amount: 599, source: 'authorized_payment', key: 'ap:77', mpPaymentId: 77 }), null);
   assert.equal(mem.commissions.filter((c) => c.tenantId === tenant.id).length, 1);
   // el pago del mes siguiente sí cuenta aparte
@@ -169,7 +169,7 @@ test('la activación y el primer pago autorizado son el mismo dinero (no se dupl
   assert.ok(next);
 });
 
-test('al llegar a 5 ventas cerradas sube a 12%; las comisiones viejas conservan su tasa', async () => {
+test('al llegar a 5 ventas cerradas sube a 17%; las comisiones viejas conservan su tasa', async () => {
   const seller = await svc.createReferrer({ name: 'Rita Paz', email: 'rita@mail.com' });
   const rates = [];
   for (let i = 1; i <= 6; i += 1) {
@@ -177,16 +177,16 @@ test('al llegar a 5 ventas cerradas sube a 12%; las comisiones viejas conservan 
     const c = await svc.recordPayment({ tenant: t, amount: 1000, source: 'manual', key: `rita:${i}` });
     rates.push(c.rate);
   }
-  assert.deepEqual(rates, [0.1, 0.1, 0.1, 0.1, 0.12, 0.12]);
+  assert.deepEqual(rates, [0.15, 0.15, 0.15, 0.15, 0.17, 0.17]);
   const first = mem.commissions.find((c) => c.key === 'rita:1');
-  assert.equal(first.commission, 100);
+  assert.equal(first.commission, 150);
   const d = await svc.detail(seller.id);
   assert.equal(d.closedSales, 6);
-  assert.equal(d.rate, 0.12);
+  assert.equal(d.rate, 0.17);
   assert.equal(d.next.from, 10);
   assert.equal(d.next.missing, 4);
   assert.equal(d.clients, 6);
-  assert.equal(d.pending, 100 * 4 + 120 * 2);
+  assert.equal(d.pending, 150 * 4 + 170 * 2);
   // repetir pago de una tienda ya cerrada no sube el conteo
   await svc.recordPayment({ tenant: mem.tenants.find((t) => t.name === 'Tienda 1'), amount: 1000, source: 'manual', key: 'rita:again' });
   assert.equal((await svc.detail(seller.id)).closedSales, 6);
@@ -212,12 +212,12 @@ test('liquidar: paga todo lo pendiente una sola vez y lo pagado ya no se anula',
   await svc.recordPayment({ tenant: t2, amount: 599, source: 'manual', key: 'pia:2' });
   const payout = await svc.payOut(seller.id, { by: 'ana', note: 'Transferencia 5 oct' });
   assert.equal(payout.count, 2);
-  assert.equal(payout.total, 34.9 + 59.9);
+  assert.equal(payout.total, 52.35 + 89.85);
   await assert.rejects(svc.payOut(seller.id, {}), (e) => e.status === 409);
   await assert.rejects(svc.voidCommission(a.id), (e) => e.status === 409);
   const d = await svc.detail(seller.id);
   assert.equal(d.pending, 0);
-  assert.equal(d.paid, 94.8);
+  assert.equal(d.paid, 142.2);
   assert.equal(d.payouts.length, 1);
 });
 

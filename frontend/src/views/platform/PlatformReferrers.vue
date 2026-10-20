@@ -58,7 +58,7 @@
         <details v-if="ladder.length" class="pf-ladder-note">
           <summary>¿Cómo suben las comisiones?</summary>
           <ReferralLadder :ladder="ladder" compact />
-          <p class="adm-hint">Empiezan en 10% y suben con las <strong>ventas cerradas</strong> (tiendas que ya pagaron). Cada cobro paga el nivel que tenga el vendedor en ese momento.</p>
+          <p class="adm-hint">Empiezan en 15% y suben con las <strong>ventas cerradas</strong> (tiendas que ya pagaron). Cada cobro paga el nivel que tenga el vendedor en ese momento.</p>
         </details>
       </section>
 

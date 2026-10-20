@@ -6,12 +6,12 @@
  * y esa tasa se guarda en el registro del cobro (subir de nivel no cambia comisiones ya generadas).
  */
 const LADDER = [
-  { from: 0, rate: 0.1 },
-  { from: 5, rate: 0.12 },
-  { from: 10, rate: 0.14 },
-  { from: 20, rate: 0.16 },
-  { from: 35, rate: 0.18 },
-  { from: 50, rate: 0.2 },
+  { from: 0, rate: 0.15 },
+  { from: 5, rate: 0.17 },
+  { from: 10, rate: 0.19 },
+  { from: 20, rate: 0.21 },
+  { from: 35, rate: 0.23 },
+  { from: 50, rate: 0.25 },
 ];
 
 const MIN_RATE = LADDER[0].rate;

@@ -158,16 +158,16 @@ Personas que venden Mi Tiendita a tiendas (por ejemplo, en otro estado) y ganan 
 
 - **Alta:** el admin crea al vendedor y se le genera su número de referencia, con formato `MT-XXXXXX`.
 - **Cómo llegan las tiendas:** escriben el código en el registro (o entran con el enlace `/register?ref=MT-XXXXXX`, que lo llena solo). El admin también puede asignar o quitar el vendedor desde la ficha del cliente.
-- **Comisión por cobro:** empieza en **10%** y sube con las *ventas cerradas* (tiendas referidas que ya pagaron al menos una vez):
+- **Comisión por cobro:** empieza en **15%** y sube con las *ventas cerradas* (tiendas referidas que ya pagaron al menos una vez):
 
   | Ventas cerradas | Comisión |
   |---|---|
-  | 0–4 | 10% |
-  | 5–9 | 12% |
-  | 10–19 | 14% |
-  | 20–34 | 16% |
-  | 35–49 | 18% |
-  | 50 o más | 20% (máximo) |
+  | 0–4 | 15% |
+  | 5–9 | 17% |
+  | 10–19 | 19% |
+  | 20–34 | 21% |
+  | 35–49 | 23% |
+  | 50 o más | 25% (máximo) |
 
   La tasa de cada cobro se guarda al generarse: subir de nivel no cambia lo ya ganado. La escalera está en `backend/services/referral.tiers.js`.
 - **Qué cobros cuentan:** la activación de la suscripción, cada cobro recurrente de Mercado Pago y los cobros que el admin registra a mano (efectivo, transferencia, licencia perpetua). Un mismo cobro nunca paga dos veces.

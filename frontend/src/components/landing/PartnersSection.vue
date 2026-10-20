@@ -15,7 +15,7 @@
           plan, te llevas una comisión — <strong>mes con mes, mientras siga con nosotros</strong>.
         </p>
         <ul class="pt-points">
-          <li><b>10% → 20%</b> de cada cobro, según las tiendas que cierres</li>
+          <li><b>15% → 25%</b> de cada cobro, según las tiendas que cierres</li>
           <li><b>Tu propio portal</b> para ver tiendas, comisiones y a tu equipo</li>
           <li><b>Sin cuota</b> ni inventario: solo tu código y tu enlace</li>
         </ul>
@@ -108,7 +108,7 @@
               Con <b>{{ nextTier.missing }}</b> {{ nextTier.missing === 1 ? "tienda más" : "tiendas más" }} subes a
               <b>{{ Math.round(nextTier.rate * 100) }}%</b> y ganarías <b>{{ money(nextTier.month) }}</b> al mes.
             </p>
-            <p v-else class="res-next">Estás en el <b>nivel máximo</b>: 20% de cada cobro.</p>
+            <p v-else class="res-next">Estás en el <b>nivel máximo</b>: 25% de cada cobro.</p>
           </div>
         </div>
         <p class="sim-note">Ejemplo con todas las tiendas pagando ese plan cada mes. La comisión se calcula sobre lo que paga cada tienda.</p>
@@ -127,7 +127,7 @@
           </p>
         </div>
         <ol class="ladder-bars">
-          <li v-for="(t, i) in LADDER" :key="t.from" :style="{ '--h': `${(t.rate / 0.2) * 100}%`, '--i': i }" :class="{ hit: stores >= t.from }">
+          <li v-for="(t, i) in LADDER" :key="t.from" :style="{ '--h': `${(t.rate / 0.25) * 100}%`, '--i': i }" :class="{ hit: stores >= t.from }">
             <span class="bar"><b>{{ Math.round(t.rate * 100) }}%</b></span>
             <small>{{ t.from === 0 ? "al empezar" : `${t.from}+ tiendas` }}</small>
           </li>
@@ -194,12 +194,12 @@ const props = defineProps({
 
 // Misma escalera que el servidor (backend/services/referral.tiers.js)
 const LADDER = [
-  { from: 0, rate: 0.1 },
-  { from: 5, rate: 0.12 },
-  { from: 10, rate: 0.14 },
-  { from: 20, rate: 0.16 },
-  { from: 35, rate: 0.18 },
-  { from: 50, rate: 0.2 },
+  { from: 0, rate: 0.15 },
+  { from: 5, rate: 0.17 },
+  { from: 10, rate: 0.19 },
+  { from: 20, rate: 0.21 },
+  { from: 35, rate: 0.23 },
+  { from: 50, rate: 0.25 },
 ];
 
 const STEPS = [
@@ -221,7 +221,7 @@ const FEATURES = [
 
 const FAQ = [
   { q: "¿Cuánto cuesta ser proveedor?", a: "Nada. No hay cuota de inscripción ni mensualidad. Solo revisamos tu solicitud antes de activar tu código." },
-  { q: "¿Sobre qué se calcula mi comisión?", a: "Sobre cada cobro que hace una tienda que trajiste: su suscripción mensual o anual y los pagos que registremos de ella. Empiezas en 10% y subes hasta 20% conforme cierras tiendas." },
+  { q: "¿Sobre qué se calcula mi comisión?", a: "Sobre cada cobro que hace una tienda que trajiste: su suscripción mensual o anual y los pagos que registremos de ella. Empiezas en 15% y subes hasta 25% conforme cierras tiendas." },
   { q: "¿Hasta cuándo gano por una tienda?", a: "Mientras la tienda siga pagando su plan. Si cancela, dejas de recibir por ella; lo que ya ganaste se queda." },
   { q: "¿Cómo y cuándo me pagan?", a: "En tu portal ves cada comisión: lo que está por cobrar y lo que ya te pagamos. Liquidamos lo acumulado por transferencia y queda registrado cada pago." },
   { q: "¿Puedo tener vendedores trabajando conmigo?", a: "Sí. Desde tu portal agregas asesores: ven y atienden tus tiendas, y tú decides quién maneja el dinero y el equipo." },
