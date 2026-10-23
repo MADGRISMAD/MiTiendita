@@ -282,3 +282,25 @@ test('postularse como proveedor: queda en revisión, con cuenta de dueño, y sin
   assert.equal(created.length, 1);
   assert.ok(partners);
 });
+
+test('alta de vendedor desde la plataforma con su acceso de Dueño: reutiliza sus datos y no deja nada a medias', async () => {
+  const refDb = require('../database/referral.db');
+  const before = referrers.length;
+  const partners = require('../services/partner.service');
+  const good = await partners.createWithOwner(
+    { name: 'Teresa Lugo Mena', email: 'tere@prov.mx', phone: '664 555 1212', state: 'Baja California', city: 'Tijuana' },
+    { username: 'TereLugo', password: 'una frase larga y segura 2026' }
+  );
+  assert.equal(good.partner.name, 'Teresa Lugo Mena');
+  const owner = users.find((u) => u.username === 'terelugo');
+  assert.equal(owner.role, 'partner_admin');
+  assert.equal(owner.partnerId, good.partner.id);
+  assert.deepEqual([owner.name, owner.lastName, owner.email, owner.cellphone], ['Teresa', 'Lugo Mena', 'tere@prov.mx', '6645551212']);
+  assert.equal(referrers.length, before + 1);
+
+  // usuario repetido o contraseña floja: se rechaza ANTES de crear al vendedor
+  await assert.rejects(partners.createWithOwner({ name: 'Otra Persona', email: 'otra@prov.mx', state: 'Sonora' }, { username: 'terelugo', password: 'una frase larga y segura 2026' }), (e) => e.status === 409);
+  await assert.rejects(partners.createWithOwner({ name: 'Otra Persona', email: 'otra@prov.mx', state: 'Sonora' }, { username: 'otrapersona', password: '123' }), (e) => e.status === 400);
+  assert.equal(referrers.length, before + 1);
+  assert.ok(refDb);
+});

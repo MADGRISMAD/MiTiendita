@@ -33,6 +33,27 @@
             <input v-model="form.payoutMpEmail" class="adm-inp" type="email" autocomplete="off" />
           </label>
         </fieldset>
+        <fieldset v-if="!referrer" class="pf-pay">
+          <legend>Acceso al portal de socios</legend>
+          <label class="adm-field" style="grid-auto-flow: column; justify-content: start; align-items: center; gap: 0.5rem">
+            <input v-model="withAccess" type="checkbox" />
+            <span>Crear también su cuenta de Dueño con estos mismos datos</span>
+          </label>
+          <template v-if="withAccess">
+            <div class="adm-row2">
+              <label class="adm-field"><span>Usuario</span><input v-model="access.username" class="adm-inp" @input="userTouched = true" minlength="3" maxlength="40" autocomplete="off" required /></label>
+              <label class="adm-field">
+                <span>Contraseña inicial</span>
+                <input v-model="access.password" class="adm-inp" :type="showPass ? 'text' : 'password'" :minlength="MIN_PASSWORD" autocomplete="new-password" required />
+              </label>
+            </div>
+            <div class="pf-pass-tools">
+              <button type="button" class="adm-btn sm" @click="generate">Generar una contraseña</button>
+              <button type="button" class="adm-btn sm" @click="showPass = !showPass">{{ showPass ? "Ocultar" : "Ver" }}</button>
+            </div>
+            <p class="adm-hint">Usa su nombre, correo y teléfono de arriba. Pásale el usuario y la contraseña por un medio seguro; la primera vez que entre a <strong>/socio</strong> activará la verificación en dos pasos.</p>
+          </template>
+        </fieldset>
         <p v-if="error" class="pf-err" role="alert">{{ error }}</p>
         <div class="adm-dlg-acts">
           <button type="button" class="adm-btn" @click="$emit('close')">Cancelar</button>
@@ -44,8 +65,9 @@
 </template>
 
 <script setup>
-import { onMounted, onUnmounted, reactive, ref } from "vue";
+import { onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import { apiService } from "../../apiService";
+import { MIN_PASSWORD, passwordProblem } from "../../passwordPolicy";
 
 const props = defineProps({ referrer: { type: Object, default: null } });
 const emit = defineEmits(["close", "saved"]);
@@ -66,11 +88,40 @@ const form = reactive({
 const saving = ref(false);
 const error = ref("");
 
+// Acceso de Dueño al portal, creado junto con el vendedor (solo al darlo de alta)
+const withAccess = ref(true);
+const showPass = ref(false);
+const access = reactive({ username: "", password: "" });
+// El usuario se sugiere con el correo mientras no lo toquen
+const userTouched = ref(false);
+watch(
+  () => form.email,
+  (mail) => {
+    if (!userTouched.value) access.username = String(mail || "").split("@")[0].toLowerCase().replace(/[^a-z0-9._-]/g, "").slice(0, 40);
+  }
+);
+function generate() {
+  const letters = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const bytes = new Uint32Array(14);
+  crypto.getRandomValues(bytes);
+  access.password = Array.from(bytes, (n) => letters[n % letters.length]).join("");
+  showPass.value = true;
+}
+
 async function submit() {
-  saving.value = true;
   error.value = "";
+  const wantsAccess = !r && withAccess.value;
+  if (wantsAccess) {
+    const weak = passwordProblem(access.password, { email: form.email, username: access.username, name: form.name });
+    if (weak) {
+      error.value = weak;
+      return;
+    }
+  }
+  saving.value = true;
   try {
-    const saved = r ? await apiService.platformUpdateReferrer(r.id, { ...form }) : await apiService.platformCreateReferrer({ ...form });
+    const payload = wantsAccess ? { ...form, access: { username: access.username.trim().toLowerCase(), password: access.password } } : { ...form };
+    const saved = r ? await apiService.platformUpdateReferrer(r.id, { ...form }) : await apiService.platformCreateReferrer(payload);
     emit("saved", saved);
   } catch (e) {
     error.value = typeof e.response?.data === "string" ? e.response.data : "No pude guardar al vendedor.";

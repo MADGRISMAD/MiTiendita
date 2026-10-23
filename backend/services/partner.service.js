@@ -333,6 +333,38 @@ async function apply(input) {
   }
 }
 
+/**
+ * Alta de un vendedor desde la plataforma, con su acceso de Dueño en el mismo paso: el nombre, correo y teléfono
+ * ya capturados se reutilizan, solo faltan el usuario y la contraseña inicial. Si algo falla no queda nada a medias.
+ */
+async function createWithOwner(input, access) {
+  const parts = String(input.name || '').trim().split(/\s+/).filter(Boolean);
+  const member = {
+    name: parts[0] || '',
+    lastName: parts.slice(1).join(' '),
+    email: input.email,
+    cellphone: input.phone,
+    username: access?.username,
+    password: access?.password,
+    role: 'partner_admin',
+  };
+  await checkMember(member); // se revisa todo antes de crear nada
+  let partner;
+  try {
+    partner = await referrals.createReferrer(input);
+  } catch (err) {
+    if (err instanceof referrals.ReferralError) throw new PartnerError(err.status, err.message);
+    throw err;
+  }
+  try {
+    const user = await createMember(partner.id, member);
+    return { partner, user };
+  } catch (err) {
+    await refDb.DeleteReferrer(partner.id).catch(() => {});
+    throw err;
+  }
+}
+
 /** Cambio que puede dejar al socio sin dueño activo: se vuelve a contar y se deshace si quedó en cero. */
 async function guarded(partnerId, target, patch, undo) {
   const losesAdmin = target.role === 'partner_admin' && !target.disabled;
@@ -383,6 +415,7 @@ module.exports = {
   commissions,
   checkMember,
   createMember,
+  createWithOwner,
   apply,
   listTeam,
   setActive,

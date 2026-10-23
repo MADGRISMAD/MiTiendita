@@ -153,7 +153,7 @@ function patch() {
 async function created(next) {
   showNew.value = false;
   await load();
-  say(`Listo. El código de ${next.name} es ${next.code}.`);
+  say(`Listo. El código de ${next.name} es ${next.code}.${next.ownerUsername ? ` Ya puede entrar a /socio con el usuario ${next.ownerUsername}.` : ""}`);
   open(next.id);
 }
 

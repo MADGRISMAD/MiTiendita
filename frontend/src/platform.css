@@ -313,3 +313,5 @@ a.adm-kpi:hover { border-color: color-mix(in srgb, var(--timber-primary) 40%, va
   .pf-payment .pf-inline .adm-field, .pf-payment .pf-inline .adm-field.grow { flex: 1 1 100%; }
   .pf-payment .pf-inline > .adm-btn { width: 100%; }
 }
+
+.pf-pass-tools { display: flex; flex-wrap: wrap; gap: 0.5rem; }

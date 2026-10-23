@@ -983,14 +983,25 @@ async function getReferrer(req, res) {
 
 async function createReferrer(req, res) {
   try {
-    const created = await referrals.createReferrer(req.body || {});
+    const { access, ...input } = req.body || {};
+    let created;
+    let owner = null;
+    if (access && (access.username || access.password)) {
+      // Con acceso al portal: se crea el vendedor y su cuenta de Dueño con los mismos datos, en un solo paso
+      const out = await partners.createWithOwner(input, access);
+      created = out.partner;
+      owner = out.user;
+    } else {
+      created = await referrals.createReferrer(input);
+    }
     await audit.record(req, {
       type: 'referrer_created',
-      message: `Dio de alta al vendedor ${created.name} (${created.code})`,
-      meta: { referrerId: created.id },
+      message: `Dio de alta al vendedor ${created.name} (${created.code})${owner ? ` con acceso al portal (${owner.username})` : ''}`,
+      meta: { referrerId: created.id, ...(owner ? { userId: owner.id } : {}) },
     });
-    return res.status(201).json(await referrals.detail(created.id));
+    return res.status(201).json({ ...(await referrals.detail(created.id)), ...(owner ? { ownerUsername: owner.username } : {}) });
   } catch (err) {
+    if (err instanceof partners.PartnerError) return res.status(err.status).send(err.message);
     return refFail(res, err);
   }
 }
