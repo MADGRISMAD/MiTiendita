@@ -38,7 +38,7 @@ function createTransport() {
   });
 }
 
-async function sendViaResend({ to, subject, html, headers }) {
+async function sendViaResend({ to, subject, html, headers, cc, replyTo }) {
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
@@ -48,6 +48,8 @@ async function sendViaResend({ to, subject, html, headers }) {
     body: JSON.stringify({
       from: mailFrom(),
       to: [to],
+      ...(cc && cc.length ? { cc } : {}),
+      ...(replyTo ? { reply_to: replyTo } : {}),
       subject,
       html,
       headers: headers || undefined,
@@ -61,11 +63,13 @@ async function sendViaResend({ to, subject, html, headers }) {
   return { sent: true, provider: 'resend', id: data.id || null };
 }
 
-async function sendViaSmtp({ to, subject, html, messageId, inReplyTo, references }) {
+async function sendViaSmtp({ to, subject, html, messageId, inReplyTo, references, cc, replyTo }) {
   const transport = createTransport();
   const info = await transport.sendMail({
     from: mailFrom(),
     to,
+    ...(cc && cc.length ? { cc } : {}),
+    ...(replyTo ? { replyTo } : {}),
     subject,
     html,
     messageId: messageId || undefined,
@@ -75,7 +79,7 @@ async function sendViaSmtp({ to, subject, html, messageId, inReplyTo, references
   return { sent: true, provider: 'smtp', id: info.messageId || messageId || null };
 }
 
-async function sendMail({ to, subject, html, messageId, inReplyTo, references }) {
+async function sendMail({ to, subject, html, messageId, inReplyTo, references, cc, replyTo }) {
   const recipient = String(to || '').trim().toLowerCase();
   if (!recipient || !recipient.includes('@')) {
     throw new Error('Destinatario de correo inválido');
@@ -91,9 +95,9 @@ async function sendMail({ to, subject, html, messageId, inReplyTo, references })
   if (inReplyTo) headers['In-Reply-To'] = inReplyTo;
   if (references && references.length) headers.References = references.join(' ');
   if (process.env.RESEND_API_KEY) {
-    return sendViaResend({ to: recipient, subject, html, headers });
+    return sendViaResend({ to: recipient, subject, html, headers, cc, replyTo });
   }
-  return sendViaSmtp({ to: recipient, subject, html, messageId, inReplyTo, references });
+  return sendViaSmtp({ to: recipient, subject, html, messageId, inReplyTo, references, cc, replyTo });
 }
 
 async function sendTemplated(to, built) {
@@ -115,6 +119,25 @@ async function sendPasswordResetEmail({ to, resetUrl }) {
 
 async function sendWelcomeEmail({ to, name, businessName, appUrl, trialDays }) {
   return sendTemplated(to, templates.welcomeEmail({ name, businessName, appUrl, trialDays }));
+}
+
+/** A quién le avisamos de lo que pasa en la plataforma: SIGNUP_NOTICE_TO (o DEMO_TO / SUPPORT_EMAIL / el correo de envío) con copia a SIGNUP_NOTICE_CC. */
+function teamRecipients() {
+  const first = (...vals) => vals.map((v) => String(v || '').trim()).find((v) => v.includes('@')) || '';
+  const to = first(process.env.SIGNUP_NOTICE_TO, process.env.DEMO_TO, process.env.SUPPORT_EMAIL, process.env.SMTP_USER);
+  const cc = String(process.env.SIGNUP_NOTICE_CC || process.env.DEMO_CC || '')
+    .split(/[,;]/)
+    .map((v) => v.trim())
+    .filter((v) => v.includes('@') && v.toLowerCase() !== to.toLowerCase());
+  return { to, cc };
+}
+
+async function sendSignupNoticeEmail({ requestedPlan, rows, adminUrl, replyTo }) {
+  const { to, cc } = teamRecipients();
+  if (!to) return { sent: false, reason: 'sin destinatario' };
+  const built = templates.signupNoticeEmail({ requestedPlan, rows, adminUrl });
+  const result = await sendMail({ to, cc, replyTo, subject: built.subject, html: built.html });
+  return { ...result, subject: built.subject };
 }
 
 async function sendPaymentConfirmedEmail(opts) {
@@ -200,6 +223,8 @@ module.exports = {
   sendInviteEmail,
   sendPasswordResetEmail,
   sendWelcomeEmail,
+  sendSignupNoticeEmail,
+  teamRecipients,
   sendPaymentConfirmedEmail,
   sendSubscriptionCancelledEmail,
   sendDailySummaryEmail,

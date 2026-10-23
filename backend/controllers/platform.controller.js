@@ -116,6 +116,8 @@ async function clientCard(tenant, { withUsers = false, pre = null } = {}) {
     isPerpetual: isPerpetual(plan),
     referrerId: tenant.referrerId || null,
     referralCode: tenant.referralCode || '',
+    requestedPlan: tenant.requestedPlan || '',
+    requestedPlanName: PLAN_NAMES[tenant.requestedPlan] || '',
   };
   if (withUsers) card.users = users;
   return card;

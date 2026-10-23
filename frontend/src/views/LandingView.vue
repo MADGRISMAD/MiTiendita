@@ -571,7 +571,7 @@
               <router-link
                 class="btn"
                 :class="p.highlight ? 'amber' : 'blue'"
-                :to="planCtaTo"
+                :to="planLink(p.id)"
               >
                 {{ loggedIn ? "Ver en facturación" : "Empezar gratis" }}
               </router-link>
@@ -768,15 +768,16 @@ const billingInterval = ref("month");
 const loggedIn = computed(() => Boolean(authStore.token));
 const showPerpetual = ref(false);
 const homeRoute = computed(() => homeForRole());
-const planCtaTo = computed(() => {
+/** Botón de cada tarjeta: a Facturación si ya entró; si no, al registro diciendo qué plan quiso probar. */
+function planLink(planId) {
   if (loggedIn.value) {
     return {
       name: "billing",
       query: billingInterval.value === "year" ? { interval: "year" } : undefined,
     };
   }
-  return "/register";
-});
+  return planId ? { path: "/register", query: { plan: planId } } : "/register";
+}
 
 /** Pseudo-aleatorio estable: las partículas quedan en el mismo lugar en cada render. */
 function seeded(i, n) {

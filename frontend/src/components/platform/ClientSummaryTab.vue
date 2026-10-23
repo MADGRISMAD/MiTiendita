@@ -99,6 +99,10 @@
       </div>
     </section>
 
+    <p v-if="detail.requestedPlanName && detail.requestedPlan !== detail.plan" class="adm-banner info" role="note">
+      Al registrarse pidió probar el plan <strong>{{ detail.requestedPlanName }}</strong>; su prueba empezó en {{ detail.planName }}. Si quieres darle ese plan, cámbialo en la pestaña Licencia.
+    </p>
+
     <p v-if="detail.billingStatus === 'suspended' && detail.suspendedReason" class="adm-banner err">
       Suspendida: {{ detail.suspendedReason }}
     </p>

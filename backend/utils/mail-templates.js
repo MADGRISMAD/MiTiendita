@@ -230,6 +230,25 @@ function welcomeEmail({ name, businessName, appUrl, trialDays }) {
   };
 }
 
+/** Aviso interno al equipo: alguien creó una cuenta (el plan que pidió, para activarlo si hace falta). */
+function signupNoticeEmail({ requestedPlan, rows, adminUrl }) {
+  const asked = requestedPlan || 'Ninguno (Probar gratis)';
+  const shop = (rows.find((r) => r.label === 'Tienda') || {}).value;
+  return {
+    subject: `Nuevo registro · plan solicitado: ${asked}${shop ? ` · ${String(shop).trim()}` : ''}`,
+    html: renderMachote({
+      eyebrow: 'Equipo',
+      title: 'Nuevo registro desde el sitio',
+      body: [
+        dataBox([{ label: 'Plan solicitado', value: asked }, ...rows]),
+        paragraph('Si pidió otro plan, actívalo desde Plataforma → Clientes → Licencia. Si respondes este correo, le escribes a la persona.'),
+        cta(adminUrl, 'Ver en la plataforma'),
+      ].join(''),
+      footerNote: 'Aviso automático de Mi Tiendita al equipo.',
+    }),
+  };
+}
+
 function paymentConfirmedEmail({ businessName, planName, interval, amount, periodEnd, appUrl }) {
   const period = interval === 'year' ? 'anual' : 'mensual';
   return {
@@ -542,6 +561,7 @@ module.exports = {
   invoiceCustomerEmail,
   invoiceStoreEmail,
   welcomeEmail,
+  signupNoticeEmail,
   paymentConfirmedEmail,
   paymentFailedEmail,
   subscriptionCancelledEmail,

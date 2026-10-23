@@ -7,6 +7,7 @@ const { createTenantDoc, newResetToken, ROLES, TRIAL_DAYS, isPartnerRole, isOuts
 const {
   sendPasswordResetEmail,
   sendWelcomeEmail,
+  sendSignupNoticeEmail,
   hasSmtpConfig,
   safeSend,
 } = require('../utils/mail.utils');
@@ -16,6 +17,7 @@ const sessions = require('../services/session.service');
 const totp = require('../utils/totp');
 const secretBox = require('../utils/secret-box');
 const referrals = require('../services/referral.service');
+const { planName } = require('../services/plan-limits.service');
 
 const MAX_FAILED_LOGINS = 5;
 const LOCK_MS = 15 * 60 * 1000;
@@ -135,9 +137,12 @@ const CreateUser = async (req, res) => {
       throw err;
     }
     delete value.referralCode;
+    const requestedPlan = value.requestedPlan || '';
+    delete value.requestedPlan;
 
     const tenant = await db.CreateTenant({
       ...createTenantDoc(value.businessName || `${value.name} ${value.lastName}`),
+      ...(requestedPlan ? { requestedPlan } : {}),
       ...(referrer ? referrals.referralFields(referrer) : {}),
     });
     const tenantId = tenant.id;
@@ -182,6 +187,23 @@ const CreateUser = async (req, res) => {
     const session = await sessions.startSession(req, res, created);
 
     const appUrl = resolveAppUrl(req);
+    // Aviso al equipo de que alguien se registró (con el plan que pidió, para activarlo si hace falta)
+    safeSend(() =>
+      sendSignupNoticeEmail({
+        requestedPlan: requestedPlan ? planName(requestedPlan) : '',
+        rows: [
+          { label: 'Plan activado', value: `Básico (prueba de ${TRIAL_DAYS} días)` },
+          { label: 'Nombre', value: `${value.name} ${value.lastName}`.trim() },
+          { label: 'Tienda', value: tenant.name },
+          { label: 'Correo', value: value.email },
+          { label: 'Celular', value: value.cellphone },
+          { label: 'Usuario', value: value.username },
+          { label: 'Vendedor', value: referrer ? `${referrer.name} (${referrer.code})` : '' },
+        ],
+        adminUrl: `${appUrl}/platform/clientes/${tenantId}`,
+        replyTo: value.email,
+      })
+    ).catch(() => {});
     safeSend(() =>
       sendWelcomeEmail({
         to: value.email,

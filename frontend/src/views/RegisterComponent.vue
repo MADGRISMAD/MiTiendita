@@ -15,7 +15,7 @@
     <template v-else>
     <header class="auth-head">
       <h1>{{ isPartner ? "Sé proveedor oficial" : "Crea tu tienda" }}</h1>
-      <p v-if="isPartner">Vende Mi Tiendita en tu zona y gana del 10% al 20% de cada cobro de las tiendas que traigas.</p>
+      <p v-if="isPartner">Vende Mi Tiendita en tu zona y gana del 15% al 25% de cada cobro de las tiendas que traigas.</p>
       <p v-else>3 días gratis. Toma menos de un minuto y puedes cobrar hoy mismo.</p>
     </header>
 
@@ -290,6 +290,7 @@ export default {
       partnerSent: false,
       businessName: "",
       referralCode: "",
+      requestedPlan: "",
       referralState: "",
       referralSeller: "",
       firstName: "",
@@ -310,6 +311,9 @@ export default {
     };
   },
   mounted() {
+    // La tarjeta de plan de la página manda ?plan=: se avisa al equipo qué quiso probar (la prueba siempre empieza en Básico)
+    const asked = String(this.$route?.query?.plan || "");
+    if (["basic", "growth", "pro"].includes(asked)) this.requestedPlan = asked;
     if (["proveedor", "partner"].includes(String(this.$route?.query?.tipo || ""))) this.kind = "partner";
     // El enlace de un vendedor (?ref=MT-XXXXXX) se recuerda por si el cliente antes recorre la página
     let code = String(this.$route?.query?.ref || "");
@@ -466,6 +470,7 @@ export default {
         }
         if (this.businessName.trim()) payload.businessName = this.businessName.trim();
         if (this.referralCode.trim()) payload.referralCode = this.referralCode.trim();
+        if (this.requestedPlan) payload.requestedPlan = this.requestedPlan;
         const res = await apiService.register(payload);
         try {
           localStorage.removeItem("mt_ref");
