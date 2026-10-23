@@ -30,9 +30,13 @@
         </div>
         <label class="adm-field">
           <span>Contraseña inicial</span>
-          <input v-model="form.password" class="adm-inp" type="password" required :minlength="MIN_PASSWORD" autocomplete="new-password" />
+          <input v-model="form.password" class="adm-inp" :type="showPass ? 'text' : 'password'" required :minlength="MIN_PASSWORD" autocomplete="new-password" />
           <em>Mínimo {{ MIN_PASSWORD }} caracteres; una frase sirve. Compártela por un medio seguro.</em>
         </label>
+        <div class="pf-pass-tools">
+          <button type="button" class="adm-btn sm" @click="generate">Generar una contraseña</button>
+          <button type="button" class="adm-btn sm" @click="showPass = !showPass">{{ showPass ? "Ocultar" : "Ver" }}</button>
+        </div>
         <p class="adm-hint">
           <strong>Asesor</strong> ve y atiende las tiendas. <strong>Dueño</strong> además ve las comisiones, reparte tiendas y maneja al equipo.
         </p>
@@ -55,10 +59,31 @@ const props = defineProps({
   title: { type: String, default: "Nueva persona del equipo" },
   defaultRole: { type: String, default: "partner_staff" },
   save: { type: Function, required: true },
+  // Datos que ya se tienen de la persona (por ejemplo, los del vendedor): { name, email, phone }
+  prefill: { type: Object, default: null },
 });
 const emit = defineEmits(["close", "created"]);
 
-const form = reactive({ name: "", lastName: "", email: "", cellphone: "", username: "", password: "", role: props.defaultRole });
+const known = props.prefill || {};
+const parts = String(known.name || "").trim().split(/\s+/).filter(Boolean);
+const form = reactive({
+  name: parts[0] || "",
+  lastName: parts.slice(1).join(" "),
+  email: known.email || "",
+  cellphone: String(known.phone || "").replace(/\D/g, "").slice(-10),
+  // El usuario se sugiere con el correo; se puede cambiar
+  username: String(known.email || "").split("@")[0].toLowerCase().replace(/[^a-z0-9._-]/g, "").slice(0, 40),
+  password: "",
+  role: props.defaultRole,
+});
+const showPass = ref(false);
+function generate() {
+  const letters = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const bytes = new Uint32Array(14);
+  crypto.getRandomValues(bytes);
+  form.password = Array.from(bytes, (n) => letters[n % letters.length]).join("");
+  showPass.value = true;
+}
 const saving = ref(false);
 const error = ref("");
 

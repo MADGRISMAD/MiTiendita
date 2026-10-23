@@ -33,6 +33,7 @@
       v-if="showNew"
       :title="`Acceso para el equipo de ${firstName}`"
       default-role="partner_admin"
+      :prefill="team.length ? null : { name: detail.name, email: detail.email, phone: detail.phone }"
       :save="(payload) => apiService.platformCreateReferrerUser(detail.id, payload)"
       @close="showNew = false"
       @created="created"
