@@ -20,6 +20,9 @@ dist
 tmp-mail-preview
 .DS_Store
 
+# Claude vault (local, no versionar)
+.claude/vault/
+
 # Local Netlify folder
 .netlify
 .vercel
