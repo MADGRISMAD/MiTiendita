@@ -323,6 +323,45 @@ async function searchFoods(req, res) {
   }
 }
 
+async function deleteFoodsBulk(req, res) {
+  try {
+    const ids = req.body?.ids;
+    if (!Array.isArray(ids) || !ids.length) return res.status(400).send('ids es requerido (array de IDs)');
+    if (ids.length > 500) return res.status(400).send('Máximo 500 productos por envío');
+    const result = await db.DeleteFoodsByIds(ids, req.tenantId);
+    await logCatalog({
+      tenantId: req.tenantId,
+      type: 'catalog_bulk_delete',
+      message: `Se eliminaron ${result.deletedCount} productos`,
+      meta: { count: result.deletedCount },
+      user: req.user?.username,
+      createdAt: new Date(),
+    });
+    return res.status(200).json({ deleted: result.deletedCount });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).send(err.message || 'Error al eliminar productos');
+  }
+}
+
+async function deleteAllFoods(req, res) {
+  try {
+    const result = await db.DeleteAllFoods(req.tenantId);
+    await logCatalog({
+      tenantId: req.tenantId,
+      type: 'catalog_wipe',
+      message: `Se eliminaron todos los productos (${result.deletedCount}) y sus categorías`,
+      meta: { count: result.deletedCount },
+      user: req.user?.username,
+      createdAt: new Date(),
+    });
+    return res.status(200).json({ deleted: result.deletedCount });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).send(err.message || 'Error al eliminar productos');
+  }
+}
+
 module.exports = {
   listMenus,
   getMenu,
@@ -336,6 +375,8 @@ module.exports = {
   createFood,
   updateFood,
   deleteFood,
+  deleteFoodsBulk,
+  deleteAllFoods,
   lowStockFoods,
   searchFoods,
 };

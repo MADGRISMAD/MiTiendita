@@ -250,6 +250,12 @@ export const apiService = {
   deleteFood(foodId: string) {
     return axios.delete(`/foods/${foodId}`).then((r) => r.status === 200);
   },
+  deleteFoodsBulk(ids: string[]) {
+    return axios.delete('/foods/bulk', { data: { ids } }).then((r) => r.data);
+  },
+  deleteAllFoods() {
+    return axios.delete('/foods/all').then((r) => r.data);
+  },
 
   getAllMenus() {
     return axios.get('/menus').then((r) => r.data);

@@ -16,6 +16,8 @@ router.get('/search', requireAuth, requireActiveSubscription, readRoles, menus.s
 router.get('/:id', requireAuth, requireActiveSubscription, readRoles, menus.getFood);
 router.post('/', requireAuth, requireActiveSubscription, writeRoles, menus.createFood);
 router.put('/prices/bulk', requireAuth, requireActiveSubscription, writeRoles, menus.bulkPrices);
+router.delete('/bulk', requireAuth, requireActiveSubscription, writeRoles, menus.deleteFoodsBulk);
+router.delete('/all', requireAuth, requireActiveSubscription, writeRoles, menus.deleteAllFoods);
 router.put('/:id', requireAuth, requireActiveSubscription, writeRoles, menus.updateFood);
 router.delete('/:id', requireAuth, requireActiveSubscription, writeRoles, menus.deleteFood);
 

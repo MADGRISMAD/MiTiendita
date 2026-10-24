@@ -122,13 +122,14 @@
           </dl>
         </div>
 
-        <div v-if="hasMasterCatalog" class="seed-check">
+        <label v-if="hasMasterCatalog" class="seed-check">
+          <input type="checkbox" v-model="loadCatalog" />
           <span>
-            <strong>Tu catálogo ya viene con 181 productos</strong>
+            <strong>Cargar catálogo inicial (181 productos)</strong>
             Botanas, pan, refrescos, lácteos, frescos… capturados y sin precio. Al escanear uno o buscarlo en la caja, te pide el precio y lo
-            guarda. El costo lo cargas con tu próxima factura.
+            guarda. Si tu tienda vende otros productos, desactiva esta opción.
           </span>
-        </div>
+        </label>
 
         <p v-if="error" class="error-text">{{ error }}</p>
       </section>
@@ -174,6 +175,7 @@ const router = useRouter();
 const step = ref(1);
 const saving = ref(false);
 const error = ref("");
+const loadCatalog = ref(true);
 const hasMasterCatalog = computed(() => masterCatalogAvailable(form.businessType));
 
 const stepTitles = [
@@ -274,7 +276,8 @@ async function finish() {
   saving.value = true;
   error.value = "";
   try {
-    await saveVenueSettings({ ...form });
+    const skipCatalog = hasMasterCatalog.value && !loadCatalog.value;
+    await saveVenueSettings({ ...form, ...(skipCatalog ? { skipCatalog: true } : {}) });
     router.push("/pos");
   } catch (e) {
     error.value = "No se pudo guardar la configuración. Intenta de nuevo.";

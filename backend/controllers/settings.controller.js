@@ -30,6 +30,8 @@ async function SaveSettings(req, res) {
       return res.status(400).send(error.details.map((d) => d.message).join(', '));
     }
 
+    const skipCatalog = Boolean(req.body?.skipCatalog);
+
     const payload = {
       ...value,
       tenantId: req.tenantId,
@@ -39,22 +41,27 @@ async function SaveSettings(req, res) {
 
     const existing = await db.GetSettings(req.tenantId);
     if (!existing) {
+      if (skipCatalog) payload.masterCatalogSkipped = true;
       payload.createdAt = new Date();
       let created = await db.CreateSettings(payload);
-      try {
-        if (await masterCatalog.syncForGiro(db, req.tenantId, created)) created = await db.GetSettings(req.tenantId);
-      } catch (err) {
-        console.warn('[catálogo maestro]', err.message);
+      if (!skipCatalog) {
+        try {
+          if (await masterCatalog.syncForGiro(db, req.tenantId, created)) created = await db.GetSettings(req.tenantId);
+        } catch (err) {
+          console.warn('[catálogo maestro]', err.message);
+        }
       }
       return res.status(201).send(created);
     }
 
     let updated = await db.UpdateSettings(payload, req.tenantId);
     // El catálogo maestro se carga (o se retira) según el giro que eligió; si falla, lo ajustado igual se guardó
-    try {
-      if (await masterCatalog.syncForGiro(db, req.tenantId, updated)) updated = await db.GetSettings(req.tenantId);
-    } catch (err) {
-      console.warn('[catálogo maestro]', err.message);
+    if (!skipCatalog) {
+      try {
+        if (await masterCatalog.syncForGiro(db, req.tenantId, updated)) updated = await db.GetSettings(req.tenantId);
+      } catch (err) {
+        console.warn('[catálogo maestro]', err.message);
+      }
     }
     return res.status(200).send(updated);
   } catch (error) {

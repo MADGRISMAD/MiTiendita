@@ -331,6 +331,21 @@
               <span><strong>Ir a Inventario</strong><small>Existencias, compras, proveedores y caducidad.</small></span>
               <PosIcon name="chevron" :size="18" />
             </router-link>
+            <section class="adm-card cfg-card danger-zone">
+              <h3>Zona de peligro</h3>
+              <p class="adm-hint">Estas acciones no se pueden deshacer.</p>
+              <button
+                type="button"
+                class="adm-btn danger-ghost"
+                :disabled="wipeBusy"
+                @click="confirmWipeProducts"
+              >
+                {{ wipeBusy ? 'Eliminando…' : 'Eliminar todos los productos y categorías' }}
+              </button>
+              <p v-if="wipeResult" class="adm-banner ok" role="status">
+                <PosIcon name="check" :size="18" /> <span>{{ wipeResult }}</span>
+              </p>
+            </section>
           </template>
 
           <!-- ======= Terminal de cobro (Mercado Pago Point) ======= -->
@@ -1025,6 +1040,23 @@ async function save() {
   }
 }
 
+const wipeBusy = ref(false);
+const wipeResult = ref("");
+async function confirmWipeProducts() {
+  if (!window.confirm("¿Seguro que quieres eliminar TODOS los productos y categorías? Esta acción no se puede deshacer.")) return;
+  if (!window.confirm("Última oportunidad: se borrarán todos los productos, sus existencias, lotes y categorías. ¿Continuar?")) return;
+  wipeBusy.value = true;
+  wipeResult.value = "";
+  try {
+    const { deleted } = await apiService.deleteAllFoods();
+    wipeResult.value = `Se eliminaron ${deleted} productos y todas las categorías.`;
+  } catch (e) {
+    saveErr.value = errText(e, "No se pudieron eliminar los productos.");
+  } finally {
+    wipeBusy.value = false;
+  }
+}
+
 // Reloj de la zona elegida
 const now = ref(new Date());
 let tick = null;
@@ -1414,6 +1446,8 @@ onBeforeUnmount(() => {
 .cfg-sec-head p { margin: 0.1rem 0 0; font-size: 0.86rem; color: var(--timber-muted); }
 .cfg-card { display: grid; gap: 0.85rem; }
 .cfg-card h3 { margin: 0; font-size: 1.02rem; font-weight: 800; }
+.danger-zone { border: 1px solid var(--timber-danger, #b42318); }
+.danger-zone h3 { color: var(--timber-danger, #b42318); }
 .cfg-split { display: grid; gap: 0.75rem; }
 .cfg-col { display: grid; gap: 0.75rem; align-content: start; min-width: 0; }
 .kinds { display: grid; grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr)); gap: 0.4rem; }

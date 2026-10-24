@@ -669,6 +669,25 @@ async function DeleteFood(id, tenantId) {
   return await dbConnection.collection('foods').deleteOne(filter);
 }
 
+async function DeleteFoodsByIds(ids, tenantId) {
+  if (!ids.length || !tenantId) return { deletedCount: 0 };
+  const oids = ids.map((id) => { try { return new ObjectId(id); } catch { return null; } }).filter(Boolean);
+  if (!oids.length) return { deletedCount: 0 };
+  const filter = { _id: { $in: oids }, tenantId: String(tenantId) };
+  await dbConnection.collection('lots').deleteMany({ foodId: { $in: ids.map(String) }, tenantId: String(tenantId) });
+  return dbConnection.collection('foods').deleteMany(filter);
+}
+
+async function DeleteAllFoods(tenantId) {
+  if (!tenantId) return { deletedCount: 0 };
+  const tid = String(tenantId);
+  await dbConnection.collection('lots').deleteMany({ tenantId: tid });
+  const result = await dbConnection.collection('foods').deleteMany({ tenantId: tid });
+  await dbConnection.collection('menus').deleteMany({ tenantId: tid });
+  await dbConnection.collection('settings').updateOne({ tenantId: tid }, { $unset: { masterCatalogVersion: '' } });
+  return result;
+}
+
 /** Productos cuyo stock está por debajo o igual al umbral mínimo. */
 async function GetLowStockFoods(tenantId) {
   const filter = {
@@ -1612,7 +1631,7 @@ module.exports = {
   AddWaiter, GetWaiters, GetWaiterByCellphone, GetWaiterByDisponibility, DeleteWaiter, UpdateWaiter,
   GetSettings, CreateSettings, UpdateSettings,
   GetMenus, GetMenuById, CreateMenu, UpdateMenu, DeleteMenu,
-  GetFoods, CountPlanFoods, CreateFoods, DeleteUnpricedCatalogFoods, DeleteEmptyCatalogMenus, ListSettingsNeedingCatalog, CountPaidOrders, CountCashSessions, GetFoodById, GetFoodByBarcode, CreateFood, UpdateFood, ReserveSaleStock, ConsumeSaleLots, RestoreSaleStock, IncrementFoodStock, DeleteFood, GetLowStockFoods, SearchFoods,
+  GetFoods, CountPlanFoods, CreateFoods, DeleteUnpricedCatalogFoods, DeleteEmptyCatalogMenus, ListSettingsNeedingCatalog, CountPaidOrders, CountCashSessions, GetFoodById, GetFoodByBarcode, CreateFood, UpdateFood, ReserveSaleStock, ConsumeSaleLots, RestoreSaleStock, IncrementFoodStock, DeleteFood, DeleteFoodsByIds, DeleteAllFoods, GetLowStockFoods, SearchFoods,
   AdjustFoodStock, CreateBillingEvent, ListBillingEvents, getCollection, ListUsersByTenants, GetSettingsMany, appState,
   RecordLoginFailure, ClearLoginFailures, FindUserById, BumpUserTokenVersion, CountActiveAdmins, FindUserInTenant,
   CreateSession, FindSessionByHash, RevokeSession, RevokeUserSessions,

@@ -419,8 +419,18 @@
               >
                 <PosIcon name="spark" :size="18" /> Registro mágico
               </button>
-              <button type="button" class="btn primary hide-mobile" @click="openNewFood">
+              <button type="button" class="btn" :class="{ primary: !selectMode }" @click="toggleSelectMode" v-if="pickFoods.length">
+                {{ selectMode ? 'Cancelar selección' : 'Seleccionar' }}
+              </button>
+              <button type="button" class="btn primary hide-mobile" @click="openNewFood" v-if="!selectMode">
                 <PosIcon name="plus" :size="18" /> Nuevo producto
+              </button>
+            </div>
+            <div v-if="selectMode && selectedIds.size" class="select-bar">
+              <span>{{ selectedIds.size }} {{ selectedIds.size === 1 ? 'producto seleccionado' : 'productos seleccionados' }}</span>
+              <button type="button" class="btn" @click="selectAllVisible">Seleccionar todos ({{ catalogRows.length }})</button>
+              <button type="button" class="btn danger-ghost" :disabled="bulkDeleting" @click="bulkDeleteSelected">
+                {{ bulkDeleting ? 'Eliminando…' : 'Eliminar seleccionados' }}
               </button>
             </div>
           </header>
@@ -522,7 +532,8 @@
 
               <div class="cat-list">
                 <div v-if="catalogRows.length" class="m-rows only-mobile">
-                  <button v-for="p in visibleRows" :key="p.id" type="button" class="m-row" @click="editFood(p)">
+                  <button v-for="p in visibleRows" :key="p.id" type="button" class="m-row" @click="selectMode ? toggleSelect(p.id) : editFood(p)">
+                    <input v-if="selectMode" type="checkbox" :checked="selectedIds.has(p.id)" class="m-row-chk" @click.stop @change="toggleSelect(p.id)" />
                     <span class="avatar" :style="{ '--hue': hueOf(p.menuId) }">
                       <img v-if="hasImg(p)" :src="p.imgUrl" alt="" loading="lazy" @error="brokenImgs.add(p.id)" />
                       <template v-else>{{ initial(p.name) }}</template>
@@ -545,6 +556,7 @@
                 <table v-if="viewMode === 'list' && catalogRows.length" class="cat-table hide-mobile">
                   <thead>
                     <tr>
+                      <th v-if="selectMode" class="chk-col"><input type="checkbox" :checked="allVisibleSelected" @change="toggleAllVisible" aria-label="Seleccionar todos" /></th>
                       <th>Producto</th>
                       <th class="hide-mobile">Código</th>
                       <th class="only-pc">Categoría</th>
@@ -555,7 +567,8 @@
                     </tr>
                   </thead>
                   <tbody>
-                    <tr v-for="p in visibleRows" :key="p.id" @click="editFood(p)">
+                    <tr v-for="p in visibleRows" :key="p.id" @click="selectMode ? toggleSelect(p.id) : editFood(p)">
+                      <td v-if="selectMode" class="chk-col" @click.stop><input type="checkbox" :checked="selectedIds.has(p.id)" @change="toggleSelect(p.id)" /></td>
                       <td>
                         <div class="cell-prod">
                           <span class="avatar sm" :style="{ '--hue': hueOf(p.menuId) }">
@@ -1789,6 +1802,48 @@ export default {
     const statusFilter = ref("all");
     const sortBy = ref("name");
     const catLimit = ref(150);
+
+    const selectMode = ref(false);
+    const selectedIds = ref(new Set());
+    const bulkDeleting = ref(false);
+    function toggleSelectMode() {
+      selectMode.value = !selectMode.value;
+      selectedIds.value = new Set();
+    }
+    function toggleSelect(id) {
+      const s = new Set(selectedIds.value);
+      if (s.has(id)) s.delete(id); else s.add(id);
+      selectedIds.value = s;
+    }
+    const allVisibleSelected = computed(() => visibleRows.value.length > 0 && visibleRows.value.every((p) => selectedIds.value.has(p.id)));
+    function toggleAllVisible() {
+      if (allVisibleSelected.value) {
+        selectedIds.value = new Set();
+      } else {
+        selectedIds.value = new Set(visibleRows.value.map((p) => p.id));
+      }
+    }
+    function selectAllVisible() {
+      selectedIds.value = new Set(catalogRows.value.map((p) => p.id));
+    }
+    async function bulkDeleteSelected() {
+      const count = selectedIds.value.size;
+      if (!count) return;
+      if (!window.confirm(`¿Eliminar ${count} ${count === 1 ? 'producto' : 'productos'}? Esta acción no se puede deshacer.`)) return;
+      bulkDeleting.value = true;
+      try {
+        await apiService.deleteFoodsBulk([...selectedIds.value]);
+        const gone = selectedIds.value;
+        productos.value = productos.value.filter((p) => !gone.has(p.id));
+        pickFoods.value = pickFoods.value.filter((p) => !gone.has(p.id));
+        selectedIds.value = new Set();
+        selectMode.value = false;
+      } catch (e) {
+        window.alert("No se pudieron eliminar los productos. Inténtalo de nuevo.");
+      } finally {
+        bulkDeleting.value = false;
+      }
+    }
     const showCats = ref(false);
     const catDrafts = reactive({});
     const menuToDelete = ref(null);
@@ -4518,6 +4573,15 @@ export default {
       editFood,
       closeFoodForm,
       deleteFood,
+      // Selección múltiple
+      selectMode,
+      selectedIds,
+      bulkDeleting,
+      toggleSelectMode,
+      toggleSelect,
+      allVisibleSelected,
+      toggleAllVisible,
+      bulkDeleteSelected,
       // Venta: buscador y catálogo
       scanInput,
       scanCode,
@@ -6799,6 +6863,7 @@ html[data-theme="dark"] .avatar {
   padding: 0.6rem;
 }
 .m-row {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 0.7rem;
@@ -7354,5 +7419,23 @@ html[data-theme="dark"] .avatar {
 .point-box span { color: var(--timber-ink); }
 .point-acts { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.25rem; }
 .point-acts .btn { min-height: 2.6rem; font-size: 0.88rem; }
+
+/* Multi-select */
+.select-bar {
+  display: flex; align-items: center; gap: 1rem;
+  padding: 0.6rem 1rem; margin-bottom: 0.5rem;
+  background: var(--timber-surface, #f5f5f5); border-radius: 8px;
+}
+.select-bar span { font-weight: 600; }
+.chk-col { width: 2.5rem; text-align: center; }
+.chk-col input[type="checkbox"] { width: 1.1rem; height: 1.1rem; cursor: pointer; }
+.m-row-chk { position: absolute; top: 0.6rem; right: 0.6rem; }
+.m-row-chk input[type="checkbox"] { width: 1.2rem; height: 1.2rem; cursor: pointer; }
+.danger-ghost {
+  background: none; border: 1px solid var(--timber-danger, #b42318);
+  color: var(--timber-danger, #b42318); cursor: pointer; border-radius: 6px;
+  padding: 0.4rem 1rem; font-weight: 600;
+}
+.danger-ghost:disabled { opacity: 0.5; cursor: not-allowed; }
 
 </style>
