@@ -99,6 +99,16 @@
             <p v-if="shown.phone" id="reg-phone-err" class="auth-err">{{ shown.phone }}</p>
           </div>
         </div>
+        <div v-if="!isPartner" class="auth-field">
+          <label for="reg-plan">¿Qué plan quieres probar?</label>
+          <select id="reg-plan" v-model="requestedPlan" class="auth-input">
+            <option value="">Todavía no sé</option>
+            <option value="basic">Básico</option>
+            <option value="growth">Crecimiento</option>
+            <option value="pro">Pro</option>
+          </select>
+          <p class="auth-note">La prueba empieza en el plan Básico; si pides otro, lo vemos contigo al arrancar.</p>
+        </div>
         <div v-if="isPartner" class="auth-row">
           <div class="auth-field">
             <label for="reg-state">Estado</label>
