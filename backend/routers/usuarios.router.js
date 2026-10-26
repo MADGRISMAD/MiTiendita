@@ -6,6 +6,7 @@ const { requireAuth } = require('../middleware/auth.middleware');
 const { limits } = require('../services/rate-limit.service');
 
 router.post('/register', limits.register(), upload.none(), userController.CreateUser);
+router.post('/register/code', limits.emailCode(), userController.SendEmailCode);
 router.post('/register-partner', limits.register(), userController.ApplyPartner);
 router.get('/referral/:code', limits.referral(), userController.CheckReferralCode);
 router.post('/login', limits.login(), upload.none(), userController.LoginUsuario);

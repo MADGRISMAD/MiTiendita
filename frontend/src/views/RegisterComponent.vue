@@ -247,9 +247,31 @@
       </label>
       <p v-if="shown.terms" class="auth-err">{{ shown.terms }}</p>
 
+      <div v-if="codeStep" class="auth-field">
+        <label for="reg-code">Código de verificación</label>
+        <input
+          id="reg-code"
+          ref="codeInput"
+          v-model="emailCode"
+          class="auth-input auth-code"
+          type="text"
+          inputmode="numeric"
+          autocomplete="one-time-code"
+          maxlength="6"
+          placeholder="000000"
+        />
+        <p class="auth-note">
+          Te enviamos un código de 6 dígitos a <strong>{{ email }}</strong>. Revisa también spam.
+          <button type="button" class="auth-link-btn" :disabled="resendIn > 0 || loading" @click="resendCode">
+            {{ resendIn > 0 ? `Reenviar en ${resendIn} s` : 'Reenviar código' }}
+          </button>
+        </p>
+      </div>
+
       <button type="submit" class="auth-btn" :disabled="loading">
         <span v-if="loading" class="auth-spin" aria-hidden="true"></span>
-        <template v-if="isPartner">{{ loading ? 'Enviando…' : 'Enviar mi solicitud' }}</template>
+        <template v-if="codeStep">{{ loading ? 'Verificando…' : isPartner ? 'Verificar y enviar mi solicitud' : 'Verificar y crear mi tienda' }}</template>
+        <template v-else-if="isPartner">{{ loading ? 'Enviando…' : 'Enviar mi solicitud' }}</template>
         <template v-else>{{ loading ? 'Creando tu tienda…' : 'Crear mi tienda' }}</template>
       </button>
     </form>
@@ -318,6 +340,10 @@ export default {
       serverErrors: {},
       serverError: "",
       loading: false,
+      codeStep: false,
+      emailCode: "",
+      resendIn: 0,
+      resendTimer: null,
     };
   },
   mounted() {
@@ -340,6 +366,7 @@ export default {
   },
   beforeUnmount() {
     clearTimeout(this.referralTimer);
+    clearInterval(this.resendTimer);
   },
   computed: {
     isPartner() {
@@ -390,6 +417,7 @@ export default {
   watch: {
     email(value) {
       delete this.serverErrors.email;
+      this.codeStep = false; // otro correo: se pide un código nuevo
       // Sugiere el usuario a partir del correo mientras no lo hayan escrito
       if (!this.usernameEdited) this.username = this.cleanUsername(String(value).split("@")[0]);
     },
@@ -455,6 +483,40 @@ export default {
       if (/"cellphone"/.test(msg)) return { field: "phone", text: "El celular debe tener 10 dígitos." };
       return { field: "", text: msg || "No se pudo crear la cuenta. Inténtalo de nuevo." };
     },
+    startResendWait() {
+      clearInterval(this.resendTimer);
+      this.resendIn = 60;
+      this.resendTimer = setInterval(() => {
+        this.resendIn -= 1;
+        if (this.resendIn <= 0) clearInterval(this.resendTimer);
+      }, 1000);
+    },
+    /** Manda el código al correo. true = hay que escribirlo; false = el servidor no lo pide. */
+    async requestCode() {
+      const res = await apiService.sendEmailCode(this.email.toLowerCase());
+      if (res?.required === false) return false;
+      this.codeStep = true;
+      this.emailCode = "";
+      this.startResendWait();
+      this.$nextTick(() => this.$refs.codeInput?.focus());
+      return true;
+    },
+    async resendCode() {
+      this.serverError = "";
+      this.loading = true;
+      try {
+        await this.requestCode();
+      } catch (e) {
+        this.serverError = this.errorText(e);
+      } finally {
+        this.loading = false;
+      }
+    },
+    errorText(e) {
+      if (isNetworkError(e)) return "No hay conexión con el servidor. Revisa tu internet e inténtalo de nuevo.";
+      const data = e.response?.data;
+      return typeof data === "string" && data ? data : "No pudimos enviar el código. Inténtalo de nuevo.";
+    },
     async register() {
       this.submitted = true;
       this.serverError = "";
@@ -464,6 +526,13 @@ export default {
       }
       this.loading = true;
       try {
+        // Primero se verifica el correo: el código llega por mail y la cuenta solo se crea con él
+        if (!this.codeStep && (await this.requestCode())) return;
+        if (this.codeStep && this.emailCode.replace(/\D/g, "").length !== 6) {
+          this.serverError = "Escribe el código de 6 dígitos que te enviamos al correo.";
+          this.$refs.codeInput?.focus();
+          return;
+        }
         const payload = {
           name: this.firstName.trim(),
           lastName: this.lastName.trim(),
@@ -471,6 +540,7 @@ export default {
           username: this.username,
           password: this.password,
           cellphone: this.phone,
+          ...(this.codeStep ? { emailCode: this.emailCode.replace(/\D/g, "") } : {}),
         };
         if (this.isPartner) {
           await apiService.registerPartner({ ...payload, state: this.partnerState.trim(), city: this.partnerCity.trim() });
@@ -504,6 +574,7 @@ export default {
         }
         const data = e.response?.data;
         const { field, text } = this.mapServerError(typeof data === "string" ? data : data?.message);
+        if (field === "email" || field === "username") this.codeStep = false; // hay que corregir un dato y se pide código otra vez
         if (field) {
           this.serverErrors = { ...this.serverErrors, [field]: text };
           this.$nextTick(() => this.focusFirstError());

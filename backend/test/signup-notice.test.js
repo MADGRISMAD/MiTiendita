@@ -8,6 +8,8 @@ const stub = (rel, exports) => {
   require.cache[file] = { id: file, filename: file, loaded: true, exports };
 };
 
+process.env.SIGNUP_VERIFY = 'off'; // la verificación del correo se prueba en email-verification.test.js
+
 function load({ referrer = null } = {}) {
   const sent = { notices: [], tenants: [], users: [] };
   stub('database/mongodb.js', {
@@ -86,5 +88,19 @@ test('los destinatarios salen de SIGNUP_NOTICE_TO/CC (o DEMO_TO/DEMO_CC) y la co
   } finally {
     for (const k of Object.keys(process.env)) if (!(k in keep)) delete process.env[k];
     Object.assign(process.env, keep);
+  }
+});
+
+test('con la verificación activa, sin código del correo no se crea ni la tienda ni la cuenta', async () => {
+  delete process.env.SIGNUP_VERIFY;
+  try {
+    const { controller, sent } = load();
+    const r = res();
+    await controller.CreateUser({ body: body(), headers: {}, protocol: 'https', get: () => 'mitiendita.test', ip: '1.1.1.1' }, r);
+    assert.equal(r.code, 400);
+    assert.match(r.body, /código/i);
+    assert.equal(sent.tenants.length + sent.users.length, 0);
+  } finally {
+    process.env.SIGNUP_VERIFY = 'off';
   }
 });

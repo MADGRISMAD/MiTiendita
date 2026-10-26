@@ -117,6 +117,10 @@ async function sendPasswordResetEmail({ to, resetUrl }) {
   return { ...result, resetUrl };
 }
 
+async function sendVerificationEmail({ to, code }) {
+  return sendTemplated(to, templates.verificationCodeEmail({ code }));
+}
+
 async function sendWelcomeEmail({ to, name, businessName, appUrl, trialDays }) {
   return sendTemplated(to, templates.welcomeEmail({ name, businessName, appUrl, trialDays }));
 }
@@ -222,6 +226,7 @@ module.exports = {
   sendMail,
   sendInviteEmail,
   sendPasswordResetEmail,
+  sendVerificationEmail,
   sendWelcomeEmail,
   sendSignupNoticeEmail,
   teamRecipients,

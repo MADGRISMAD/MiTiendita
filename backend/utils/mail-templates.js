@@ -155,6 +155,21 @@ function passwordResetEmail({ resetUrl }) {
   };
 }
 
+function verificationCodeEmail({ code }) {
+  return {
+    subject: `${code} es tu código de verificación — Mi Tiendita`,
+    html: renderMachote({
+      eyebrow: 'Seguridad',
+      title: 'Verifica tu correo',
+      body: [
+        paragraph('Usa este código para terminar de crear tu cuenta en Mi Tiendita:'),
+        `<p style="margin:16px 0;font-size:34px;font-weight:800;letter-spacing:8px;text-align:center;color:${BRAND.ink}">${code}</p>`,
+      ].join(''),
+      footerNote: 'El código vence en 10 minutos. Si no fuiste tú, ignora este correo; no se creó ninguna cuenta.',
+    }),
+  };
+}
+
 function invoiceCustomerEmail({ storeName, folio, total, rfc, email }) {
   return {
     subject: `Solicitud de factura ${folio} — ${storeName}`,
@@ -558,6 +573,7 @@ module.exports = {
   dataBox,
   inviteEmail,
   passwordResetEmail,
+  verificationCodeEmail,
   invoiceCustomerEmail,
   invoiceStoreEmail,
   welcomeEmail,

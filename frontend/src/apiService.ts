@@ -80,7 +80,7 @@ axios.interceptors.request.use((config) => {
 });
 
 // Rutas de login/registro: un 401 ahí es «datos incorrectos», no «sesión vencida»
-const AUTH_PATHS = /\/usuarios\/(login|login\/mfa|refresh|logout|register|forgot-password|reset-password|mfa\/setup|mfa\/enable)\/?$/;
+const AUTH_PATHS = /\/usuarios\/(login|login\/mfa|refresh|logout|register|register\/code|forgot-password|reset-password|mfa\/setup|mfa\/enable)\/?$/;
 const PUBLIC_PAGES = /^\/($|login|register|invite|forgot|reset|factura)/;
 
 let refreshing: Promise<boolean> | null = null;
@@ -192,6 +192,9 @@ export const apiService = {
   },
   registerPartner(payload: Record<string, unknown>) {
     return axios.post('/usuarios/register-partner', payload).then((r) => r.data);
+  },
+  sendEmailCode(email: string) {
+    return axios.post('/usuarios/register/code', { email }).then((r) => r.data);
   },
   register(payload: Record<string, unknown>) {
     return axios.post('/usuarios/register', payload).then((r) => r.data);

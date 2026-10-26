@@ -17,6 +17,7 @@ const sessions = require('../services/session.service');
 const totp = require('../utils/totp');
 const secretBox = require('../utils/secret-box');
 const referrals = require('../services/referral.service');
+const emailVerification = require('../services/email-verification.service');
 const { planName } = require('../services/plan-limits.service');
 
 const MAX_FAILED_LOGINS = 5;
@@ -66,11 +67,29 @@ const CheckReferralCode = async (req, res) => {
   }
 };
 
+/** Registro, paso 1: manda al correo un código de 6 dígitos. Si el servidor no puede mandar correos, avisa que no hace falta. */
+const SendEmailCode = async (req, res) => {
+  try {
+    if (!emailVerification.required()) return res.status(200).json({ ok: true, required: false });
+    const email = String(req.body?.email || '').trim().toLowerCase();
+    if (email && (await service.FindUserByEmail(email))) {
+      return res.status(400).send('Usuario con el correo ya registrado');
+    }
+    await emailVerification.send(email);
+    return res.status(200).json({ ok: true, required: true });
+  } catch (err) {
+    if (err.status) return res.status(err.status).send(err.message);
+    console.error(err);
+    return res.status(500).send('No pudimos enviar el código. Inténtalo de nuevo.');
+  }
+};
+
 /** Solicitud pública para ser proveedor oficial (socio). Queda en revisión. */
 const ApplyPartner = async (req, res) => {
   const partners = require('../services/partner.service');
   try {
     const body = req.body || {};
+    await emailVerification.consume(body.email, body.emailCode);
     const { partner, user } = await partners.apply({
       name: body.name,
       lastName: body.lastName,
@@ -139,6 +158,8 @@ const CreateUser = async (req, res) => {
     delete value.referralCode;
     const requestedPlan = value.requestedPlan || '';
     delete value.requestedPlan;
+    await emailVerification.consume(value.email, value.emailCode);
+    delete value.emailCode;
 
     const tenant = await db.CreateTenant({
       ...createTenantDoc(value.businessName || `${value.name} ${value.lastName}`),
@@ -219,6 +240,7 @@ const CreateUser = async (req, res) => {
       ...session,
     });
   } catch (error) {
+    if (error.status) return res.status(error.status).send(error.message);
     return res.status(500).send(error.message);
   }
 };
@@ -510,6 +532,7 @@ const ChangePassword = async (req, res) => {
 
 module.exports = {
   CreateUser,
+  SendEmailCode,
   ApplyPartner,
   CheckReferralCode,
   LoginUsuario,

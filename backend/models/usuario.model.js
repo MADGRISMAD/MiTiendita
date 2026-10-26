@@ -16,6 +16,7 @@ const userSchema = Joi.object({
   referralCode: Joi.string().max(20).optional().allow(''),
   // Plan que la persona quiso probar (viene de la tarjeta de la página); la prueba siempre arranca en Básico
   requestedPlan: Joi.string().valid('basic', 'growth', 'pro').optional().allow(''),
+  emailCode: Joi.string().max(12).optional().allow(''),
 });
 
 module.exports = userSchema;

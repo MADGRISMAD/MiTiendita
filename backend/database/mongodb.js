@@ -80,6 +80,8 @@ async function ensureIndexes() {
   }
   // Los trabajos de impresión no se guardan más de 3 días
   await dbConnection.collection('print_jobs').createIndex({ createdAt: 1 }, { expireAfterSeconds: 3 * 24 * 60 * 60 }).catch(() => {});
+  // Códigos de verificación de correo del registro: se borran solos al vencer
+  await dbConnection.collection('email_codes').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }).catch(() => {});
   // Un mismo cobro de Mercado Pago no se registra dos veces
   await dbConnection
     .collection('billing_events')
@@ -1564,6 +1566,19 @@ async function GetExchanges(tenantId, opts = {}) {
 }
 
 // ── Catálogos maestros por giro (los edita la plataforma) ──
+async function GetEmailCode(email) {
+  return dbConnection.collection('email_codes').findOne({ email });
+}
+async function SaveEmailCode(email, fields) {
+  await dbConnection.collection('email_codes').updateOne({ email }, { $set: fields }, { upsert: true });
+}
+async function BumpEmailCodeTries(email) {
+  const doc = await dbConnection.collection('email_codes').findOneAndUpdate({ email }, { $inc: { tries: 1 } }, { returnDocument: 'after' });
+  return doc?.tries ?? doc?.value?.tries ?? 0;
+}
+async function DeleteEmailCode(email) {
+  await dbConnection.collection('email_codes').deleteOne({ email });
+}
 async function ListCatalogItems(catalog) {
   const rows = await dbConnection.collection('master_catalog_items').find({ catalog }).sort({ section: 1, name: 1 }).toArray();
   return rows.map(withId);
@@ -1689,6 +1704,7 @@ module.exports = {
   GetFoodsBySupplier, UnlinkSupplierFromFoods,
   CreatePurchase, GetPurchases, GetPurchaseById,
   CreateLot, GetLotsByFood, GetExpiringLots, TakeFromLot, CreateExchange, GetExchanges,
+  GetEmailCode, SaveEmailCode, BumpEmailCodeTries, DeleteEmailCode,
   ListCatalogItems, CountCatalogItems, GetCatalogItem, InsertCatalogItems, UpsertCatalogItem, DeleteCatalogItem, IsCatalogSeeded, MarkCatalogSeeded,
   CreatePlatformAudit, ListPlatformAudit, CreateActivityLog, GetActivityLog, GetPaidItemQtySince,
 };
