@@ -253,6 +253,16 @@ export const apiService = {
   deleteFoodsBulk(ids: string[]) {
     return axios.delete('/foods/bulk', { data: { ids } }).then((r) => r.data);
   },
+  /** Catálogo inicial de abarrotes (Ajustes → Inventario). */
+  catalogStatus() {
+    return axios.get('/settings/catalog').then((r) => r.data);
+  },
+  catalogLoad() {
+    return axios.post('/settings/catalog/load').then((r) => r.data);
+  },
+  catalogRemove() {
+    return axios.post('/settings/catalog/remove').then((r) => r.data);
+  },
   deleteAllFoods() {
     return axios.delete('/foods/all').then((r) => r.data);
   },

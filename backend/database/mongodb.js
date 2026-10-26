@@ -535,6 +535,7 @@ async function ListSettingsNeedingCatalog(giros, version) {
     .find({
       setupCompleted: true,
       masterCatalogVersion: { $ne: version },
+      masterCatalogSkipped: { $ne: true },
       $or: [{ businessType: { $in: giros } }, { businessType: { $exists: false } }],
     })
     .toArray();
@@ -686,7 +687,8 @@ async function DeleteAllFoods(tenantId) {
   await dbConnection.collection('lots').deleteMany({ tenantId: tid });
   const result = await dbConnection.collection('foods').deleteMany({ tenantId: tid });
   await dbConnection.collection('menus').deleteMany({ tenantId: tid });
-  await dbConnection.collection('settings').updateOne({ tenantId: tid }, { $unset: { masterCatalogVersion: '' } });
+  // Quien vació su catálogo a propósito no quiere que se vuelva a llenar solo
+  await dbConnection.collection('settings').updateOne({ tenantId: tid }, { $unset: { masterCatalogVersion: '' }, $set: { masterCatalogSkipped: true } });
   return result;
 }
 

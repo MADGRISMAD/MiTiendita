@@ -326,6 +326,37 @@
                 </button>
               </div>
             </section>
+            <section class="adm-card cfg-card">
+              <h3>Catálogo inicial de abarrotes</h3>
+              <template v-if="!catalog">
+                <p class="adm-hint">Revisando…</p>
+              </template>
+              <template v-else-if="!catalog.available">
+                <p class="adm-hint">
+                  Este catálogo trae {{ catalog.total }} productos de abarrotes (botanas, pan, refrescos, lácteos…) y solo lo usan las tiendas de abarrotes,
+                  conveniencia y comercio. Tu giro no lo usa: carga tus productos con
+                  <router-link to="/products">Productos</router-link> (importando una lista) o con Inventario Mágico, tomando foto a la nota del proveedor.
+                </p>
+              </template>
+              <template v-else>
+                <p class="adm-hint">
+                  Productos de abarrotes ya capturados, <strong>sin precio</strong>: al escanear uno o buscarlo en la caja, te pide el precio y lo guarda.
+                </p>
+                <p class="state-line" :class="catalog.inStore ? 'on' : 'off'">
+                  <i></i>{{ catalog.inStore }} de {{ catalog.total }} en tu tienda<template v-if="catalog.unpriced"> · {{ catalog.unpriced }} aún sin precio</template>.
+                </p>
+                <div class="cat-acts">
+                  <button v-if="catalog.missing" type="button" class="adm-btn primary" :disabled="catalogBusy" @click="loadCatalogNow">
+                    {{ catalogBusy ? 'Cargando…' : catalog.inStore ? `Cargar los ${catalog.missing} que faltan` : `Cargar los ${catalog.total} productos` }}
+                  </button>
+                  <button v-if="catalog.unpriced" type="button" class="adm-btn danger-ghost" :disabled="catalogBusy" @click="removeCatalogUnpriced">
+                    Quitar los {{ catalog.unpriced }} sin precio
+                  </button>
+                </div>
+                <p v-if="catalogMsg" class="adm-banner ok" role="status"><PosIcon name="check" :size="18" /> <span>{{ catalogMsg }}</span></p>
+                <p class="adm-hint">Los productos que ya tienen precio nunca se quitan. Si cambias el giro, guarda primero el cambio.</p>
+              </template>
+            </section>
             <router-link to="/inventory" class="cfg-wizard">
               <PosIcon name="box" :size="18" />
               <span><strong>Ir a Inventario</strong><small>Existencias, compras, proveedores y caducidad.</small></span>
@@ -1040,6 +1071,53 @@ async function save() {
   }
 }
 
+// Catálogo inicial de abarrotes (Ajustes → Inventario)
+const catalog = ref(null);
+const catalogBusy = ref(false);
+const catalogMsg = ref("");
+async function refreshCatalog() {
+  try {
+    catalog.value = await apiService.catalogStatus();
+  } catch {
+    catalog.value = null;
+  }
+}
+async function loadCatalogNow() {
+  catalogBusy.value = true;
+  catalogMsg.value = "";
+  try {
+    const out = await apiService.catalogLoad();
+    catalog.value = out;
+    catalogMsg.value = out.created ? `Listo: se cargaron ${out.created} productos.` : "Ya estaba completo.";
+  } catch (e) {
+    saveErr.value = errText(e, "No se pudo cargar el catálogo inicial.");
+  } finally {
+    catalogBusy.value = false;
+  }
+}
+async function removeCatalogUnpriced() {
+  const n = catalog.value?.unpriced || 0;
+  if (!window.confirm(`¿Quitar los ${n} productos del catálogo que todavía no tienen precio? Los que ya tienen precio se quedan.`)) return;
+  catalogBusy.value = true;
+  catalogMsg.value = "";
+  try {
+    const out = await apiService.catalogRemove();
+    catalog.value = out;
+    catalogMsg.value = `Listo: se quitaron ${out.removed} productos sin precio.`;
+  } catch (e) {
+    saveErr.value = errText(e, "No se pudieron quitar los productos.");
+  } finally {
+    catalogBusy.value = false;
+  }
+}
+watch(
+  () => section.value === "inventario",
+  (on) => {
+    if (on) refreshCatalog();
+  },
+  { immediate: true }
+);
+
 const wipeBusy = ref(false);
 const wipeResult = ref("");
 async function confirmWipeProducts() {
@@ -1446,6 +1524,7 @@ onBeforeUnmount(() => {
 .cfg-sec-head p { margin: 0.1rem 0 0; font-size: 0.86rem; color: var(--timber-muted); }
 .cfg-card { display: grid; gap: 0.85rem; }
 .cfg-card h3 { margin: 0; font-size: 1.02rem; font-weight: 800; }
+.cat-acts { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 .danger-zone { border: 1px solid var(--timber-danger, #b42318); }
 .danger-zone h3 { color: var(--timber-danger, #b42318); }
 .cfg-split { display: grid; gap: 0.75rem; }

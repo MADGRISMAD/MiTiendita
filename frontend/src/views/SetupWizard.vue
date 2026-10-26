@@ -131,6 +131,11 @@
           </span>
         </label>
 
+        <p v-else class="seed-note">
+          El catálogo inicial es de tiendas de abarrotes y comercios. Para este giro cargas tus productos desde Productos (importando una lista) o con Inventario Mágico,
+          tomando foto a la nota del proveedor.
+        </p>
+
         <p v-if="error" class="error-text">{{ error }}</p>
       </section>
 
@@ -545,6 +550,7 @@ async function finish() {
   background: #fff;
   cursor: pointer;
 }
+.seed-note { margin: 1rem 0 0; padding: 0.7rem 0.85rem; border-radius: 0.75rem; background: #f3f6f4; font-size: 0.86rem; color: #3a433d; }
 .seed-check input { margin-top: 0.2rem; }
 .seed-check span { display: grid; gap: 0.2rem; font-size: 0.88rem; color: #3a433d; }
 .seed-check strong { font-size: 0.92rem; }

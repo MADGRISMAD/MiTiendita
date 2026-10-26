@@ -61,7 +61,7 @@ function memoryDb({ foods = [], menus = [], settings = [] } = {}) {
     },
     async ListSettingsNeedingCatalog(giros, version) {
       return settings.filter(
-        (s) => s.setupCompleted === true && s.masterCatalogVersion !== version && (!s.businessType || giros.includes(s.businessType))
+        (s) => s.setupCompleted === true && s.masterCatalogVersion !== version && s.masterCatalogSkipped !== true && (!s.businessType || giros.includes(s.businessType))
       );
     },
   };
@@ -229,4 +229,53 @@ test('el front y el back coinciden en qué giros usan el catálogo', async () =>
   const src = fs.readFileSync(path.join(root, '../frontend/src/masterCatalog.js'), 'utf8');
   const mod = await import(`data:text/javascript,${encodeURIComponent(src)}`);
   assert.deepEqual([...mod.MASTER_CATALOG_GIROS].sort(), [...catalog.GIROS].sort());
+});
+
+test('quien rechazó el catálogo no lo recibe solo: ni al guardar ajustes ni al reiniciar el servidor', async () => {
+  const db = memoryDb({ settings: [{ tenantId: 'a', setupCompleted: true, businessType: 'abarrotes', masterCatalogSkipped: true }] });
+  assert.equal(await catalog.syncForGiro(db, 'a', db.settings[0]), null);
+  assert.equal(mine(db, 'a').length, 0);
+  assert.equal(await catalog.backfill(db), 0);
+  assert.equal(mine(db, 'a').length, 0);
+});
+
+test('Ajustes: el dueño lo carga a pedido, solo lo que falta, y desde ahí vuelve a recibir las versiones nuevas', async () => {
+  const db = memoryDb({ settings: [{ tenantId: 'a', setupCompleted: true, businessType: 'abarrotes', masterCatalogSkipped: true }] });
+  const before = await catalog.status(db, 'a', db.settings[0]);
+  assert.deepEqual([before.available, before.total, before.inStore, before.missing, before.unpriced], [true, 181, 0, 181, 0]);
+
+  const out = await catalog.load(db, 'a', db.settings[0]);
+  assert.equal(out.created, 181);
+  assert.equal(db.settings[0].masterCatalogVersion, catalog.VERSION);
+  assert.equal(db.settings[0].masterCatalogSkipped, false);
+  const after = await catalog.status(db, 'a', db.settings[0]);
+  assert.deepEqual([after.inStore, after.missing, after.unpriced], [181, 0, 181]);
+
+  // se puede repetir sin duplicar, y respeta lo que el dueño ya tenía
+  assert.equal((await catalog.load(db, 'a', db.settings[0])).created, 0);
+  assert.equal(mine(db, 'a').length, 181);
+});
+
+test('Ajustes: farmacia y ferretería no tienen catálogo que cargar', async () => {
+  for (const giro of ['pharmacy', 'hardware']) {
+    const db = memoryDb({ settings: [{ tenantId: 'a', setupCompleted: true, businessType: giro }] });
+    assert.equal((await catalog.status(db, 'a', db.settings[0])).available, false);
+    assert.equal(await catalog.load(db, 'a', db.settings[0]), null);
+    assert.equal(mine(db, 'a').length, 0);
+  }
+});
+
+test('Ajustes: quitar lo que no tiene precio conserva lo que ya tiene precio y no vuelve solo', async () => {
+  const db = memoryDb({ settings: [{ tenantId: 'a', setupCompleted: true, businessType: 'abarrotes' }] });
+  await catalog.load(db, 'a', db.settings[0]);
+  const priced = db.foods.find((f) => f.catalogId === '7501011100013');
+  Object.assign(priced, { price: 48, needsPrice: false });
+  const out = await catalog.removeUnpriced(db, 'a');
+  assert.equal(out.removed, 180);
+  assert.deepEqual(mine(db, 'a').map((f) => f.name), ['Papas Sabritas Saladas 170 g']);
+  assert.equal(db.settings[0].masterCatalogSkipped, true);
+  // al guardar ajustes o reiniciar, no regresa
+  assert.equal(await catalog.syncForGiro(db, 'a', db.settings[0]), null);
+  assert.equal(await catalog.backfill(db), 0);
+  assert.equal(mine(db, 'a').length, 1);
 });

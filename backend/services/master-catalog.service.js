@@ -85,6 +85,8 @@ async function seed(db, tenantId) {
  */
 async function syncForGiro(db, tenantId, settings) {
   if (availableFor(settings?.businessType)) {
+    // Quien lo rechazó (en el asistente o al quitarlo) no lo recibe solo: lo pide desde Ajustes
+    if (settings?.masterCatalogSkipped) return null;
     if (settings?.masterCatalogVersion === VERSION) return null;
     const loaded = await seed(db, tenantId);
     await db.UpdateSettings({ masterCatalogVersion: VERSION }, tenantId);
@@ -96,6 +98,37 @@ async function syncForGiro(db, tenantId, settings) {
     await db.UpdateSettings({ masterCatalogVersion: null }, tenantId);
   }
   return null;
+}
+
+/** Cómo está el catálogo en esta tienda: cuánto trae, cuánto falta y cuánto sigue sin precio. */
+async function status(db, tenantId, settings) {
+  const foods = await db.GetFoods(tenantId);
+  const have = new Set(foods.flatMap((f) => [f.catalogId, f.barcode, f.sku]).filter(Boolean).map(String));
+  const missing = ITEMS.filter((item) => !have.has(item.id) && !have.has(item.code)).length;
+  return {
+    available: availableFor(settings?.businessType),
+    total: ITEMS.length,
+    inStore: ITEMS.length - missing,
+    missing,
+    unpriced: foods.filter((f) => f.catalogId && f.needsPrice).length,
+    skipped: Boolean(settings?.masterCatalogSkipped),
+  };
+}
+
+/** Carga a pedido del dueño (desde Ajustes): solo lo que falta, y desde ahí la tienda vuelve a recibir las versiones nuevas. */
+async function load(db, tenantId, settings) {
+  if (!availableFor(settings?.businessType)) return null;
+  const result = await seed(db, tenantId);
+  await db.UpdateSettings({ masterCatalogVersion: VERSION, masterCatalogSkipped: false }, tenantId);
+  return result;
+}
+
+/** Quita lo del catálogo que sigue sin precio (lo que ya tiene precio es del dueño) y no lo vuelve a cargar solo. */
+async function removeUnpriced(db, tenantId) {
+  const removed = await db.DeleteUnpricedCatalogFoods(tenantId);
+  await db.DeleteEmptyCatalogMenus(tenantId);
+  await db.UpdateSettings({ masterCatalogVersion: null, masterCatalogSkipped: true }, tenantId);
+  return { removed };
 }
 
 /** Al arrancar el servidor: carga el catálogo en las tiendas que ya existían. Devuelve cuántas tiendas recibieron. */
@@ -112,4 +145,4 @@ async function backfill(db) {
   return tiendas;
 }
 
-module.exports = { GIROS, VERSION, ITEMS, availableFor, productName, toFood, seed, syncForGiro, backfill };
+module.exports = { GIROS, VERSION, ITEMS, availableFor, productName, toFood, seed, syncForGiro, status, load, removeUnpriced, backfill };

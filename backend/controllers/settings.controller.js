@@ -70,6 +70,39 @@ async function SaveSettings(req, res) {
   }
 }
 
+/** Catálogo inicial de abarrotes: cómo está en esta tienda. */
+async function CatalogStatus(req, res) {
+  try {
+    const settings = await db.GetSettings(req.tenantId);
+    return res.status(200).json(await masterCatalog.status(db, req.tenantId, settings));
+  } catch (error) {
+    console.error(error);
+    return res.status(500).send('No pude revisar el catálogo inicial');
+  }
+}
+
+async function CatalogLoad(req, res) {
+  try {
+    const settings = await db.GetSettings(req.tenantId);
+    const loaded = await masterCatalog.load(db, req.tenantId, settings);
+    if (!loaded) return res.status(400).send('El catálogo inicial es de tiendas de abarrotes y comercios; tu giro no lo usa.');
+    return res.status(200).json({ ...loaded, ...(await masterCatalog.status(db, req.tenantId, await db.GetSettings(req.tenantId))) });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).send('No pude cargar el catálogo inicial');
+  }
+}
+
+async function CatalogRemove(req, res) {
+  try {
+    const out = await masterCatalog.removeUnpriced(db, req.tenantId);
+    return res.status(200).json({ ...out, ...(await masterCatalog.status(db, req.tenantId, await db.GetSettings(req.tenantId))) });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).send('No pude quitar los productos sin precio');
+  }
+}
+
 async function GetOnboarding(req, res) {
   try {
     if (!req.tenantId) return res.status(404).send('Sin tienda');
@@ -204,6 +237,9 @@ module.exports = {
   GetSettings,
   SaveSettings,
   GetOnboarding,
+  CatalogStatus,
+  CatalogLoad,
+  CatalogRemove,
   DismissOnboarding,
   GetSupport,
   SendSupport,

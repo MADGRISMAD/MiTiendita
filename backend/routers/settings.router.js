@@ -8,6 +8,9 @@ const { requireAuth, requireActiveSubscription, requireRoles } = require('../mid
 router.get('/', requireAuth, upload.none(), settingsController.GetSettings);
 router.get('/onboarding', requireAuth, settingsController.GetOnboarding);
 router.post('/onboarding/dismiss', requireAuth, requireRoles('admin'), settingsController.DismissOnboarding);
+router.get('/catalog', requireAuth, requireRoles('admin'), settingsController.CatalogStatus);
+router.post('/catalog/load', requireAuth, requireActiveSubscription, requireRoles('admin'), settingsController.CatalogLoad);
+router.post('/catalog/remove', requireAuth, requireActiveSubscription, requireRoles('admin'), settingsController.CatalogRemove);
 router.get('/support', requireAuth, requireRoles('admin'), settingsController.GetSupport);
 router.post('/support', requireAuth, requireRoles('admin'), settingsController.SendSupport);
 router.post(
