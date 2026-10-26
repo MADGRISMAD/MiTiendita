@@ -254,8 +254,8 @@ export const apiService = {
     return axios.delete('/foods/bulk', { data: { ids } }).then((r) => r.data);
   },
   /** Catálogo inicial de abarrotes (Ajustes → Inventario). */
-  catalogStatus() {
-    return axios.get('/settings/catalog').then((r) => r.data);
+  catalogStatus(giro?: string) {
+    return axios.get('/settings/catalog', { params: giro ? { giro } : {} }).then((r) => r.data);
   },
   catalogLoad() {
     return axios.post('/settings/catalog/load').then((r) => r.data);
@@ -540,6 +540,30 @@ export const apiService = {
   },
   platformDeleteExpense(id: string) {
     return axios.delete(`/platform/expenses/${id}`).then((r) => r.data);
+  },
+  /** Catálogos maestros por giro (panel de la plataforma). */
+  platformCatalogs() {
+    return axios.get('/platform/catalogs').then((r) => r.data);
+  },
+  platformCatalogItems(catalog: string) {
+    return axios.get(`/platform/catalogs/${catalog}/items`).then((r) => r.data);
+  },
+  platformCatalogSave(catalog: string, item: Record<string, unknown>, key?: string) {
+    return key
+      ? axios.put(`/platform/catalogs/${catalog}/items/${encodeURIComponent(key)}`, item).then((r) => r.data)
+      : axios.post(`/platform/catalogs/${catalog}/items`, item).then((r) => r.data);
+  },
+  platformCatalogDelete(catalog: string, key: string) {
+    return axios.delete(`/platform/catalogs/${catalog}/items/${encodeURIComponent(key)}`).then((r) => r.data);
+  },
+  platformCatalogImport(catalog: string, rows: Record<string, unknown>[]) {
+    return axios.post(`/platform/catalogs/${catalog}/import`, { rows }, { timeout: 120_000 }).then((r) => r.data);
+  },
+  platformCatalogFromTenant(catalog: string, tenantId: string, foodIds: string[]) {
+    return axios.post(`/platform/catalogs/${catalog}/from-tenant`, { tenantId, foodIds }).then((r) => r.data);
+  },
+  platformTenantProducts(tenantId: string, catalog?: string) {
+    return axios.get(`/platform/tenants/${tenantId}/products`, { params: catalog ? { catalog } : {} }).then((r) => r.data);
   },
   platformListTenants() {
     return cachedGet('/platform/tenants');

@@ -70,6 +70,7 @@ async function ensureIndexes() {
     ['orders', { tenantId: 1, customerId: 1, createdAt: -1 }],
     ['foods', { tenantId: 1, barcode: 1 }],
     ['foods', { tenantId: 1, altCodes: 1 }],
+    ['master_catalog_items', { catalog: 1, section: 1 }],
     ['foods', { tenantId: 1, sku: 1 }],
     ['cash_sessions', { tenantId: 1, status: 1 }],
     ['print_jobs', { tenantId: 1, status: 1, createdAt: 1 }],
@@ -85,6 +86,7 @@ async function ensureIndexes() {
     .createIndex({ mpPaymentId: 1 }, { unique: true, partialFilterExpression: { mpPaymentId: { $type: 'string' } } })
     .catch(() => {});
   await dbConnection.collection('billing_events').createIndex({ type: 1, at: -1 }).catch(() => {});
+  await dbConnection.collection('master_catalog_items').createIndex({ catalog: 1, key: 1 }, { unique: true }).catch(() => {});
   await dbConnection.collection('suppliers').createIndex({ tenantId: 1, name: 1 }).catch(() => {});
   await dbConnection.collection('purchases').createIndex({ tenantId: 1, date: -1 }).catch(() => {});
   await dbConnection.collection('lots').createIndex({ tenantId: 1, foodId: 1, expiresAt: 1 }).catch(() => {});
@@ -1561,6 +1563,40 @@ async function GetExchanges(tenantId, opts = {}) {
   return (await dbConnection.collection('exchanges').find(filter).sort({ createdAt: -1 }).limit(300).toArray()).map(withId);
 }
 
+// ── Catálogos maestros por giro (los edita la plataforma) ──
+async function ListCatalogItems(catalog) {
+  const rows = await dbConnection.collection('master_catalog_items').find({ catalog }).sort({ section: 1, name: 1 }).toArray();
+  return rows.map(withId);
+}
+async function CountCatalogItems(catalog) {
+  return dbConnection.collection('master_catalog_items').countDocuments({ catalog });
+}
+async function GetCatalogItem(catalog, key) {
+  return withId(await dbConnection.collection('master_catalog_items').findOne({ catalog, key: String(key) }));
+}
+async function InsertCatalogItems(items) {
+  if (!items.length) return 0;
+  const result = await dbConnection.collection('master_catalog_items').insertMany(items);
+  return result.insertedCount;
+}
+/** Crea o actualiza un producto del catálogo por su `key`. */
+async function UpsertCatalogItem(catalog, key, data) {
+  const now = new Date();
+  await dbConnection
+    .collection('master_catalog_items')
+    .updateOne({ catalog, key: String(key) }, { $set: { ...data, catalog, key: String(key), updatedAt: now }, $setOnInsert: { createdAt: now } }, { upsert: true });
+  return GetCatalogItem(catalog, key);
+}
+async function DeleteCatalogItem(catalog, key) {
+  return (await dbConnection.collection('master_catalog_items').deleteOne({ catalog, key: String(key) })).deletedCount;
+}
+async function IsCatalogSeeded() {
+  return Boolean(await dbConnection.collection('app_state').findOne({ _id: 'master_catalog_seeded' }));
+}
+async function MarkCatalogSeeded() {
+  await dbConnection.collection('app_state').updateOne({ _id: 'master_catalog_seeded' }, { $set: { at: new Date() } }, { upsert: true });
+}
+
 // ── Bitácora ──
 async function CreateActivityLog(data) {
   const result = await dbConnection.collection('activity_log').insertOne(data);
@@ -1653,5 +1689,6 @@ module.exports = {
   GetFoodsBySupplier, UnlinkSupplierFromFoods,
   CreatePurchase, GetPurchases, GetPurchaseById,
   CreateLot, GetLotsByFood, GetExpiringLots, TakeFromLot, CreateExchange, GetExchanges,
+  ListCatalogItems, CountCatalogItems, GetCatalogItem, InsertCatalogItems, UpsertCatalogItem, DeleteCatalogItem, IsCatalogSeeded, MarkCatalogSeeded,
   CreatePlatformAudit, ListPlatformAudit, CreateActivityLog, GetActivityLog, GetPaidItemQtySince,
 };

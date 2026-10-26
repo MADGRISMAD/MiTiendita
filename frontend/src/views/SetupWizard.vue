@@ -125,14 +125,14 @@
         <label v-if="hasMasterCatalog" class="seed-check">
           <input type="checkbox" v-model="loadCatalog" />
           <span>
-            <strong>Cargar catálogo inicial (181 productos)</strong>
-            Botanas, pan, refrescos, lácteos, frescos… capturados y sin precio. Al escanear uno o buscarlo en la caja, te pide el precio y lo
+            <strong>Cargar catálogo inicial ({{ catalogInfo.total }} productos)</strong>
+            Productos de tu giro ya capturados y sin precio. Al escanear uno o buscarlo en la caja, te pide el precio y lo
             guarda. Si tu tienda vende otros productos, desactiva esta opción.
           </span>
         </label>
 
         <p v-else class="seed-note">
-          El catálogo inicial es de tiendas de abarrotes y comercios. Para este giro cargas tus productos desde Productos (importando una lista) o con Inventario Mágico,
+          Todavía no hay productos precargados para este giro. Cárgalos desde Productos (importando una lista) o con Inventario Mágico,
           tomando foto a la nota del proveedor.
         </p>
 
@@ -168,12 +168,11 @@
 </template>
 
 <script setup>
-import { computed, reactive, ref } from "vue";
+import { computed, reactive, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { saveVenueSettings, venueStore } from "../venueStore";
 import { apiService } from "../apiService";
 import BrandName from "../components/BrandName.vue";
-import { masterCatalogAvailable } from "../masterCatalog";
 import { DEFAULT_ACCENT, DEFAULT_PRIMARY, applyBrandPreview, brandFromLogo, isDefaultPalette } from "../brandTheme";
 
 const router = useRouter();
@@ -181,7 +180,9 @@ const step = ref(1);
 const saving = ref(false);
 const error = ref("");
 const loadCatalog = ref(true);
-const hasMasterCatalog = computed(() => masterCatalogAvailable(form.businessType));
+// Cuántos productos precargados hay para el giro elegido (lo decide la plataforma; puede no haber ninguno)
+const catalogInfo = ref(null);
+const hasMasterCatalog = computed(() => Boolean(catalogInfo.value?.available));
 
 const stepTitles = [
   "Bienvenida",
@@ -275,6 +276,15 @@ function useStockBrand() {
   form.accentColor = DEFAULT_ACCENT;
   applyBrandPreview(DEFAULT_PRIMARY, DEFAULT_ACCENT);
 }
+
+async function refreshCatalogInfo() {
+  try {
+    catalogInfo.value = await apiService.catalogStatus(form.businessType);
+  } catch {
+    catalogInfo.value = null;
+  }
+}
+watch(() => form.businessType, refreshCatalogInfo, { immediate: true });
 
 async function finish() {
   if (!canContinue.value) return;

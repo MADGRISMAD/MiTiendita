@@ -1,7 +1,7 @@
 // Importar precios desde un CSV (Excel > Guardar como CSV). Sin imports: la prueba del backend lo carga como módulo
 // (backend/test/price-import.test.js).
 
-const fold = (s) =>
+export const fold = (s) =>
   String(s ?? "")
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")

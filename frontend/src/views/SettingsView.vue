@@ -327,20 +327,19 @@
               </div>
             </section>
             <section class="adm-card cfg-card">
-              <h3>Catálogo inicial de abarrotes</h3>
+              <h3>Catálogo inicial de productos</h3>
               <template v-if="!catalog">
                 <p class="adm-hint">Revisando…</p>
               </template>
               <template v-else-if="!catalog.available">
                 <p class="adm-hint">
-                  Este catálogo trae {{ catalog.total }} productos de abarrotes (botanas, pan, refrescos, lácteos…) y solo lo usan las tiendas de abarrotes,
-                  conveniencia y comercio. Tu giro no lo usa: carga tus productos con
+                  Todavía no hay productos precargados para tu giro. Carga los tuyos desde
                   <router-link to="/products">Productos</router-link> (importando una lista) o con Inventario Mágico, tomando foto a la nota del proveedor.
                 </p>
               </template>
               <template v-else>
                 <p class="adm-hint">
-                  Productos de abarrotes ya capturados, <strong>sin precio</strong>: al escanear uno o buscarlo en la caja, te pide el precio y lo guarda.
+                  Productos de tu giro ya capturados, <strong>sin precio</strong>: al escanear uno o buscarlo en la caja, te pide el precio y lo guarda.
                 </p>
                 <p class="state-line" :class="catalog.inStore ? 'on' : 'off'">
                   <i></i>{{ catalog.inStore }} de {{ catalog.total }} en tu tienda<template v-if="catalog.unpriced"> · {{ catalog.unpriced }} aún sin precio</template>.

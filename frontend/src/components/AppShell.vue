@@ -10,7 +10,7 @@
       </div>
 
       <!-- Nav PC (rail horizontal en top) -->
-      <nav class="top-nav only-pc" aria-label="Navegación">
+      <nav class="top-nav only-pc" :class="{ crowded: dock.length > 6 }" aria-label="Navegación">
         <router-link
           v-for="item in dock"
           :key="'top-' + item.to"
@@ -297,6 +297,7 @@ const adminDock = [
   ...supportDock,
   { to: "/platform/finanzas", name: "platformFinance", label: "Finanzas", icon: ico.cash },
   { to: "/platform/vendedores", name: "platformReferrers", label: "Vendedores", icon: ico.tag },
+  { to: "/platform/catalogos", name: "platformCatalogs", label: "Catálogos", icon: ico.products },
   { to: "/platform/equipo", name: "platformTeam", label: "Equipo", icon: ico.people },
 ];
 
@@ -544,6 +545,11 @@ onUnmounted(() => clearInterval(timer));
   font-weight: 600;
   font-size: 0.9rem;
   transition: background 0.15s ease, color 0.15s ease;
+}
+.top-nav.crowded .top-nav-item { padding: 0 0.6rem; gap: 0.3rem; font-size: 0.86rem; }
+/* Con muchas pestañas (panel de plataforma) no caben los íconos junto a los nombres */
+@media (max-width: 1500px) {
+  .top-nav.crowded .dock-ico { display: none; }
 }
 .top-nav-item .dock-ico {
   width: auto;

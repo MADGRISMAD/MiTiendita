@@ -137,6 +137,12 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: true, roles: ["platform_admin", "platform_support"], owner: true },
   },
   {
+    path: "/platform/catalogos",
+    name: "platformCatalogs",
+    component: () => import("./views/platform/PlatformCatalogs.vue"),
+    meta: { requiresAuth: true, roles: ["platform_admin"], owner: true },
+  },
+  {
     path: "/platform/equipo",
     name: "platformTeam",
     component: () => import("./views/platform/PlatformTeam.vue"),

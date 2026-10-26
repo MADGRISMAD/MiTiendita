@@ -74,7 +74,7 @@ async function SaveSettings(req, res) {
 async function CatalogStatus(req, res) {
   try {
     const settings = await db.GetSettings(req.tenantId);
-    return res.status(200).json(await masterCatalog.status(db, req.tenantId, settings));
+    return res.status(200).json(await masterCatalog.status(db, req.tenantId, settings, req.query.giro));
   } catch (error) {
     console.error(error);
     return res.status(500).send('No pude revisar el catálogo inicial');

@@ -1,6 +1,7 @@
 const router = require('express').Router();
 const platform = require('../controllers/platform.controller');
 const desktop = require('../controllers/desktop.controller');
+const catalogs = require('../controllers/catalog-admin.controller');
 const { requireAuth, requireRoles } = require('../middleware/auth.middleware');
 const { rateLimit } = require('../services/rate-limit.service');
 const { refuseBranch } = require('../middleware/refuse-branch');
@@ -33,6 +34,16 @@ router.get('/desktop-licenses/:id', ...staff, desktop.detail);
 router.post('/desktop-licenses', ...adminOnly, writeLimit, desktop.create);
 router.post('/desktop-licenses/:id/release', ...adminOnly, writeLimit, desktop.release);
 router.post('/desktop-licenses/:id/revoke', ...adminOnly, writeLimit, desktop.revoke);
+
+// Catálogos maestros por giro (productos que ya vienen cargados en las tiendas nuevas)
+router.get('/catalogs', ...adminOnly, catalogs.summary);
+router.get('/catalogs/:catalog/items', ...adminOnly, catalogs.list);
+router.post('/catalogs/:catalog/items', ...adminOnly, writeLimit, catalogs.create);
+router.post('/catalogs/:catalog/import', ...adminOnly, writeLimit, catalogs.importRows);
+router.post('/catalogs/:catalog/from-tenant', ...adminOnly, writeLimit, catalogs.addFromTenant);
+router.put('/catalogs/:catalog/items/:key', ...adminOnly, writeLimit, catalogs.update);
+router.delete('/catalogs/:catalog/items/:key', ...adminOnly, writeLimit, catalogs.remove);
+router.get('/tenants/:id/products', ...adminOnly, catalogs.tenantProducts);
 
 router.get('/inbox', ...staff, platform.inbox);
 router.get('/support', ...staff, platform.support);

@@ -87,6 +87,7 @@ if (!process.env.VERCEL) {
   // Catálogo maestro: las tiendas que ya existían lo reciben al arrancar (una sola vez cada una).
   const masterCatalog = require('./services/master-catalog.service');
   ensureConnection()
+    .then(() => masterCatalog.ensureSeeded(require('./database/mongodb')))
     .then(() => masterCatalog.backfill(require('./database/mongodb')))
     .then((n) => n && console.log(`[catálogo maestro] cargado en ${n} tienda(s)`))
     .catch((err) => console.warn('[catálogo maestro] no se pudo cargar:', err.message));
