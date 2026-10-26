@@ -91,3 +91,27 @@ export function code128Bars(text, quiet = 10) {
 }
 
 export { PATTERNS as CODE128_PATTERNS };
+
+// Un mismo código puede llegar escrito distinto (UPC-A de 12 dígitos contra EAN-13 con un cero al inicio, mayúsculas).
+// Misma regla que backend/utils/barcode.js.
+export function canon(code) {
+  const c = String(code || "").trim();
+  return /^\d+$/.test(c) ? c.replace(/^0+/, "") || "0" : c.toLowerCase();
+}
+
+/** Todos los códigos con los que un producto se puede escanear: el principal, la clave y los extra. */
+export function codesOf(food) {
+  return [food?.barcode, food?.sku, ...(Array.isArray(food?.altCodes) ? food.altCodes : [])]
+    .map((c) => String(c || "").trim())
+    .filter(Boolean);
+}
+
+export function hasCode(food, code) {
+  const q = canon(code);
+  return Boolean(q) && codesOf(food).some((c) => canon(c) === q);
+}
+
+/** Código principal que se muestra de un producto ("" si no tiene). */
+export function mainCodeOf(food) {
+  return String(food?.barcode || food?.sku || "").trim();
+}

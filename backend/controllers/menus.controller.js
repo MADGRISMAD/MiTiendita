@@ -1,4 +1,5 @@
 const db = require('../database/mongodb');
+const { cleanAltCodes } = require('../utils/barcode');
 const { roundQty, saleUnitOf } = require('../utils/units');
 const limits = require('../services/plan-limits.service');
 const { ObjectId } = require('mongodb');
@@ -124,6 +125,7 @@ async function createFood(req, res) {
       tracksExpiry,
       supplierIds,
       saleUnit,
+      altCodes,
     } = req.body || {};
     if (!name || price == null || !menuId) {
       return res.status(400).send('name, price y menuId son requeridos');
@@ -141,6 +143,11 @@ async function createFood(req, res) {
         return res.status(409).send(`Ya existe un producto con el código "${code}": ${existing.name}`);
       }
     }
+    const extra = cleanAltCodes(altCodes, code);
+    for (const alt of extra) {
+      const clash = await db.GetFoodByBarcode(alt, req.tenantId).catch(() => null);
+      if (clash) return res.status(409).send(`Ya existe un producto con el código "${alt}": ${clash.name}`);
+    }
     const created = await db.CreateFood({
       name,
       price: Number(price),
@@ -150,6 +157,7 @@ async function createFood(req, res) {
       imgUrl: imgUrl || '',
       sku: code,
       barcode: code,
+      altCodes: extra,
       menuId: String(menuId),
       tenantId: req.tenantId,
       stock: stock == null || stock === '' ? 0 : Math.max(0, roundQty(stock)),
@@ -181,6 +189,16 @@ async function updateFood(req, res) {
         const existing = await db.GetFoodByBarcode(code, req.tenantId).catch(() => null);
         if (existing && String(existing.id) !== String(req.params.id)) {
           return res.status(409).send(`Ya existe un producto con el código "${code}": ${existing.name}`);
+        }
+      }
+    }
+    if (body.altCodes != null) {
+      const main = body.barcode != null ? body.barcode : (await db.GetFoodById(req.params.id, req.tenantId).catch(() => null))?.barcode;
+      body.altCodes = cleanAltCodes(body.altCodes, main);
+      for (const alt of body.altCodes) {
+        const clash = await db.GetFoodByBarcode(alt, req.tenantId).catch(() => null);
+        if (clash && String(clash.id) !== String(req.params.id)) {
+          return res.status(409).send(`Ya existe un producto con el código "${alt}": ${clash.name}`);
         }
       }
     }

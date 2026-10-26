@@ -1,4 +1,5 @@
 import { rateOf } from "./tax";
+import { hasCode } from "./barcode";
 const DB_NAME = "mitiendita-offline";
 const DB_VER = 1;
 
@@ -205,11 +206,7 @@ export function lookupInCatalog(foods, code) {
   const q = String(code || "").trim().toLowerCase();
   if (!q) return { matches: [] };
   const list = Array.isArray(foods) ? foods : [];
-  const exact = list.find((f) => {
-    const barcode = String(f.barcode || "").trim().toLowerCase();
-    const sku = String(f.sku || "").trim().toLowerCase();
-    return barcode === q || sku === q;
-  });
+  const exact = list.find((f) => hasCode(f, code));
   if (exact) return exact;
   const matches = list.filter((f) => {
     const name = String(f.name || "").toLowerCase();

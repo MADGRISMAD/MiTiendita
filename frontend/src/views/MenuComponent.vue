@@ -774,13 +774,15 @@
               <div>
                 <h3 id="missing-title">No está en el catálogo</h3>
                 <p>
-                  El código <strong>{{ missingCode }}</strong> no existe. Regístralo para venderlo o cóbralo como
-                  artículo varios.
+                  El código <strong>{{ missingCode }}</strong> no existe. Búscalo en tu catálogo para asignárselo a un producto,
+                  o regístralo como producto nuevo.
                 </p>
               </div>
             </header>
-            <div v-if="missingIntent === 'sale' && pickFoods.length" class="link-box">
-              <label class="link-label" for="link-term">¿Ya lo tienes en tu catálogo? Búscalo y le asigno este código.</label>
+            <div v-if="pickFoods.length" class="link-box">
+              <label class="link-label" for="link-term">
+                ¿Ya lo tienes en tu catálogo? Búscalo y le asigno este código.
+              </label>
               <input
                 id="link-term"
                 ref="linkInput"
@@ -791,15 +793,34 @@
                 placeholder="Nombre del producto"
                 :disabled="linkBusy"
               />
+              <p v-if="!linkTerm.trim() && linkHits.length" class="dlg-note">Productos que aún no tienen código:</p>
               <ul v-if="linkHits.length" class="link-hits">
-                <li v-for="h in linkHits" :key="h.id">
-                  <button type="button" class="link-hit" :disabled="linkBusy" @click="linkScanned(h)">
+                <li v-for="h in linkHits" :key="h.id" class="link-row">
+                  <div class="link-info">
                     <span>{{ h.name }}</span>
-                    <small>{{ h.needsPrice ? "Sin precio" : money(h.price) }}</small>
-                  </button>
+                    <small>
+                      {{ h.needsPrice ? "Sin precio" : money(h.price) }} ·
+                      <template v-if="mainCodeOf(h)">código {{ mainCodeOf(h) }}<template v-if="h.altCodes?.length"> (+{{ h.altCodes.length }})</template></template>
+                      <template v-else>sin código</template>
+                    </small>
+                  </div>
+                  <div class="link-acts">
+                    <button v-if="!mainCodeOf(h)" type="button" class="link-hit" :disabled="linkBusy" @click="linkScanned(h, 'set')">
+                      Asignar este código
+                    </button>
+                    <template v-else>
+                      <button type="button" class="link-hit" :disabled="linkBusy" title="El código de arriba deja de ser de este producto y se usa el nuevo" @click="linkScanned(h, 'replace')">
+                        Reemplazar
+                      </button>
+                      <button type="button" class="link-hit" :disabled="linkBusy" title="Sirve para otra presentación o versión de temporada: los dos códigos venden este producto" @click="linkScanned(h, 'add')">
+                        Agregar como segundo código
+                      </button>
+                    </template>
+                  </div>
                 </li>
               </ul>
               <p v-else-if="linkTerm.trim().length > 1" class="dlg-note">No encontré ese nombre en tu catálogo.</p>
+              <p v-else-if="!linkTerm.trim()" class="dlg-note">Todos tus productos ya tienen código. Escribe el nombre para buscar uno.</p>
               <p v-if="linkErr" class="dlg-err">{{ linkErr }}</p>
             </div>
             <div class="dlg-stack">
@@ -1448,6 +1469,20 @@
                     Generar
                   </button>
                 </div>
+                <div v-if="foodForm.altCodes.length || foodForm.barcode" class="alt-codes">
+                  <span v-for="c in foodForm.altCodes" :key="c" class="alt-chip">
+                    {{ c }}
+                    <button type="button" :aria-label="`Quitar el código ${c}`" @click="foodForm.altCodes = foodForm.altCodes.filter((x) => x !== c)">×</button>
+                  </span>
+                  <input
+                    v-model="newAltCode"
+                    class="inp alt-input"
+                    placeholder="Otro código (versión de temporada…)"
+                    autocomplete="off"
+                    @keydown.enter.prevent="addAltCode"
+                    @blur="addAltCode"
+                  />
+                </div>
                 <p v-if="duplicateCode" class="dup-warn" role="alert">
                   <PosIcon name="alert" :size="16" />
                   <span>Este código ya es de <b>{{ duplicateCode.name }}</b>.</span>
@@ -1608,6 +1643,8 @@ import { matchCustomers, quickCustomerPayload } from "../saleCustomer";
 import { downloadCsv } from "../download";
 import { authStore } from "../authStore";
 import { isNetworkError, newClientSaleId } from "../net";
+import { canon, hasCode, mainCodeOf } from "../barcode";
+import { flushPending, queueCode, readPending } from "../pendingCodes";
 import {
   applyPendingStock,
   loadCatalog,
@@ -1772,12 +1809,15 @@ export default {
       const code = String(foodForm.barcode || "").trim();
       if (!code) return null;
       const own = editingFood.value ? String(editingFood.value.id) : "";
-      return (
-        pickFoods.value.find(
-          (p) => String(p.id) !== own && (String(p.barcode || "").trim() === code || String(p.sku || "").trim() === code)
-        ) || null
-      );
+      return pickFoods.value.find((p) => String(p.id) !== own && hasCode(p, code)) || null;
     });
+    const newAltCode = ref("");
+    function addAltCode() {
+      const c = String(newAltCode.value || "").trim();
+      newAltCode.value = "";
+      if (!c || canon(c) === canon(foodForm.barcode) || foodForm.altCodes.some((x) => canon(x) === canon(c))) return;
+      foodForm.altCodes = [...foodForm.altCodes, c];
+    }
     const menuForm = reactive({ name: "", description: "" });
     const foodForm = reactive({
       name: "",
@@ -1786,6 +1826,7 @@ export default {
       description: "",
       imgUrl: "",
       barcode: "",
+      altCodes: [],
       priceMode: "gross", // gross = el precio ya incluye IVA
       stock: 0,
       lowStockThreshold: 5,
@@ -2779,6 +2820,7 @@ export default {
       }
       if (scanError.value) return { tone: "err", text: scanError.value };
       if (scanning.value) return { tone: "busy", text: "Buscando…" };
+      if (offlineLinkNote.value) return { tone: "busy", text: offlineLinkNote.value };
       const pre = parseQtyPrefix(scanCode.value);
       if (pre.hasQty) {
         return { tone: "busy", text: `Cantidad × ${formatQty(pre.qty)}: escanea o busca el producto` };
@@ -2887,33 +2929,65 @@ export default {
     const linkInput = ref(null);
     const linkHits = computed(() => {
       const tokens = fold(linkTerm.value).split(/\s+/).filter(Boolean);
-      if (!tokens.length) return [];
-      return pickFoods.value
-        .filter((f) => !f.isMisc && tokens.every((t) => fold(f.name).includes(t)))
-        .sort((a, b) => Number(Boolean(b.needsPrice)) - Number(Boolean(a.needsPrice)) || String(a.name).localeCompare(String(b.name), "es"))
-        .slice(0, 6);
+      const pool = pickFoods.value.filter((f) => !f.isMisc);
+      // Sin escribir nada: los productos que todavía no tienen código; escribiendo: cualquiera que coincida
+      const list = tokens.length ? pool.filter((f) => tokens.every((t) => fold(f.name).includes(t))) : pool.filter((f) => !mainCodeOf(f));
+      return list
+        .sort(
+          (a, b) =>
+            Number(Boolean(mainCodeOf(a))) - Number(Boolean(mainCodeOf(b))) ||
+            Number(Boolean(b.needsPrice)) - Number(Boolean(a.needsPrice)) ||
+            String(a.name).localeCompare(String(b.name), "es")
+        )
+        .slice(0, 8);
     });
-    async function linkScanned(producto) {
+    /** mode: 'set' (no tenía código), 'replace' (cambia el principal) o 'add' (queda como segundo código). */
+    async function linkScanned(producto, mode = "set") {
       const code = missingCode.value;
+      const intent = missingIntent.value;
       if (!code || linkBusy.value) return;
       linkBusy.value = true;
       linkErr.value = "";
+      const payload =
+        mode === "add" ? { altCodes: [...(producto.altCodes || []), code] } : { barcode: code, sku: code };
+      let updated;
       try {
-        const updated = await apiService.editFood(producto.id, { barcode: code, sku: code });
-        pickFoods.value = pickFoods.value.map((p) => (p.id === updated.id ? { ...p, ...updated } : p));
-        saveCatalog(authStore.tenantId, { foods: pickFoods.value, menus: menus.value }).catch(() => {});
-        missingCode.value = "";
-        addProduct({ ...producto, ...updated }, 1, {}); // si no tiene precio, ahora la caja lo pide
+        updated = await apiService.editFood(producto.id, payload);
       } catch (error) {
-        const raw = error.response?.data;
-        linkErr.value = isNetworkError(error)
-          ? "Sin conexión no se puede guardar el código. Intenta de nuevo."
-          : typeof raw === "string" && raw
-            ? raw
-            : raw?.message || "No se pudo asignar el código.";
-      } finally {
-        linkBusy.value = false;
+        if (isNetworkError(error)) {
+          // Sin internet: se aplica aquí para seguir vendiendo y se sube cuando regrese la conexión
+          updated = { ...producto, ...payload };
+          queueCode({ tenantId: authStore.tenantId, id: producto.id, payload });
+          scanError.value = "";
+          offlineLinkNote.value = "Código guardado en este equipo; se sube cuando haya internet.";
+        } else {
+          const raw = error.response?.data;
+          linkErr.value = typeof raw === "string" && raw ? raw : raw?.message || "No se pudo asignar el código.";
+          linkBusy.value = false;
+          return;
+        }
       }
+      pickFoods.value = pickFoods.value.map((p) => (p.id === updated.id ? { ...p, ...updated } : p));
+      saveCatalog(authStore.tenantId, { foods: pickFoods.value, menus: menus.value }).catch(() => {});
+      missingCode.value = "";
+      linkBusy.value = false;
+      if (intent === "price") {
+        // Consulta de precio (F4): se muestra el producto, no se agrega al ticket
+        showPriceCheck.value = true;
+        priceErr.value = "";
+        priceResult.value = { ...producto, ...updated };
+        priceCode.value = code;
+        lastPriceCode = code;
+        lastPriceAt = Date.now();
+      } else {
+        addProduct({ ...producto, ...updated }, 1, {}); // si no tiene precio, ahora la caja lo pide
+      }
+    }
+    const offlineLinkNote = ref("");
+    async function flushPendingCodes() {
+      if (!authStore.tenantId || !readPending().length) return;
+      const sent = await flushPending(authStore.tenantId, (id, payload) => apiService.editFood(id, payload)).catch(() => 0);
+      if (sent) offlineLinkNote.value = "";
     }
 
     function askToAdd(code, intent) {
@@ -4273,6 +4347,7 @@ export default {
       foodForm.description = producto.description || "";
       foodForm.imgUrl = producto.imgUrl || "";
       foodForm.barcode = producto.barcode || producto.sku || "";
+      foodForm.altCodes = Array.isArray(producto.altCodes) ? [...producto.altCodes] : [];
       foodForm.priceMode = producto.priceIncludesTax ? "gross" : "net";
       foodForm.stock = Number(producto.stock) || 0;
       foodForm.lowStockThreshold = producto.lowStockThreshold != null ? Number(producto.lowStockThreshold) : 5;
@@ -4289,7 +4364,7 @@ export default {
       if (!src) return;
       const copy = { ...foodForm, supplierIds: [...foodForm.supplierIds] };
       closeFoodForm();
-      Object.assign(foodForm, copy, { name: `${copy.name} (copia)`, barcode: "", stock: 0 });
+      Object.assign(foodForm, copy, { name: `${copy.name} (copia)`, barcode: "", altCodes: [], stock: 0 });
       showFoodForm.value = true;
     }
 
@@ -4335,6 +4410,7 @@ export default {
       foodForm.description = "";
       foodForm.imgUrl = "";
       foodForm.barcode = "";
+      foodForm.altCodes = [];
       foodForm.priceMode = "gross";
       foodForm.stock = 0;
       foodForm.lowStockThreshold = 5;
@@ -4372,6 +4448,7 @@ export default {
         imgUrl: (foodForm.imgUrl || "").trim(),
         barcode: (foodForm.barcode || "").trim(),
         sku: (foodForm.barcode || "").trim(),
+        altCodes: [...foodForm.altCodes],
         priceIncludesTax: foodForm.priceMode === "gross",
         menuId: foodForm.menuId && foodForm.menuId !== "__new" ? foodForm.menuId : selectedMenuId.value,
         stock: Number(foodForm.stock) || 0,
@@ -4470,6 +4547,8 @@ export default {
     }
 
     onMounted(async () => {
+      window.addEventListener("online", flushPendingCodes);
+      flushPendingCodes();
       await fetchMenus();
       loadCashSession();
       compactPos.value = isCompactPos();
@@ -4485,6 +4564,7 @@ export default {
     });
 
     onUnmounted(() => {
+      window.removeEventListener("online", flushPendingCodes);
       stopScaleWatch();
       window.removeEventListener("keydown", onHotkey);
       window.removeEventListener("focus", onWindowFocus);
@@ -4689,6 +4769,9 @@ export default {
       linkInput,
       linkHits,
       linkScanned,
+      mainCodeOf,
+      newAltCode,
+      addAltCode,
       missingIntent,
       dismissMissing,
       startAddMissing,
@@ -5883,6 +5966,16 @@ html[data-theme="dark"] .avatar {
   text-align: left;
   cursor: pointer;
 }
+.link-row { display: grid; gap: 0.4rem; padding: 0.55rem 0.7rem; border: 1px solid var(--timber-line); border-radius: 0.7rem; background: var(--timber-panel); }
+.link-info { display: grid; gap: 0.15rem; min-width: 0; }
+.link-info span { font-weight: 700; overflow-wrap: anywhere; }
+.link-info small { color: var(--timber-muted); }
+.link-acts { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.link-acts .link-hit { width: auto; flex: 1 1 8rem; justify-content: center; font-weight: 700; }
+.alt-codes { display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; margin-top: 0.4rem; }
+.alt-chip { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.2rem 0.3rem 0.2rem 0.6rem; border-radius: 999px; background: var(--timber-surface); border: 1px solid var(--timber-line); font-size: 0.82rem; }
+.alt-chip button { border: 0; background: none; color: var(--timber-muted); cursor: pointer; font-size: 1rem; line-height: 1; }
+.alt-input { flex: 1 1 12rem; min-width: 0; font-size: 0.85rem; }
 .link-hit:hover:not(:disabled) { border-color: var(--timber-primary); }
 .link-hit:disabled { opacity: 0.6; cursor: wait; }
 .link-hit small { color: var(--timber-muted); white-space: nowrap; }

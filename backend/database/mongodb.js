@@ -1,4 +1,5 @@
 require('dotenv').config();
+const { codeVariants } = require('../utils/barcode');
 const { blockedByPlan } = require('../services/branch-plan');
 const { MongoClient, ObjectId } = require('mongodb');
 const { createTenantDoc } = require('../models/tenant.model');
@@ -68,6 +69,7 @@ async function ensureIndexes() {
     ['orders', { tenantId: 1, cashSessionId: 1 }],
     ['orders', { tenantId: 1, customerId: 1, createdAt: -1 }],
     ['foods', { tenantId: 1, barcode: 1 }],
+    ['foods', { tenantId: 1, altCodes: 1 }],
     ['foods', { tenantId: 1, sku: 1 }],
     ['cash_sessions', { tenantId: 1, status: 1 }],
     ['print_jobs', { tenantId: 1, status: 1, createdAt: 1 }],
@@ -552,11 +554,11 @@ async function GetFoodById(id, tenantId) {
   return withId(await dbConnection.collection('foods').findOne(filter));
 }
 async function GetFoodByBarcode(code, tenantId) {
-  const c = String(code || '').trim();
-  if (!c) return null;
+  const variants = codeVariants(code);
+  if (!variants.length) return null;
   const filter = {
     ...(tenantId ? { tenantId } : {}),
-    $or: [{ barcode: c }, { sku: c }],
+    $or: [{ barcode: { $in: variants } }, { sku: { $in: variants } }, { altCodes: { $in: variants } }],
   };
   return withId(await dbConnection.collection('foods').findOne(filter));
 }
