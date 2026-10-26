@@ -45,6 +45,11 @@
                     <PosIcon name="x" />
                   </button>
                 </div>
+                <button type="button" class="tool" title="Escanear con la cámara" aria-label="Escanear con la cámara" :disabled="cashBlocked" @click="cameraFor = 'pos'">
+                  <PosIcon name="camera" />
+                  <span class="tool-label">Cámara</span>
+                </button>
+                <CameraScanner v-if="cameraFor" @close="cameraFor = ''" @detect="onCameraDetect" />
                 <button type="button" class="tool" title="Consultar precio (F4)" aria-label="Consultar precio" @click="openPriceCheck">
                   <PosIcon name="tag" />
                   <span class="tool-label">Precio</span>
@@ -1465,6 +1470,9 @@
                     data-scan="barcode"
                     @keydown.enter.prevent
                   />
+                  <button type="button" class="btn" title="Leer el código con la cámara" aria-label="Escanear con la cámara" @click="cameraFor = 'form'">
+                    <PosIcon name="camera" />
+                  </button>
                   <button type="button" class="btn" title="Crear un código interno para imprimir en etiqueta" @click="generateCode">
                     Generar
                   </button>
@@ -1615,6 +1623,7 @@
 import AppShell from "../components/AppShell.vue";
 import MagicPricesSheet from "../components/MagicPricesSheet.vue";
 import BulkPricesDialog from "../components/BulkPricesDialog.vue";
+import CameraScanner from "../components/CameraScanner.vue";
 import PosIcon from "../components/PosIcon.js";
 import { ref, reactive, computed, onMounted, onUnmounted, watch, nextTick } from "vue";
 import { useRoute, useRouter } from "vue-router";
@@ -1696,7 +1705,7 @@ function round2(n) {
 const CATEGORY_HUES = [212, 28, 152, 274, 342, 46, 190, 118, 8, 236];
 
 export default {
-  components: { AppShell, MagicPricesSheet, BulkPricesDialog, PosIcon },
+  components: { AppShell, MagicPricesSheet, BulkPricesDialog, CameraScanner, PosIcon },
   directives: { selectOnFocus: vSelectOnFocus },
   props: {
     initialMode: { type: String, default: "pos" },
@@ -3342,6 +3351,17 @@ export default {
 
     let queuedCode = "";
 
+    const cameraFor = ref(""); // "pos" (caja) o "form" (código del producto que se edita)
+    function onCameraDetect(code) {
+      const target = cameraFor.value;
+      cameraFor.value = "";
+      if (target === "form") foodForm.barcode = code;
+      else {
+        scanCode.value = code;
+        applyScannedCode(code);
+      }
+    }
+
     async function applyScannedCode(raw) {
       const text = String(raw || "").trim();
       const { qty, rest: code, hasQty } = parseQtyPrefix(text);
@@ -4759,6 +4779,8 @@ export default {
       priceResult,
       priceErr,
       openPriceCheck,
+      cameraFor,
+      onCameraDetect,
       closePriceCheck,
       runPriceCheck,
       addFromPriceCheck,
