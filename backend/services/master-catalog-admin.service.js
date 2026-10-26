@@ -24,7 +24,7 @@ function cleanItem(input) {
   if (name.length < 2) throw httpError(400, 'Escribe el nombre del producto.');
   const unit = String(input.unit || 'pz').trim().toLowerCase();
   if (!SALE_UNITS.includes(unit)) throw httpError(400, `La unidad debe ser ${SALE_UNITS.join(', ')}.`);
-  return {
+  const out = {
     section: clean(input.section, 80) || 'General',
     name,
     presentation: clean(input.presentation, 40),
@@ -33,6 +33,15 @@ function cleanItem(input) {
     unit,
     verified: truthy(input.verified),
   };
+  // Precio sugerido y costo son opcionales: si no vienen, el producto nace sin precio y lo captura el dueño.
+  for (const field of ['price', 'cost']) {
+    const raw = String(input[field] == null ? '' : input[field]).replace(/[$,\s]/g, '');
+    if (!raw) continue;
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n < 0) throw httpError(400, `El ${field === 'price' ? 'precio' : 'costo'} no es válido.`);
+    out[field] = Math.round(n * 100) / 100;
+  }
+  return out;
 }
 
 async function codeTaken(db, catalog, code, exceptKey) {

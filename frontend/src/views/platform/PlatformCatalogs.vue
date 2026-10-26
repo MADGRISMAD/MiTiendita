@@ -360,7 +360,7 @@ async function runImport() {
   }
 }
 function downloadTemplate() {
-  downloadCsv("plantilla-catalogo.csv", CATALOG_COLUMNS, [["Analgésicos", "Paracetamol", "500 mg c/20", "7502000000011", "pz", "", ""]]);
+  downloadCsv("plantilla-catalogo.csv", CATALOG_COLUMNS, [["Analgésicos", "Paracetamol", "500 mg c/20", "7502000000011", "pz", "", "", "", ""]]);
 }
 function exportCatalog() {
   downloadCsv(`catalogo-${catalog.value}.csv`, CATALOG_COLUMNS, catalogRowsToCsv(items.value));

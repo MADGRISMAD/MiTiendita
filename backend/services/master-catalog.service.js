@@ -62,13 +62,13 @@ function productName(item) {
   return item.unit === 'kg' && /^1\s*kg$/i.test(presentation) ? item.name : `${item.name} ${presentation}`;
 }
 
-/** Producto de la tienda a partir de uno del catálogo. Sin precio: se lo pone el dueño. */
+/** Producto de la tienda a partir de uno del catálogo. Si el catálogo trae precio lo usa; si no, se lo pone el dueño. */
 function toFood(item, { menuId, tenantId }) {
   return {
     name: productName(item),
-    price: 0,
-    needsPrice: true,
-    cost: 0,
+    price: item.price > 0 ? item.price : 0,
+    needsPrice: !(item.price > 0),
+    cost: item.cost > 0 ? item.cost : 0,
     priceIncludesTax: true, // precio de anaquel
     description: '',
     imgUrl: '',

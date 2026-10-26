@@ -9,10 +9,12 @@ const HEADERS = {
   unit: ["unidad", "unidad de venta"],
   plu: ["plu", "bascula", "a granel"],
   verified: ["verificado", "verificada"],
+  price: ["precio", "precio sugerido", "precio publico", "precio venta", "precio sugerido publico"],
+  cost: ["costo", "precio mayoreo", "mayoreo"],
 };
 
 /** Encabezados de la plantilla, en el orden en que se exportan. */
-export const CATALOG_COLUMNS = ["categoria", "nombre", "presentacion", "codigo", "unidad", "plu", "verificado"];
+export const CATALOG_COLUMNS = ["categoria", "nombre", "presentacion", "codigo", "unidad", "plu", "verificado", "precio", "costo"];
 
 function columnOf(header, field) {
   return header.findIndex((h) => HEADERS[field].includes(fold(h)));
@@ -34,11 +36,13 @@ export function catalogRowsFromCsv(text) {
     unit: cell(row, "unit") || "pz",
     plu: cell(row, "plu"),
     verified: cell(row, "verified"),
+    price: cell(row, "price"),
+    cost: cell(row, "cost"),
   }));
   return { rows, error: "" };
 }
 
 /** Filas de un catálogo (o de los productos de una tienda) para exportarlas con las mismas columnas de la plantilla. */
 export function catalogRowsToCsv(items) {
-  return items.map((i) => [i.section, i.name, i.presentation || "", i.code || "", i.unit || "pz", i.plu ? "sí" : "", i.verified ? "sí" : ""]);
+  return items.map((i) => [i.section, i.name, i.presentation || "", i.code || "", i.unit || "pz", i.plu ? "sí" : "", i.verified ? "sí" : "", i.price ?? "", i.cost ?? ""]);
 }

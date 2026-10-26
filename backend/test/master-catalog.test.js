@@ -386,6 +386,15 @@ test('panel: importar un archivo crea lo nuevo, actualiza lo que ya existe y rep
   assert.deepEqual([again.created, again.updated], [0, 2]);
   assert.equal(await db.CountCatalogItems('pharmacy'), 3);
   assert.equal((await db.GetCatalogItem('pharmacy', '7502000000011')).section, 'Analgésicos y fiebre');
+
+  // con precio y costo el producto nace con precio; sin ellos, sin precio
+  await admin.importRows(db, 'pharmacy', [{ name: 'Con precio', code: '7502000000099', price: '$12.50', cost: '9' }]);
+  const priced = catalog.toFood(await db.GetCatalogItem('pharmacy', '7502000000099'), { menuId: 'm1', tenantId: 't1' });
+  assert.deepEqual([priced.price, priced.cost, priced.needsPrice], [12.5, 9, false]);
+  const bare = catalog.toFood(await db.GetCatalogItem('pharmacy', '7502000000035'), { menuId: 'm1', tenantId: 't1' });
+  assert.deepEqual([bare.price, bare.needsPrice], [0, true]);
+  const bad = await admin.importRows(db, 'pharmacy', [{ name: 'Mal precio', price: 'abc' }]);
+  assert.equal(bad.errors.length, 1);
   await assert.rejects(admin.importRows(db, 'pharmacy', []), (e) => e.status === 400);
   await assert.rejects(admin.importRows(db, 'pharmacy', Array(3001).fill({ name: 'Producto' })), (e) => e.status === 400);
 });
