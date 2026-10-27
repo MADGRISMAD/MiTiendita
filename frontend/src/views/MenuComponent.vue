@@ -20,7 +20,8 @@
                   <input
                     id="pos-scan"
                     ref="scanInput"
-                    v-model="scanCode"
+                    :value="scanCode"
+                    @input="scanCode = $event.target.value"
                     type="search"
                     inputmode="search"
                     enterkeyhint="search"
@@ -49,7 +50,7 @@
                   <PosIcon name="camera" />
                   <span class="tool-label">Cámara</span>
                 </button>
-                <CameraScanner v-if="cameraFor" @close="cameraFor = ''" @detect="onCameraDetect" />
+                <CameraScanner v-if="cameraFor === 'pos'" @close="cameraFor = ''" @detect="onCameraDetect" />
                 <button type="button" class="tool" title="Consultar precio (F4)" aria-label="Consultar precio" @click="openPriceCheck">
                   <PosIcon name="tag" />
                   <span class="tool-label">Precio</span>
@@ -497,7 +498,8 @@
                 <div class="finder-box">
                   <PosIcon name="search" class="finder-ico" />
                   <input
-                    v-model="catalogSearch"
+                    :value="catalogSearch"
+                    @input="catalogSearch = $event.target.value"
                     class="scan-input cat-search"
                     type="search"
                     :placeholder="catalogPlaceholder"
@@ -733,7 +735,8 @@
             </header>
             <input
               ref="priceInput"
-              v-model="priceCode"
+              :value="priceCode"
+              @input="priceCode = $event.target.value"
               class="inp big"
               placeholder="Código de barras o nombre"
               autocomplete="off"
@@ -1473,9 +1476,6 @@
                   <button type="button" class="btn" title="Leer el código con la cámara" aria-label="Escanear con la cámara" @click="cameraFor = 'form'">
                     <PosIcon name="camera" />
                   </button>
-                  <button type="button" class="btn" title="Crear un código interno para imprimir en etiqueta" @click="generateCode">
-                    Generar
-                  </button>
                 </div>
                 <div v-if="foodForm.altCodes.length || foodForm.barcode" class="alt-codes">
                   <span v-for="c in foodForm.altCodes" :key="c" class="alt-chip">
@@ -1598,10 +1598,11 @@
                 </div>
               </div>
               <PhotoCropDialog :file="photoFile" @done="onPhotoCropped" @cancel="photoFile = null" />
-              <p v-if="foodError" class="scan-msg err wide">{{ foodError }}</p>
+              <CameraScanner v-if="cameraFor === 'form'" @close="cameraFor = ''" @detect="onCameraDetect" />
             </div>
 
             <footer class="product-foot" :class="{ editing: editingFood }">
+              <p v-if="foodError" class="scan-msg err" role="alert">{{ foodError }}</p>
               <div class="sheet-actions">
                 <button type="button" class="act" @click="closeFoodForm">Cancelar</button>
                 <button type="submit" class="act primary">Guardar<span class="hide-mobile"> producto</span></button>
@@ -1894,6 +1895,7 @@ export default {
         const gone = selectedIds.value;
         productos.value = productos.value.filter((p) => !gone.has(p.id));
         pickFoods.value = pickFoods.value.filter((p) => !gone.has(p.id));
+        saveCatalog(authStore.tenantId, { foods: pickFoods.value, menus: menus.value }).catch(() => {});
         selectedIds.value = new Set();
         selectMode.value = false;
       } catch (e) {
@@ -2455,19 +2457,6 @@ export default {
         else foodForm.name = q;
       });
       catalogSearch.value = "";
-    }
-
-    // Código interno EAN-13 con prefijo 20 (reservado para uso dentro de la tienda)
-    function generateCode() {
-      let max = 0;
-      for (const p of pickFoods.value) {
-        const c = codeOf(p);
-        if (/^20\d{11}$/.test(c)) max = Math.max(max, Number(c.slice(2, 12)));
-      }
-      const base = "20" + String(max + 1).padStart(10, "0");
-      let sum = 0;
-      for (let i = 0; i < 12; i++) sum += Number(base[i]) * (i % 2 ? 3 : 1);
-      foodForm.barcode = base + ((10 - (sum % 10)) % 10);
     }
 
     // Ganancia sobre el costo; al escribirla se calcula el precio
@@ -4509,6 +4498,7 @@ export default {
         const pidx = pickFoods.value.findIndex((p) => p.id === saved.id);
         if (pidx >= 0) pickFoods.value[pidx] = saved;
         else pickFoods.value.push(saved);
+        saveCatalog(authStore.tenantId, { foods: pickFoods.value, menus: menus.value }).catch(() => {});
         closeFoodForm();
         if (shouldAdd && saved?.id) {
           if (intent === "price") {
@@ -4545,6 +4535,7 @@ export default {
       await apiService.deleteFood(editingFood.value.id);
       productos.value = productos.value.filter((p) => p.id !== editingFood.value.id);
       pickFoods.value = pickFoods.value.filter((p) => p.id !== editingFood.value.id);
+      saveCatalog(authStore.tenantId, { foods: pickFoods.value, menus: menus.value }).catch(() => {});
       closeFoodForm();
     }
 
@@ -4669,7 +4660,6 @@ export default {
       marginPct,
       marginTone,
       codeOf,
-      generateCode,
       foodMarkup,
       onFormMenuChange,
       duplicateFood,
@@ -5244,6 +5234,13 @@ html[data-theme="dark"] .avatar {
   height: 100%;
   object-fit: cover;
   border-radius: inherit;
+}
+.tile .avatar {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1 / 1;
+  font-size: 2rem;
+  border-radius: 0.7rem;
 }
 .badge {
   position: absolute;
