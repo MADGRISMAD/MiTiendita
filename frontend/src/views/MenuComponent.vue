@@ -1587,10 +1587,17 @@
                 </div>
               </template>
 
-              <label class="field wide">
-                <span>Foto (link)</span>
-                <input v-model="foodForm.imgUrl" class="inp" type="url" placeholder="Pega aquí el link de la foto" />
-              </label>
+              <div class="field wide">
+                <span>Foto</span>
+                <div class="photo-row">
+                  <button type="button" class="btn" @click="$refs.photoInput.click()">
+                    {{ foodForm.imgUrl ? "Cambiar foto" : "Subir o tomar foto" }}
+                  </button>
+                  <button v-if="foodForm.imgUrl" type="button" class="btn danger-ghost" @click="foodForm.imgUrl = ''">Quitar</button>
+                  <input ref="photoInput" type="file" accept="image/*" hidden @change="onProductPhoto" />
+                </div>
+              </div>
+              <PhotoCropDialog :file="photoFile" @done="onPhotoCropped" @cancel="photoFile = null" />
               <p v-if="foodError" class="scan-msg err wide">{{ foodError }}</p>
             </div>
 
@@ -1623,6 +1630,7 @@
 import AppShell from "../components/AppShell.vue";
 import MagicPricesSheet from "../components/MagicPricesSheet.vue";
 import BulkPricesDialog from "../components/BulkPricesDialog.vue";
+import PhotoCropDialog from "../components/PhotoCropDialog.vue";
 import CameraScanner from "../components/CameraScanner.vue";
 import PosIcon from "../components/PosIcon.js";
 import { ref, reactive, computed, onMounted, onUnmounted, watch, nextTick } from "vue";
@@ -1705,7 +1713,7 @@ function round2(n) {
 const CATEGORY_HUES = [212, 28, 152, 274, 342, 46, 190, 118, 8, 236];
 
 export default {
-  components: { AppShell, MagicPricesSheet, BulkPricesDialog, CameraScanner, PosIcon },
+  components: { AppShell, MagicPricesSheet, BulkPricesDialog, PhotoCropDialog, CameraScanner, PosIcon },
   directives: { selectOnFocus: vSelectOnFocus },
   props: {
     initialMode: { type: String, default: "pos" },
@@ -4421,7 +4429,18 @@ export default {
       await fetchMenus();
     }
 
+    const photoFile = ref(null);
+    function onProductPhoto(e) {
+      photoFile.value = e.target.files?.[0] || null;
+      e.target.value = "";
+    }
+    function onPhotoCropped(dataUrl) {
+      foodForm.imgUrl = dataUrl;
+      photoFile.value = null;
+    }
+
     function closeFoodForm() {
+      photoFile.value = null;
       showFoodForm.value = false;
       editingFood.value = null;
       foodForm.name = "";
@@ -4673,6 +4692,9 @@ export default {
       editFood,
       closeFoodForm,
       deleteFood,
+      photoFile,
+      onProductPhoto,
+      onPhotoCropped,
       // Selección múltiple
       selectMode,
       selectedIds,
@@ -7534,6 +7556,8 @@ html[data-theme="dark"] .avatar {
 .point-box span { color: var(--timber-ink); }
 .point-acts { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.25rem; }
 .point-acts .btn { min-height: 2.6rem; font-size: 0.88rem; }
+
+.photo-row { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 
 /* Multi-select */
 .select-bar {
