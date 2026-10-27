@@ -1622,10 +1622,10 @@
               <div class="field wide">
                 <span>Foto</span>
                 <div class="photo-row">
-                  <button type="button" class="btn" @click="$refs.photoInput.click()">
-                    {{ foodForm.imgUrl ? "Cambiar foto" : "Subir o tomar foto" }}
-                  </button>
+                  <button type="button" class="btn" @click="$refs.photoCamera.click()">Tomar foto</button>
+                  <button type="button" class="btn" @click="$refs.photoInput.click()">{{ foodForm.imgUrl ? "Cambiar desde galería" : "Subir de galería" }}</button>
                   <button v-if="foodForm.imgUrl" type="button" class="btn danger-ghost" @click="foodForm.imgUrl = ''">Quitar</button>
+                  <input ref="photoCamera" type="file" accept="image/*" capture="environment" hidden @change="onProductPhoto" />
                   <input ref="photoInput" type="file" accept="image/*" hidden @change="onProductPhoto" />
                 </div>
               </div>
