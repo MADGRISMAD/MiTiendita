@@ -520,6 +520,10 @@
                   <button type="button" :class="{ on: viewMode === 'list' }" title="Lista" @click="viewMode = 'list'">☰</button>
                   <button type="button" :class="{ on: viewMode === 'grid' }" title="Mosaico" @click="viewMode = 'grid'">▦</button>
                 </div>
+                <div v-if="viewMode === 'grid'" class="view-toggle hide-mobile" role="group" aria-label="Tamaño del mosaico">
+                  <button type="button" :class="{ on: gridSize === 'auto' }" title="Se adapta al ancho de la pantalla" @click="gridSize = 'auto'">Auto</button>
+                  <button type="button" :class="{ on: gridSize === 'five' }" title="Hasta 5 productos por fila" @click="gridSize = 'five'">5</button>
+                </div>
               </div>
 
               <div class="cat-chips">
@@ -611,7 +615,7 @@
                   </tbody>
                 </table>
 
-                <div v-else-if="catalogRows.length" class="tiles cat-tiles hide-mobile">
+                <div v-else-if="catalogRows.length" class="tiles cat-tiles hide-mobile" :class="{ 'cols-5': gridSize === 'five' }">
                   <button v-for="p in visibleRows" :key="p.id" type="button" class="tile" @click="editFood(p)">
                     <span class="avatar" :style="{ '--hue': hueOf(p.menuId) }">
                       <img v-if="hasImg(p)" :src="p.imgUrl" alt="" loading="lazy" @error="brokenImgs.add(p.id)" />
@@ -1856,7 +1860,22 @@ export default {
 
     // Búsqueda y vista de lista en modo catálogo
     const catalogSearch = ref("");
-    const viewMode = ref("list"); // "grid" o "list"
+    const VIEW_KEY = "mt-catalog-view";
+    let savedView = {};
+    try {
+      savedView = JSON.parse(localStorage.getItem(VIEW_KEY) || "{}") || {};
+    } catch {
+      /* sin almacenamiento: se usan los valores por defecto */
+    }
+    const viewMode = ref(savedView.mode === "grid" ? "grid" : "list"); // "grid" o "list"
+    const gridSize = ref(savedView.size === "five" ? "five" : "auto"); // "auto" (se adapta) o "five" (hasta 5 por fila)
+    watch([viewMode, gridSize], () => {
+      try {
+        localStorage.setItem(VIEW_KEY, JSON.stringify({ mode: viewMode.value, size: gridSize.value }));
+      } catch {
+        /* ignore */
+      }
+    });
     const catFilter = ref("");
     const statusFilter = ref("all");
     const sortBy = ref("name");
@@ -4636,6 +4655,7 @@ export default {
       duplicateCode,
       catalogSearch,
       viewMode,
+      gridSize,
       lowStockItems,
       suppliers,
       catFilter,
@@ -6929,6 +6949,10 @@ html[data-theme="dark"] .avatar {
 .pill.low { background: var(--timber-warning-soft); color: var(--timber-warning); }
 .pill.out { background: var(--timber-danger-soft); color: var(--timber-danger); }
 .cat-tiles { overflow: visible; }
+/* Hasta 5 por fila; si el espacio no alcanza, baja a 4, 3… sin pasar de 8rem por tarjeta */
+.cat-tiles.cols-5 {
+  grid-template-columns: repeat(auto-fill, minmax(max(8rem, calc((100% - 2.4rem) / 5)), 1fr));
+}
 .more-btn {
   display: flex;
   margin: 0.75rem auto;
@@ -7518,7 +7542,8 @@ html[data-theme="dark"] .avatar {
   border: 1px solid var(--timber-line);
 }
 .view-toggle button {
-  width: 2.4rem;
+  min-width: 2.4rem;
+  padding: 0 0.55rem;
   height: 2.4rem;
   border: none;
   border-radius: 0.4rem;
