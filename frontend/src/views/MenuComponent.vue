@@ -66,6 +66,10 @@
                   <PosIcon name="plus" />
                   <span class="tool-label">Varios</span>
                 </button>
+                <div class="view-toggle hide-mobile" role="group" aria-label="Tamaño de las tarjetas">
+                  <button type="button" :class="{ on: posGridSize === 'auto' }" title="Se adapta al ancho de la pantalla" @click="posGridSize = 'auto'">Auto</button>
+                  <button type="button" :class="{ on: posGridSize === 'five' }" title="Hasta 5 productos por fila" @click="posGridSize = 'five'">5</button>
+                </div>
               </div>
               <p class="finder-status" :class="'tone-' + status.tone" aria-live="polite">
                 <span class="dot" aria-hidden="true"></span>
@@ -157,7 +161,7 @@
             </div>
 
             <!-- Mosaico de productos -->
-            <div v-else class="tiles">
+            <div v-else class="tiles" :class="{ 'cols-5': posGridSize === 'five' }">
               <button
                 v-for="p in pickList"
                 :key="p.id"
@@ -1869,9 +1873,13 @@ export default {
     }
     const viewMode = ref(savedView.mode === "grid" ? "grid" : "list"); // "grid" o "list"
     const gridSize = ref(savedView.size === "five" ? "five" : "auto"); // "auto" (se adapta) o "five" (hasta 5 por fila)
-    watch([viewMode, gridSize], () => {
+    const posGridSize = ref(savedView.pos === "five" ? "five" : "auto"); // lo mismo, en la pantalla de Vender
+    watch([viewMode, gridSize, posGridSize], () => {
       try {
-        localStorage.setItem(VIEW_KEY, JSON.stringify({ mode: viewMode.value, size: gridSize.value }));
+        localStorage.setItem(
+          VIEW_KEY,
+          JSON.stringify({ mode: viewMode.value, size: gridSize.value, pos: posGridSize.value })
+        );
       } catch {
         /* ignore */
       }
@@ -4656,6 +4664,7 @@ export default {
       catalogSearch,
       viewMode,
       gridSize,
+      posGridSize,
       lowStockItems,
       suppliers,
       catFilter,
@@ -6578,6 +6587,7 @@ html[data-theme="dark"] .avatar {
     background: var(--timber-panel);
   }
   .tile:hover:not(:disabled) { transform: none; box-shadow: none; }
+  .tile .avatar { width: 2.65rem; height: 2.65rem; aspect-ratio: auto; font-size: 1.05rem; }
   .tile-name { font-size: 0.93rem; }
   .tile-foot {
     flex-direction: column;
@@ -6950,8 +6960,10 @@ html[data-theme="dark"] .avatar {
 .pill.out { background: var(--timber-danger-soft); color: var(--timber-danger); }
 .cat-tiles { overflow: visible; }
 /* Hasta 5 por fila; si el espacio no alcanza, baja a 4, 3… sin pasar de 8rem por tarjeta */
-.cat-tiles.cols-5 {
-  grid-template-columns: repeat(auto-fill, minmax(max(8rem, calc((100% - 2.4rem) / 5)), 1fr));
+@media (min-width: 768px) {
+  .tiles.cols-5 {
+    grid-template-columns: repeat(auto-fill, minmax(max(8rem, calc((100% - 2.4rem) / 5)), 1fr));
+  }
 }
 .more-btn {
   display: flex;
