@@ -67,8 +67,20 @@
                   <span class="tool-label">Varios</span>
                 </button>
                 <div class="view-toggle hide-mobile" role="group" aria-label="Tamaño de las tarjetas">
-                  <button type="button" :class="{ on: posGridSize === 'auto' }" title="Se adapta al ancho de la pantalla" @click="posGridSize = 'auto'">Auto</button>
-                  <button type="button" :class="{ on: posGridSize === 'five' }" title="Hasta 5 productos por fila" @click="posGridSize = 'five'">5</button>
+                  <button
+                    v-for="o in GRID_SIZES"
+                    :key="o.id"
+                    type="button"
+                    :class="{ on: posGridSize === o.id }"
+                    :title="o.title"
+                    :aria-label="o.title"
+                    :aria-pressed="posGridSize === o.id"
+                    @click="posGridSize = o.id"
+                  >
+                    <svg viewBox="0 0 16 16" width="18" height="18" fill="currentColor" aria-hidden="true">
+                      <rect v-for="(r, i) in o.rects" :key="i" v-bind="r" rx="1" />
+                    </svg>
+                  </button>
                 </div>
               </div>
               <p class="finder-status" :class="'tone-' + status.tone" aria-live="polite">
@@ -525,8 +537,20 @@
                   <button type="button" :class="{ on: viewMode === 'grid' }" title="Mosaico" @click="viewMode = 'grid'">▦</button>
                 </div>
                 <div v-if="viewMode === 'grid'" class="view-toggle hide-mobile" role="group" aria-label="Tamaño del mosaico">
-                  <button type="button" :class="{ on: gridSize === 'auto' }" title="Se adapta al ancho de la pantalla" @click="gridSize = 'auto'">Auto</button>
-                  <button type="button" :class="{ on: gridSize === 'five' }" title="Hasta 5 productos por fila" @click="gridSize = 'five'">5</button>
+                  <button
+                    v-for="o in GRID_SIZES"
+                    :key="o.id"
+                    type="button"
+                    :class="{ on: gridSize === o.id }"
+                    :title="o.title"
+                    :aria-label="o.title"
+                    :aria-pressed="gridSize === o.id"
+                    @click="gridSize = o.id"
+                  >
+                    <svg viewBox="0 0 16 16" width="18" height="18" fill="currentColor" aria-hidden="true">
+                      <rect v-for="(r, i) in o.rects" :key="i" v-bind="r" rx="1" />
+                    </svg>
+                  </button>
                 </div>
               </div>
 
@@ -1864,6 +1888,19 @@ export default {
 
     // Búsqueda y vista de lista en modo catálogo
     const catalogSearch = ref("");
+    // Cuadros chicos (se adapta al ancho) y cuadros grandes (hasta 5 por fila); rects = dibujo del ícono
+    const GRID_SIZES = [
+      {
+        id: "auto",
+        title: "Cuadros chicos: caben más productos",
+        rects: [0, 6, 12].flatMap((y) => [0, 6, 12].map((x) => ({ x, y, width: 4, height: 4 }))),
+      },
+      {
+        id: "five",
+        title: "Cuadros grandes: hasta 5 por fila",
+        rects: [0, 9].flatMap((y) => [0, 9].map((x) => ({ x, y, width: 7, height: 7 }))),
+      },
+    ];
     const VIEW_KEY = "mt-catalog-view";
     let savedView = {};
     try {
@@ -4663,6 +4700,7 @@ export default {
       duplicateCode,
       catalogSearch,
       viewMode,
+      GRID_SIZES,
       gridSize,
       posGridSize,
       lowStockItems,
@@ -5320,8 +5358,11 @@ html[data-theme="dark"] .avatar {
   display: flex;
   align-items: center;
   gap: 0.8rem;
+  flex: 0 0 auto;
   width: 100%;
-  padding: 0.6rem 0.75rem;
+  height: 4.7rem;
+  overflow: hidden;
+  padding: 0.5rem 0.75rem;
   border: 1px solid transparent;
   border-radius: 0.8rem;
   background: transparent;
@@ -5347,6 +5388,12 @@ html[data-theme="dark"] .avatar {
   font-size: 0.98rem;
   font-weight: 700;
   line-height: 1.25;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
 }
 .result-name mark {
   padding: 0 0.05rem;
@@ -5373,6 +5420,7 @@ html[data-theme="dark"] .avatar {
   font-size: 1.08rem;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 .in-ticket {
   font-size: 0.72rem;
@@ -6597,7 +6645,7 @@ html[data-theme="dark"] .avatar {
   }
   .results { padding: 0.45rem 0.5rem 1rem; }
   .result {
-    padding: 0.6rem 0.6rem;
+    padding: 0.5rem 0.6rem;
     background: var(--timber-panel);
     border-color: var(--timber-line);
   }
@@ -6962,7 +7010,7 @@ html[data-theme="dark"] .avatar {
 /* Hasta 5 por fila; si el espacio no alcanza, baja a 4, 3… sin pasar de 8rem por tarjeta */
 @media (min-width: 768px) {
   .tiles.cols-5 {
-    grid-template-columns: repeat(auto-fill, minmax(max(8rem, calc((100% - 2.4rem) / 5)), 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(max(10rem, calc((100% - 2.4rem) / 5)), 1fr));
   }
 }
 .more-btn {
@@ -7553,9 +7601,11 @@ html[data-theme="dark"] .avatar {
   padding: 0.15rem;
   border: 1px solid var(--timber-line);
 }
+.finder-row .view-toggle { align-self: center; }
 .view-toggle button {
-  min-width: 2.4rem;
-  padding: 0 0.55rem;
+  display: inline-grid;
+  place-items: center;
+  width: 2.4rem;
   height: 2.4rem;
   border: none;
   border-radius: 0.4rem;
