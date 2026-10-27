@@ -1622,8 +1622,13 @@
               <div class="field wide">
                 <span>Foto</span>
                 <div class="photo-row">
-                  <button type="button" class="btn" @click="$refs.photoCamera.click()">Tomar foto</button>
-                  <button type="button" class="btn" @click="$refs.photoInput.click()">{{ foodForm.imgUrl ? "Cambiar desde galería" : "Subir de galería" }}</button>
+                  <button type="button" class="btn" :aria-expanded="photoMenu" @click="photoMenu = !photoMenu">
+                    {{ foodForm.imgUrl ? "Cambiar foto" : "Agregar foto" }}
+                  </button>
+                  <template v-if="photoMenu">
+                    <button type="button" class="btn" @click="photoMenu = false; $refs.photoCamera.click()">Tomar foto</button>
+                    <button type="button" class="btn" @click="photoMenu = false; $refs.photoInput.click()">Galería</button>
+                  </template>
                   <button v-if="foodForm.imgUrl" type="button" class="btn danger-ghost" @click="foodForm.imgUrl = ''">Quitar</button>
                   <input ref="photoCamera" type="file" accept="image/*" capture="environment" hidden @change="onProductPhoto" />
                   <input ref="photoInput" type="file" accept="image/*" hidden @change="onProductPhoto" />
@@ -4483,6 +4488,7 @@ export default {
     }
 
     const photoFile = ref(null);
+    const photoMenu = ref(false);
     function onProductPhoto(e) {
       photoFile.value = e.target.files?.[0] || null;
       e.target.value = "";
@@ -4493,6 +4499,7 @@ export default {
     }
 
     function closeFoodForm() {
+      photoMenu.value = false;
       photoFile.value = null;
       showFoodForm.value = false;
       editingFood.value = null;
@@ -4751,6 +4758,7 @@ export default {
       deleteFood,
       photoFile,
       onProductPhoto,
+      photoMenu,
       onPhotoCropped,
       // Selección múltiple
       selectMode,
