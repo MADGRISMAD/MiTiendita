@@ -147,7 +147,9 @@ function compress() {
   for (let round = 0; round < 3; round++) {
     const canvas = render(size);
     for (const q of [0.88, 0.8, 0.72, 0.64, 0.56]) {
-      const url = canvas.toDataURL("image/jpeg", q);
+      // WebP pesa menos a la misma calidad; si el navegador no lo sabe crear, devuelve PNG y se usa JPEG
+      let url = canvas.toDataURL("image/webp", q);
+      if (!url.startsWith("data:image/webp")) url = canvas.toDataURL("image/jpeg", q);
       if (url.length <= MAX_CHARS) return url;
     }
     size = Math.round(size * 0.8);
