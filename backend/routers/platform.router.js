@@ -44,6 +44,7 @@ router.post('/catalogs/:catalog/codes/suggest', ...adminOnly, catalogs.codesSugg
 router.post('/catalogs/:catalog/recode/preview', ...adminOnly, catalogs.recodePreview);
 router.post('/catalogs/:catalog/recode/apply', ...adminOnly, writeLimit, catalogs.recodeApply);
 router.post('/catalogs/:catalog/items', ...adminOnly, writeLimit, catalogs.create);
+router.post('/catalogs/:catalog/clear', ...adminOnly, writeLimit, catalogs.clearCatalog);
 router.post('/catalogs/:catalog/import', ...adminOnly, writeLimit, catalogs.importRows);
 router.post('/catalogs/:catalog/from-tenant', ...adminOnly, writeLimit, catalogs.addFromTenant);
 router.put('/catalogs/:catalog/items/:key', ...adminOnly, writeLimit, catalogs.update);

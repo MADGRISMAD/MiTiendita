@@ -114,6 +114,17 @@ async function recodeApply(req, res) {
   }
 }
 
+/** Elimina todo el catálogo maestro elegido (pide escribir ELIMINAR) y lo anota en la bitácora. */
+async function clearCatalog(req, res) {
+  try {
+    const result = await admin.clear(db, req.params.catalog, req.body?.confirm);
+    await audit.record(req, { type: 'catalog_cleared', message: `Eliminó todo el catálogo ${label(req.params.catalog)} (${result.removed} productos)`, meta: { catalog: req.params.catalog, removed: result.removed } });
+    return res.json(result);
+  } catch (err) {
+    return fail(res, err, 'No se pudo eliminar el catálogo.');
+  }
+}
+
 async function importRows(req, res) {
   try {
     const out = await admin.importRows(db, req.params.catalog, req.body?.rows);
@@ -150,4 +161,4 @@ async function addFromTenant(req, res) {
   }
 }
 
-module.exports = { summary, list, create, update, remove, importRows, tenantProducts, addFromTenant, codesReport, codesOnline, codesSuggest, recodePreview, recodeApply };
+module.exports = { summary, list, create, update, remove, importRows, tenantProducts, addFromTenant, codesReport, codesOnline, codesSuggest, recodePreview, recodeApply, clearCatalog };

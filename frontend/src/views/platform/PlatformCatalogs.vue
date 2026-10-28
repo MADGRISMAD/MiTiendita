@@ -5,6 +5,7 @@
         <button type="button" class="adm-btn" :disabled="!items.length" @click="exportCatalog">Exportar</button>
         <button type="button" class="adm-btn" @click="showImport = !showImport">Importar archivo</button>
         <button type="button" class="adm-btn" :aria-pressed="showCodes" @click="showCodes = !showCodes">Verificar códigos</button>
+        <button type="button" class="adm-btn danger-ghost" :disabled="busy || !items.length" @click="clearCatalog">Eliminar catálogo</button>
         <button type="button" class="adm-btn primary" @click="openEdit(null)">Agregar producto</button>
       </template>
     </template>
@@ -705,6 +706,31 @@ async function markVerified(keys) {
 }
 const verifyOne = (key) => markVerified([key]);
 const verifyMatching = () => markVerified(onlineList.value.filter((r) => r.status === "same" && !r.sizeDiffers).map((r) => r.key));
+
+// ---------- Eliminar todo el catálogo ----------
+async function clearCatalog() {
+  const name = catalogLabel(catalog.value);
+  const word = window.prompt(
+    `Vas a ELIMINAR todo el catálogo «${name}» (${items.value.length} productos).\n\nAntes de borrar se descarga una copia en CSV. Las tiendas que ya lo cargaron no se ven afectadas y el servidor no lo vuelve a llenar solo.\n\nPara confirmar escribe ELIMINAR:`
+  );
+  if (word === null) return;
+  if (String(word).trim().toUpperCase() !== "ELIMINAR") {
+    error.value = "No se eliminó nada: no escribiste ELIMINAR.";
+    return;
+  }
+  busy.value = true;
+  error.value = "";
+  try {
+    exportCatalog(); // copia de respaldo antes de borrar
+    const r = await apiService.platformCatalogClear(catalog.value, "ELIMINAR");
+    say(`Se eliminó el catálogo «${name}» (${r.removed} productos). La copia se descargó como catalogo-${catalog.value}.csv.`);
+    await Promise.all([loadItems(), loadCatalogs()]);
+  } catch (e) {
+    error.value = errText(e, "No pude eliminar el catálogo.");
+  } finally {
+    busy.value = false;
+  }
+}
 
 // ---------- Importar y exportar ----------
 const showImport = ref(false);

@@ -60,6 +60,11 @@ function memoryDb({ foods = [], menus = [], settings = [], catalogItems = catalo
       catalogItems.splice(i, 1);
       return 1;
     },
+    async DeleteAllCatalogItems(c) {
+      const before = catalogItems.length;
+      for (let i = catalogItems.length - 1; i >= 0; i -= 1) if (catalogItems[i].catalog === c) catalogItems.splice(i, 1);
+      return before - catalogItems.length;
+    },
     async IsCatalogSeeded() {
       return seeded;
     },
@@ -320,6 +325,21 @@ test('al arrancar, el archivo pasa a la base una sola vez; si el equipo la vací
   assert.equal(await db.CountCatalogItems('abarrotes'), 181);
   for (const i of [...db.catalogItems]) await db.DeleteCatalogItem('abarrotes', i.key);
   assert.equal(await catalog.ensureSeeded(db), 0);
+  assert.equal(await db.CountCatalogItems('abarrotes'), 0);
+});
+
+test('eliminar un catálogo: pide la palabra de confirmación, borra solo ese catálogo y no se vuelve a llenar al reiniciar', async () => {
+  const db = memoryDb({ catalogItems: [] });
+  await catalog.ensureSeeded(db);
+  await admin.create(db, 'pharmacy', { section: 'Analgésicos', name: 'Paracetamol', code: '7502000000011' });
+  await assert.rejects(admin.clear(db, 'abarrotes', ''), (e) => e.status === 400);
+  await assert.rejects(admin.clear(db, 'abarrotes', 'si'), (e) => e.status === 400);
+  await assert.rejects(admin.clear(db, 'nada', 'ELIMINAR'), (e) => e.status === 404);
+  assert.equal(await db.CountCatalogItems('abarrotes'), 181, 'sin confirmar no se borra nada');
+  assert.deepEqual(await admin.clear(db, 'abarrotes', ' eliminar '), { removed: 181 });
+  assert.equal(await db.CountCatalogItems('abarrotes'), 0);
+  assert.equal(await db.CountCatalogItems('pharmacy'), 1, 'los demás catálogos no se tocan');
+  assert.equal(await catalog.ensureSeeded(db), 0, 'al reiniciar no se vuelve a sembrar');
   assert.equal(await db.CountCatalogItems('abarrotes'), 0);
 });
 

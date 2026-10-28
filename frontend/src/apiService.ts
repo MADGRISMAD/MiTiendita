@@ -578,6 +578,9 @@ export const apiService = {
   platformCatalogRecodeApply(catalog: string, tenantId: string, clearOthers: boolean) {
     return axios.post(`/platform/catalogs/${catalog}/recode/apply`, { tenantId, clearOthers }, { timeout: 120_000 }).then((r) => r.data);
   },
+  platformCatalogClear(catalog: string, confirm: string) {
+    return axios.post(`/platform/catalogs/${catalog}/clear`, { confirm }).then((r) => r.data);
+  },
   platformCatalogDelete(catalog: string, key: string) {
     return axios.delete(`/platform/catalogs/${catalog}/items/${encodeURIComponent(key)}`).then((r) => r.data);
   },
