@@ -565,6 +565,9 @@ export const apiService = {
   platformCatalogCodesOnline(catalog: string, keys: string[]) {
     return axios.post(`/platform/catalogs/${catalog}/codes/online`, { keys }, { timeout: 60_000 }).then((r) => r.data);
   },
+  platformCatalogCodesSuggest(catalog: string, keys: string[]) {
+    return axios.post(`/platform/catalogs/${catalog}/codes/suggest`, { keys }, { timeout: 60_000 }).then((r) => r.data);
+  },
   platformCatalogDelete(catalog: string, key: string) {
     return axios.delete(`/platform/catalogs/${catalog}/items/${encodeURIComponent(key)}`).then((r) => r.data);
   },

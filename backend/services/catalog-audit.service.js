@@ -9,6 +9,8 @@ const barcodeLookup = require('./barcode-lookup.service');
 const { CATALOGS } = require('./master-catalog.service');
 
 const MAX_BATCH = 8;
+const MAX_SUGGEST_BATCH = 4;
+const MAX_CANDIDATES = 4;
 const STOP = new Set(['de', 'la', 'el', 'con', 'sin', 'y', 'en', 'para', 'por', 'del', 'los', 'las', 'un', 'una']);
 const UNITS = new Set(['ml', 'l', 'lt', 'g', 'gr', 'kg', 'pz', 'pzs', 'pieza', 'piezas', 'cm', 'mm', 'm']);
 
@@ -23,10 +25,13 @@ function gtinStatus(code) {
   if (!c) return 'missing';
   if (!/^\d+$/.test(c)) return 'internal';
   if (![8, 12, 13, 14].includes(c.length)) return 'length';
-  const digits = [...c].map(Number);
-  const check = digits.pop();
-  const sum = digits.reverse().reduce((acc, d, i) => acc + d * (i % 2 === 0 ? 3 : 1), 0);
-  return (10 - (sum % 10)) % 10 === check ? 'ok' : 'digit';
+  return checkDigitOf(c.slice(0, -1)) === Number(c.slice(-1)) ? 'ok' : 'digit';
+}
+
+/** Dígito verificador que le toca a un código sin su último dígito. */
+function checkDigitOf(body) {
+  const sum = [...String(body)].reverse().reduce((acc, d, i) => acc + Number(d) * (i % 2 === 0 ? 3 : 1), 0);
+  return (10 - (sum % 10)) % 10;
 }
 
 /** ¿El nombre del catálogo y el de la base pública hablan del mismo producto? */
@@ -116,4 +121,52 @@ async function checkOnline(db, catalog, keys) {
   return { results };
 }
 
-module.exports = { gtinStatus, sameProduct, sizeDiffers, localReport, onlineKeys, checkOnline, MAX_BATCH };
+/**
+ * Posibles códigos correctos para un producto. Nunca cambia nada:
+ *  - «confirmed»: el código con el dígito verificador corregido existe en las bases y el nombre coincide;
+ *  - «check_digit»: solo se corrigió el dígito y no hay dónde confirmarlo;
+ *  - «search»: salió de buscar por nombre (poco preciso; primero los de México, que empiezan con 750).
+ */
+async function suggestFor(db, catalog, item, usedCodes) {
+  const mine = `${item.name} ${item.presentation || ''}`;
+  const status = item.plu ? 'internal' : gtinStatus(item.code);
+  if (status === 'internal') return [];
+  const out = [];
+  const seen = new Set([canon(item.code || '')]);
+  const take = (c) => {
+    const k = canon(c.code);
+    if (seen.has(k) || usedCodes.has(k) || gtinStatus(c.code) !== 'ok') return;
+    seen.add(k);
+    out.push(c);
+  };
+  if (status === 'digit') {
+    const fixed = item.code.slice(0, -1) + checkDigitOf(item.code.slice(0, -1));
+    const found = await barcodeLookup.lookup(fixed);
+    if (found.found && sameProduct(mine, `${found.name} ${found.quantity || ''}`)) take({ code: fixed, name: found.name, quantity: found.quantity || '', source: found.source, confidence: 'confirmed' });
+    else if (!found.found && !found.unavailable) take({ code: fixed, name: '', quantity: '', source: '', confidence: 'check_digit' });
+  }
+  const found = await barcodeLookup.searchByName(mine);
+  const ranked = found
+    .filter((c) => sameProduct(mine, `${c.name} ${c.quantity}`))
+    .sort((a, b) => Number(b.code.replace(/^0+/, '').startsWith('750')) - Number(a.code.replace(/^0+/, '').startsWith('750')) || Number(b.mexico) - Number(a.mexico));
+  for (const c of ranked) take({ code: c.code, name: c.name, quantity: c.quantity, source: c.source, confidence: 'search', mexico: c.mexico || c.code.replace(/^0+/, '').startsWith('750') });
+  return out.slice(0, MAX_CANDIDATES);
+}
+
+/** Sugerencias para una tanda de productos: { [key]: candidatos }. */
+async function suggest(db, catalog, keys) {
+  assertCatalog(catalog);
+  if (!Array.isArray(keys) || !keys.length) throw httpError(400, 'Faltan los productos.');
+  if (keys.length > MAX_SUGGEST_BATCH) throw httpError(400, `Máximo ${MAX_SUGGEST_BATCH} productos por tanda.`);
+  const all = await db.ListCatalogItems(catalog);
+  const wanted = new Set(keys.map(String));
+  const used = new Set(all.filter((i) => i.code && !wanted.has(i.key)).map((i) => canon(i.code)));
+  const suggestions = {};
+  for (const key of keys) {
+    const item = all.find((i) => i.key === String(key));
+    suggestions[key] = item ? await suggestFor(db, catalog, item, used) : [];
+  }
+  return { suggestions };
+}
+
+module.exports = { suggest, checkDigitOf, gtinStatus, sameProduct, sizeDiffers, localReport, onlineKeys, checkOnline, MAX_BATCH, MAX_SUGGEST_BATCH };

@@ -86,3 +86,49 @@ test('comparación en línea: igual, distinto, no encontrado y sin servicio; no 
     lookup.clearCache();
   }
 });
+
+test('dígito verificador que le toca a un código', () => {
+  assert.equal(audit.checkDigitOf('750105530007'), 5);
+  assert.equal(audit.checkDigitOf('7501055'), 3);
+});
+
+test('sugerencias: dígito corregido y confirmado, sin confirmar, y por nombre con los de México primero', async () => {
+  const lookup = require('../services/barcode-lookup.service');
+  const realFetch = global.fetch;
+  const db = fakeDb([
+    row('a', 'Coca-Cola', '7501055300076', { presentation: '355 ml' }), // dígito malo: el bueno es ...075
+    row('b', 'Galletas Marías Gamesa', '7501000111101'), // dígito malo, el corregido no está en ninguna base
+    row('c', 'Cheetos Torciditos', '7501011100013'), // válido y ya usado por otro producto
+    row('d', 'Coca-Cola Light', '7501011100013'),
+  ]);
+  const json = (b, status = 200) => ({ ok: status < 400, status, json: async () => b });
+  global.fetch = async (url) => {
+    const u = String(url);
+    if (u.includes('/api/v2/product/7501055300075')) return json({ status: 1, product: { product_name: 'Coca-Cola Original', quantity: '355 ml' } });
+    if (u.includes('/cgi/search.pl') && u.includes('openfoodfacts') && u.includes('Coca-Cola')) {
+      return json({ products: [
+        { code: '7441003518483', product_name: 'Coca-Cola 355 ml', brands: 'Coca', countries_tags: ['en:panama'] },
+        { code: '7501055300075', product_name: 'Coca-Cola Original', quantity: '355 ml', brands: 'Coca-Cola', countries_tags: ['en:mexico'] },
+        { code: '7501011100013', product_name: 'Coca-Cola 355 ml', countries_tags: ['en:mexico'] }, // ya lo usa otro producto
+        { code: '9999999999999', product_name: 'Cable USB' },
+      ] });
+    }
+    return json({ status: 0, products: [] }, 404);
+  };
+  try {
+    lookup.clearCache();
+    const { suggestions } = await audit.suggest(db, 'abarrotes', ['a', 'b']);
+    assert.equal(suggestions.a[0].code, '7501055300075');
+    assert.equal(suggestions.a[0].confidence, 'confirmed');
+    assert.equal(suggestions.a.filter((c) => c.code === '7501055300075').length, 1, 'sin repetir');
+    assert.ok(!suggestions.a.some((c) => c.code === '7501011100013'), 'no propone un código que ya usa otro producto');
+    assert.ok(!suggestions.a.some((c) => c.code === '9999999999999'), 'descarta lo que no se parece');
+    const panama = suggestions.a.findIndex((c) => c.code === '7441003518483');
+    assert.ok(panama === -1 || panama > 0, 'el de México no queda detrás del de Panamá');
+    assert.deepEqual(suggestions.b.map((c) => [c.code, c.confidence]), [['7501000111107', 'check_digit']]);
+    await assert.rejects(audit.suggest(db, 'abarrotes', ['a', 'b', 'c', 'd', 'a']), (e) => e.status === 400);
+  } finally {
+    global.fetch = realFetch;
+    lookup.clearCache();
+  }
+});

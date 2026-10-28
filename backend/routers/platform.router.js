@@ -40,6 +40,7 @@ router.get('/catalogs', ...adminOnly, catalogs.summary);
 router.get('/catalogs/:catalog/items', ...adminOnly, catalogs.list);
 router.get('/catalogs/:catalog/codes', ...adminOnly, catalogs.codesReport);
 router.post('/catalogs/:catalog/codes/online', ...adminOnly, catalogs.codesOnline);
+router.post('/catalogs/:catalog/codes/suggest', ...adminOnly, catalogs.codesSuggest);
 router.post('/catalogs/:catalog/items', ...adminOnly, writeLimit, catalogs.create);
 router.post('/catalogs/:catalog/import', ...adminOnly, writeLimit, catalogs.importRows);
 router.post('/catalogs/:catalog/from-tenant', ...adminOnly, writeLimit, catalogs.addFromTenant);

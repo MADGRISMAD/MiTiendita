@@ -39,8 +39,11 @@ async function create(req, res) {
 
 async function update(req, res) {
   try {
+    const before = await db.GetCatalogItem(req.params.catalog, req.params.key);
     const item = await admin.update(db, req.params.catalog, req.params.key, req.body || {});
-    await audit.record(req, { type: 'catalog_item_updated', message: `Editó «${item.name}» del catálogo ${label(req.params.catalog)}`, meta: { catalog: req.params.catalog, key: item.key } });
+    // Si cambió el código de barras queda anotado el anterior y el nuevo
+    const recode = before && before.code !== item.code ? ` (código ${before.code || 'vacío'} → ${item.code || 'vacío'})` : '';
+    await audit.record(req, { type: 'catalog_item_updated', message: `Editó «${item.name}» del catálogo ${label(req.params.catalog)}${recode}`, meta: { catalog: req.params.catalog, key: item.key } });
     return res.json(item);
   } catch (err) {
     return fail(res, err, 'No se pudo guardar el producto.');
@@ -65,6 +68,15 @@ async function codesReport(req, res) {
     return res.json({ ...report, onlineKeys: keys, batch: codeAudit.MAX_BATCH });
   } catch (err) {
     return fail(res, err, 'No se pudieron revisar los códigos.');
+  }
+}
+
+/** Posibles códigos correctos para unos productos; el panel los muestra y la persona decide cuál usar. */
+async function codesSuggest(req, res) {
+  try {
+    return res.json(await codeAudit.suggest(db, req.params.catalog, req.body?.keys));
+  } catch (err) {
+    return fail(res, err, 'No se pudieron buscar los códigos.');
   }
 }
 
@@ -113,4 +125,4 @@ async function addFromTenant(req, res) {
   }
 }
 
-module.exports = { summary, list, create, update, remove, importRows, tenantProducts, addFromTenant, codesReport, codesOnline };
+module.exports = { summary, list, create, update, remove, importRows, tenantProducts, addFromTenant, codesReport, codesOnline, codesSuggest };

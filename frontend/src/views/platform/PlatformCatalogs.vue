@@ -88,9 +88,49 @@
                 <small>{{ p.code || "sin código" }} · {{ p.section }}<template v-if="p.sharedWith.length"> · mismo código que: {{ p.sharedWith.join(", ") }}</template></small>
               </span>
               <span class="adm-pill bad" v-for="i in p.issues" :key="i">{{ ISSUE_LABEL[i] }}</span>
-              <span class="acts"><button type="button" class="adm-btn sm" @click="editByKey(p.key)">Editar</button></span>
+              <span class="acts">
+                <button type="button" class="adm-btn sm" :disabled="suggestRunning" @click="runSuggest([p.key])">Buscar código</button>
+                <button type="button" class="adm-btn sm" @click="editByKey(p.key)">Editar</button>
+              </span>
             </li>
           </ul>
+
+          <div v-if="fixKeys.length || proposalKeys.length" class="pf-fix">
+            <div class="acts">
+              <button v-if="!suggestRunning" type="button" class="adm-btn" :disabled="onlineRunning || !fixKeys.length" @click="runSuggest(fixKeys)">
+                Buscar el código correcto de los {{ fixKeys.length }} con problema
+              </button>
+              <button v-else type="button" class="adm-btn" @click="stopSuggest = true">Detener</button>
+              <span v-if="suggestTotal" class="pf-muted cat-progress">{{ suggestDone }} de {{ suggestTotal }} buscados</span>
+            </div>
+            <p v-if="suggestNote" class="adm-hint">{{ suggestNote }}</p>
+            <template v-if="proposalKeys.length">
+              <p class="adm-hint">
+                Propuestas para <strong>{{ proposalKeys.length }}</strong> productos. Nada se cambia hasta que tú lo autorices: «Confirmado» es un código que existe en las bases y trae el
+                mismo nombre; «Sin confirmar» solo tiene el dígito corregido; «Por nombre» salió de buscar el nombre y puede ser de otro país.
+              </p>
+              <div v-if="confirmedKeys.length" class="acts">
+                <button type="button" class="adm-btn primary" :disabled="busy" @click="applyConfirmed">{{ confirmedKeys.length === 1 ? "Aplicar la corrección confirmada" : `Aplicar las ${confirmedKeys.length} correcciones confirmadas` }}</button>
+              </div>
+              <ul class="pf-list">
+                <li v-for="k in proposalKeys" :key="k" class="cat-row cat-fix">
+                  <span class="body">
+                    <strong>{{ nameOf(k) }}</strong>
+                    <small>Código actual: {{ codeOf(k) || "sin código" }}</small>
+                    <span v-for="c in suggestions[k]" :key="c.code" class="cat-cand">
+                      <span class="body">
+                        <strong>{{ c.code }}</strong>
+                        <small v-if="c.name">{{ [c.name, c.quantity].filter(Boolean).join(" · ") }} · {{ c.source }}<template v-if="c.mexico"> · México</template></small>
+                        <small v-else>Dígito verificador corregido; no aparece en las bases.</small>
+                      </span>
+                      <span class="adm-pill" :class="CONFIDENCE[c.confidence].tone">{{ CONFIDENCE[c.confidence].label }}</span>
+                      <button type="button" class="adm-btn sm" :disabled="busy" @click="useCode(k, c)">Usar este código</button>
+                    </span>
+                  </span>
+                </li>
+              </ul>
+            </template>
+          </div>
 
           <div class="acts">
             <button v-if="!onlineRunning" type="button" class="adm-btn primary" :disabled="!codes.onlineKeys.length" @click="runOnline">
@@ -120,6 +160,7 @@
                 <span v-else-if="r.status === 'same'" class="adm-pill warn">Tamaño distinto</span>
                 <span v-else class="adm-pill">No encontrado</span>
                 <span class="acts">
+                  <button v-if="r.status === 'different'" type="button" class="adm-btn sm" :disabled="suggestRunning" @click="runSuggest([r.key])">Buscar código</button>
                   <button type="button" class="adm-btn sm" @click="editByKey(r.key)">Editar</button>
                   <button type="button" class="adm-btn sm" :disabled="busy" @click="verifyOne(r.key)">Está bien</button>
                 </span>
@@ -354,6 +395,7 @@ function pickCatalog(key) {
   target.value = key;
   query.value = "";
   codes.value = null;
+  suggestions.value = {};
   onlineResults.value = {};
   onlineDone.value = 0;
   onlineTotal.value = 0;
@@ -433,6 +475,8 @@ async function runCodes() {
   codesBusy.value = true;
   codesError.value = "";
   onlineResults.value = {};
+  suggestions.value = {};
+  suggestNote.value = "";
   onlineDone.value = 0;
   onlineTotal.value = 0;
   onlineNote.value = "";
@@ -474,6 +518,95 @@ async function runOnline() {
     onlineRunning.value = false;
   }
 }
+// Propuestas de código correcto: el servidor las busca, la persona autoriza cada cambio
+const CONFIDENCE = {
+  confirmed: { label: "Confirmado", tone: "good" },
+  check_digit: { label: "Sin confirmar", tone: "warn" },
+  search: { label: "Por nombre", tone: "warn" },
+};
+const suggestions = ref({}); // key → candidatos
+const suggestRunning = ref(false);
+const stopSuggest = ref(false);
+const suggestDone = ref(0);
+const suggestTotal = ref(0);
+const suggestNote = ref("");
+
+const codeOf = (key) => items.value.find((i) => i.key === key)?.code || "";
+// Con problema de código, o con otro nombre en las bases públicas
+const fixKeys = computed(() => [
+  ...new Set([
+    ...(codes.value?.problems || []).filter((p) => p.issues.some((i) => i !== "duplicate")).map((p) => p.key),
+    ...onlineList.value.filter((r) => r.status === "different").map((r) => r.key),
+  ]),
+]);
+const proposalKeys = computed(() => Object.keys(suggestions.value).filter((k) => suggestions.value[k]?.length));
+const confirmedKeys = computed(() => proposalKeys.value.filter((k) => suggestions.value[k][0].confidence === "confirmed"));
+
+async function runSuggest(keys) {
+  const list = [...keys];
+  suggestRunning.value = true;
+  stopSuggest.value = false;
+  suggestDone.value = 0;
+  suggestTotal.value = list.length;
+  suggestNote.value = "";
+  let empty = 0;
+  try {
+    for (let i = 0; i < list.length && !stopSuggest.value; i += 4) {
+      const res = await apiService.platformCatalogCodesSuggest(catalog.value, list.slice(i, i + 4));
+      suggestions.value = { ...suggestions.value, ...res.suggestions };
+      suggestDone.value = Math.min(i + 4, list.length);
+      empty = Object.values(res.suggestions).every((c) => !c.length) ? empty + 1 : 0;
+    }
+    if (stopSuggest.value) suggestNote.value = "Se detuvo; lo encontrado hasta ahora se conserva.";
+    else if (list.length && !proposalKeys.value.length) suggestNote.value = "No encontré códigos para proponer. Si el producto lo tienes en la mano, lo más seguro es escanearlo con la cámara y editar el código.";
+    else if (empty >= 3) suggestNote.value = "Varios productos quedaron sin propuesta: las bases públicas no los tienen o no respondieron.";
+  } catch (e) {
+    suggestNote.value = errText(e, "Se cortó la búsqueda de códigos.");
+  } finally {
+    suggestRunning.value = false;
+  }
+}
+function dropFixed(key) {
+  const { [key]: _gone, ...rest } = suggestions.value;
+  suggestions.value = rest;
+  if (codes.value) codes.value = { ...codes.value, problems: codes.value.problems.filter((p) => p.key !== key) };
+  onlineResults.value = Object.fromEntries(Object.entries(onlineResults.value).filter(([k]) => k !== key));
+}
+async function useCode(key, cand) {
+  const named = cand.name ? `\nSegún ${cand.source}: ${[cand.name, cand.quantity].filter(Boolean).join(" · ")}` : "";
+  if (!window.confirm(`¿Cambiar el código de «${nameOf(key)}»?\n\nAntes: ${codeOf(key) || "sin código"}\nAhora: ${cand.code}${named}`)) return;
+  busy.value = true;
+  try {
+    await apiService.platformCatalogSave(catalog.value, { code: cand.code }, key);
+    dropFixed(key);
+    say(`Código de «${nameOf(key)}» cambiado a ${cand.code}.`);
+    await loadItems();
+  } catch (e) {
+    error.value = errText(e, "No pude cambiar el código.");
+  } finally {
+    busy.value = false;
+  }
+}
+async function applyConfirmed() {
+  const keys = [...confirmedKeys.value];
+  if (!window.confirm(`Se cambiará el código de ${keys.length} productos. Todos están confirmados: el código existe en las bases públicas y el nombre coincide con el tuyo.\n\n¿Continuar?`)) return;
+  busy.value = true;
+  let done = 0;
+  try {
+    for (const key of keys) {
+      await apiService.platformCatalogSave(catalog.value, { code: suggestions.value[key][0].code }, key);
+      dropFixed(key);
+      done += 1;
+    }
+    say(`${done} códigos corregidos.`);
+  } catch (e) {
+    error.value = `${errText(e, "No pude cambiar un código.")} Se alcanzaron a cambiar ${done} de ${keys.length}.`;
+  } finally {
+    busy.value = false;
+    await loadItems();
+  }
+}
+
 async function markVerified(keys) {
   busy.value = true;
   try {
@@ -618,6 +751,11 @@ onMounted(async () => {
 .cat-pick { display: flex; align-items: center; gap: 0.6rem; flex: 1 1 auto; min-width: 0; cursor: pointer; }
 .cat-checks { display: grid; gap: 0.4rem; align-content: end; }
 .cat-checks label { display: flex; align-items: center; gap: 0.5rem; font-size: 0.9rem; }
+.pf-fix { display: grid; gap: 0.6rem; padding: 0.8rem 0; border-top: 1px solid var(--timber-line); }
+.cat-fix { align-items: flex-start; }
+.cat-cand { display: flex; align-items: center; gap: 0.6rem; padding: 0.4rem 0.6rem; margin-top: 0.3rem; border: 1px solid var(--timber-line); border-radius: 0.7rem; }
+.cat-cand .body { flex: 1 1 auto; }
+@media (max-width: 40rem) { .cat-cand { flex-wrap: wrap; } }
 .cat-progress { align-self: center; margin-left: 0.75rem; }
 .pf-err-list { margin: 0.4rem 0 0; padding-left: 1.1rem; }
 @media (max-width: 40rem) {

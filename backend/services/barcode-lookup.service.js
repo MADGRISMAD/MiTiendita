@@ -82,4 +82,31 @@ async function lookup(codeInput) {
   return value;
 }
 
-module.exports = { lookup, suggestedName, clearCache: () => { cache.clear(); upcPausedUntil = 0; } };
+/** Búsqueda por nombre en las bases abiertas (no en UPCitemdb: su límite diario es muy bajo). Poco precisa: solo da candidatos. */
+const searchCache = new Map();
+async function searchByName(queryInput) {
+  const q = clean(queryInput).slice(0, 100);
+  if (q.length < 3) return [];
+  const hit = searchCache.get(q.toLowerCase());
+  if (hit && hit.until > Date.now()) return hit.value;
+  const hosts = FACTS.slice(0, 3); // alimentos, hogar y cuidado personal
+  const lists = await Promise.allSettled(
+    hosts.map(async ({ source, host }) => {
+      const url = `https://${host}/cgi/search.pl?search_terms=${encodeURIComponent(q)}&search_simple=1&action=process&json=1&page_size=8&fields=code,product_name,product_name_es,brands,quantity,countries_tags`;
+      const res = await fetch(url, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(TIMEOUT_MS) });
+      if (!res.ok) throw new Error(`${host} ${res.status}`);
+      const data = await res.json(); // si la página responde «no disponible» (HTML) lanza y se ignora
+      return (data.products || [])
+        .map((p) => ({ code: clean(p.code), name: suggestedName(p), quantity: clean(p.quantity), source, mexico: (p.countries_tags || []).includes('en:mexico') }))
+        .filter((c) => c.code && c.name);
+    })
+  );
+  const value = lists.flatMap((l) => (l.status === 'fulfilled' ? l.value : []));
+  if (lists.some((l) => l.status === 'fulfilled')) {
+    if (searchCache.size >= MAX_CACHE) searchCache.delete(searchCache.keys().next().value);
+    searchCache.set(q.toLowerCase(), { value, until: Date.now() + TTL_MISSING_MS });
+  }
+  return value;
+}
+
+module.exports = { lookup, searchByName, suggestedName, clearCache: () => { cache.clear(); searchCache.clear(); upcPausedUntil = 0; } };
