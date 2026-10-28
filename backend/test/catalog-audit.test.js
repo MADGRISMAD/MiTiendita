@@ -126,6 +126,22 @@ test('sugerencias: dígito corregido y confirmado, sin confirmar, y por nombre c
     const panama = suggestions.a.findIndex((c) => c.code === '7441003518483');
     assert.ok(panama === -1 || panama > 0, 'el de México no queda detrás del de Panamá');
     assert.deepEqual(suggestions.b.map((c) => [c.code, c.confidence]), [['7501000111107', 'check_digit']]);
+    // un código válido que las bases atribuyen a otro producto: dice a cuál y propone el que sí es
+    const wrong = fakeDb([row('w', 'Coca-Cola', '7501055300075', { presentation: '355 ml' }), row('z', 'Jabón Zote', '036000291452')]);
+    global.fetch = async (url) => {
+      const u = String(url);
+      if (u.includes('/api/v2/product/7501055300075')) return json({ status: 1, product: { product_name: 'Papel higiénico Kleenex' } });
+      if (u.includes('/api/v2/product/036000291452')) return json({ status: 1, product: { product_name: 'Jabón Zote', brands: 'Zote' } });
+      if (u.includes('/cgi/search.pl') && u.includes('openfoodfacts')) return json({ products: [{ code: '7501055363070', product_name: 'Coca-Cola Original', quantity: '355 ml', countries_tags: ['en:mexico'] }] });
+      return json({ status: 0, products: [] }, 404);
+    };
+    lookup.clearCache();
+    const other = await audit.suggest(wrong, 'abarrotes', ['w', 'z']);
+    assert.equal(other.registered.w.same, false);
+    assert.equal(other.registered.w.name, 'Papel higiénico Kleenex');
+    assert.equal(other.suggestions.w[0].code, '7501055363070');
+    assert.equal(other.registered.z.same, true);
+    assert.deepEqual(other.suggestions.z, [], 'si el código ya es de este producto no se propone cambiarlo');
     await assert.rejects(audit.suggest(db, 'abarrotes', ['a', 'b', 'c', 'd', 'a']), (e) => e.status === 400);
   } finally {
     global.fetch = realFetch;

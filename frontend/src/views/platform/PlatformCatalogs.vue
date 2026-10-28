@@ -69,7 +69,11 @@
           </div>
         </div>
         <div class="acts">
-          <button type="button" class="adm-btn primary" :disabled="codesBusy || onlineRunning" @click="runCodes">{{ codesBusy ? "Revisando…" : "Revisar códigos" }}</button>
+          <button type="button" class="adm-btn primary" :disabled="codesBusy || onlineRunning || suggestRunning" @click="runAll">
+            {{ allRunning ? "Revisando…" : "Revisar y proponer cambios" }}
+          </button>
+          <button type="button" class="adm-btn" :disabled="codesBusy || onlineRunning || suggestRunning" title="Solo lo que se puede saber sin internet" @click="runCodes">Solo revisión rápida</button>
+          <button v-if="allRunning" type="button" class="adm-btn" @click="stopAll">Detener</button>
           <label class="cat-checks"><span><input v-model="onlyUnverified" type="checkbox" :disabled="onlineRunning" /> Solo los que no están verificados</span></label>
         </div>
         <p v-if="codesError" class="pf-err" role="alert">{{ codesError }}</p>
@@ -117,6 +121,7 @@
                   <span class="body">
                     <strong>{{ nameOf(k) }}</strong>
                     <small>Código actual: {{ codeOf(k) || "sin código" }}</small>
+                    <small v-if="reasonOf(k)" class="cat-reason">{{ reasonOf(k) }}</small>
                     <span v-for="c in suggestions[k]" :key="c.code" class="cat-cand">
                       <span class="body">
                         <strong>{{ c.code }}</strong>
@@ -396,6 +401,7 @@ function pickCatalog(key) {
   query.value = "";
   codes.value = null;
   suggestions.value = {};
+  registered.value = {};
   onlineResults.value = {};
   onlineDone.value = 0;
   onlineTotal.value = 0;
@@ -476,6 +482,7 @@ async function runCodes() {
   codesError.value = "";
   onlineResults.value = {};
   suggestions.value = {};
+  registered.value = {};
   suggestNote.value = "";
   onlineDone.value = 0;
   onlineTotal.value = 0;
@@ -532,6 +539,17 @@ const suggestTotal = ref(0);
 const suggestNote = ref("");
 
 const codeOf = (key) => items.value.find((i) => i.key === key)?.code || "";
+const registered = ref({}); // key → a qué producto dicen las bases que pertenece hoy su código
+/** Por qué se propone cambiar el código de un producto. */
+function reasonOf(key) {
+  const r = registered.value[key];
+  if (r && !r.same) return `Ese código aparece en ${r.source} como «${[r.name, r.quantity].filter(Boolean).join(" · ")}», no como este producto.`;
+  const problem = codes.value?.problems.find((p) => p.key === key);
+  if (problem?.issues.includes("digit")) return "El dígito verificador no cuadra: es probable que el código esté mal escrito o inventado.";
+  if (problem?.issues.includes("length")) return "La longitud no es la de un código de barras.";
+  if (problem?.issues.includes("missing")) return "No tiene código.";
+  return "";
+}
 // Con problema de código, o con otro nombre en las bases públicas
 const fixKeys = computed(() => [
   ...new Set([
@@ -554,6 +572,7 @@ async function runSuggest(keys) {
     for (let i = 0; i < list.length && !stopSuggest.value; i += 4) {
       const res = await apiService.platformCatalogCodesSuggest(catalog.value, list.slice(i, i + 4));
       suggestions.value = { ...suggestions.value, ...res.suggestions };
+      registered.value = { ...registered.value, ...res.registered };
       suggestDone.value = Math.min(i + 4, list.length);
       empty = Object.values(res.suggestions).every((c) => !c.length) ? empty + 1 : 0;
     }
@@ -566,6 +585,21 @@ async function runSuggest(keys) {
     suggestRunning.value = false;
   }
 }
+// Todo en uno: revisión rápida, comparar con internet y buscar el código correcto de los que no coinciden
+const allRunning = ref(false);
+function stopAll() {
+  stopOnline.value = true;
+  stopSuggest.value = true;
+  allRunning.value = false;
+}
+async function runAll() {
+  allRunning.value = true;
+  await runCodes();
+  if (!codes.value || !allRunning.value) return void (allRunning.value = false);
+  if (codes.value.onlineKeys.length) await runOnline();
+  if (allRunning.value && !stopOnline.value && fixKeys.value.length) await runSuggest(fixKeys.value);
+  allRunning.value = false;
+}
 function dropFixed(key) {
   const { [key]: _gone, ...rest } = suggestions.value;
   suggestions.value = rest;
@@ -573,7 +607,7 @@ function dropFixed(key) {
   onlineResults.value = Object.fromEntries(Object.entries(onlineResults.value).filter(([k]) => k !== key));
 }
 async function useCode(key, cand) {
-  const named = cand.name ? `\nSegún ${cand.source}: ${[cand.name, cand.quantity].filter(Boolean).join(" · ")}` : "";
+  const named = (cand.name ? `\nSegún ${cand.source}: ${[cand.name, cand.quantity].filter(Boolean).join(" · ")}` : "") + (reasonOf(key) ? `\n\nMotivo: ${reasonOf(key)}` : "");
   if (!window.confirm(`¿Cambiar el código de «${nameOf(key)}»?\n\nAntes: ${codeOf(key) || "sin código"}\nAhora: ${cand.code}${named}`)) return;
   busy.value = true;
   try {
@@ -756,6 +790,8 @@ onMounted(async () => {
 .cat-cand { display: flex; align-items: center; gap: 0.6rem; padding: 0.4rem 0.6rem; margin-top: 0.3rem; border: 1px solid var(--timber-line); border-radius: 0.7rem; }
 .cat-cand .body { flex: 1 1 auto; }
 @media (max-width: 40rem) { .cat-cand { flex-wrap: wrap; } }
+.pf-card-stack > .acts, .pf-fix > .acts { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+.cat-reason { color: var(--timber-ink); }
 .cat-progress { align-self: center; margin-left: 0.75rem; }
 .pf-err-list { margin: 0.4rem 0 0; padding-left: 1.1rem; }
 @media (max-width: 40rem) {

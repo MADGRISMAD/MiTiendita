@@ -153,7 +153,15 @@ async function suggestFor(db, catalog, item, usedCodes) {
   return out.slice(0, MAX_CANDIDATES);
 }
 
-/** Sugerencias para una tanda de productos: { [key]: candidatos }. */
+/** A qué producto dicen las bases públicas que pertenece el código registrado (null si no aparece o no es consultable). */
+async function registeredAs(item) {
+  if (item.plu || gtinStatus(item.code) !== 'ok') return null;
+  const found = await barcodeLookup.lookup(item.code);
+  if (!found.found) return null;
+  return { name: found.name, quantity: found.quantity || '', source: found.source, same: sameProduct(`${item.name} ${item.presentation || ''}`, `${found.name} ${found.quantity || ''}`) };
+}
+
+/** Sugerencias para una tanda de productos: { suggestions: { [key]: candidatos }, registered: { [key]: a qué producto pertenece hoy su código } }. */
 async function suggest(db, catalog, keys) {
   assertCatalog(catalog);
   if (!Array.isArray(keys) || !keys.length) throw httpError(400, 'Faltan los productos.');
@@ -162,11 +170,14 @@ async function suggest(db, catalog, keys) {
   const wanted = new Set(keys.map(String));
   const used = new Set(all.filter((i) => i.code && !wanted.has(i.key)).map((i) => canon(i.code)));
   const suggestions = {};
+  const registered = {};
   for (const key of keys) {
     const item = all.find((i) => i.key === String(key));
-    suggestions[key] = item ? await suggestFor(db, catalog, item, used) : [];
+    registered[key] = item ? await registeredAs(item) : null;
+    // Si el código registrado ya es de este mismo producto, no hay nada que reemplazar
+    suggestions[key] = item && !registered[key]?.same ? await suggestFor(db, catalog, item, used) : [];
   }
-  return { suggestions };
+  return { suggestions, registered };
 }
 
 module.exports = { suggest, checkDigitOf, gtinStatus, sameProduct, sizeDiffers, localReport, onlineKeys, checkOnline, MAX_BATCH, MAX_SUGGEST_BATCH };
