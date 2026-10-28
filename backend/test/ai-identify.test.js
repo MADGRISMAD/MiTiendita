@@ -1,6 +1,5 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const path = require('node:path');
 const gemini = require('../services/gemini.service');
 
 const CATS = ['Limpieza', 'Botanas', 'Electrónica'];
