@@ -257,6 +257,54 @@
             {{ busy ? "Pasando…" : `Agregar ${picked.size} seleccionados` }}
           </button>
         </div>
+        <div class="pf-recode">
+          <div class="adm-card-head">
+            <div>
+              <h3>Usar los códigos de esta tienda en el maestro</h3>
+              <p>
+                Para comprobar los códigos del catálogo «{{ catalogLabel(catalog) }}» contra los de esta tienda (los de esta tienda se dan por buenos). Primero ves qué cambiaría; no se aplica nada hasta que
+                lo confirmes.
+              </p>
+            </div>
+            <button type="button" class="adm-btn" :disabled="recodeBusy" @click="previewRecode">{{ recodeBusy ? "Calculando…" : "Ver qué cambiaría" }}</button>
+          </div>
+          <p v-if="recodeError" class="pf-err" role="alert">{{ recodeError }}</p>
+          <template v-if="recodePrev">
+            <label class="cat-checks"><span><input v-model="recodeClear" type="checkbox" :disabled="recodeBusy" @change="previewRecode" /> Quitar el código a los productos del maestro que no están en esta tienda</span></label>
+            <p class="adm-hint">
+              La tienda tiene {{ recodePrev.counts.storeProducts }} productos con código. Del maestro:
+              <strong>{{ recodePrev.counts.recode }}</strong> recibirían el código de la tienda ·
+              <strong>{{ recodePrev.counts.same }}</strong> ya lo tienen igual ·
+              <strong>{{ recodePrev.counts.clear }}</strong> quedarían sin código ·
+              {{ recodePrev.counts.ambiguous + recodePrev.counts.conflict }} se omiten por duda (repetidos o código ya usado) ·
+              {{ recodePrev.counts.kept }} con clave propia o PLU no se tocan.
+            </p>
+            <ul v-if="recodePrev.recode.length" class="pf-list">
+              <li v-for="c in recodePrev.recode" :key="c.key" class="cat-row">
+                <span class="body">
+                  <strong>{{ c.name }}<template v-if="c.presentation"> · {{ c.presentation }}</template></strong>
+                  <small>{{ c.from || "sin código" }} → <strong>{{ c.to }}</strong> · en la tienda: {{ c.storeName }}</small>
+                </span>
+              </li>
+            </ul>
+            <p v-if="recodePrev.counts.recode > recodePrev.recode.length" class="pf-muted">…y {{ recodePrev.counts.recode - recodePrev.recode.length }} más.</p>
+            <details v-if="recodePrev.clear.length" class="cat-section">
+              <summary><strong>Quedarían sin código</strong><span class="pf-chip">{{ recodePrev.counts.clear }}</span></summary>
+              <ul class="pf-list">
+                <li v-for="c in recodePrev.clear" :key="c.key" class="cat-row">
+                  <span class="body"><strong>{{ c.name }}<template v-if="c.presentation"> · {{ c.presentation }}</template></strong><small>{{ c.from }}</small></span>
+                </li>
+              </ul>
+              <p v-if="recodePrev.counts.clear > recodePrev.clear.length" class="pf-muted">Se muestran {{ recodePrev.clear.length }} de {{ recodePrev.counts.clear }}.</p>
+            </details>
+            <div class="acts">
+              <button type="button" class="adm-btn primary" :disabled="recodeBusy || !(recodePrev.counts.recode + recodePrev.counts.clear)" @click="applyRecode">
+                Aplicar estos cambios
+              </button>
+              <button type="button" class="adm-btn ghost" :disabled="recodeBusy" @click="recodePrev = null">Cancelar</button>
+            </div>
+          </template>
+        </div>
         <p v-if="!storeSections.length" class="pf-muted">{{ onlyMissing ? "No falta nada: todo lo de esta tienda ya está en el catálogo." : "La tienda no tiene productos." }}</p>
         <details v-for="s in storeSections" :key="s.name" class="cat-section" open>
           <summary>
@@ -716,7 +764,43 @@ const storeMatches = computed(() => {
   return (q ? stores.value.filter((t) => fold(t.businessName).includes(q)) : stores.value).slice(0, 200);
 });
 const storeSections = computed(() => group((store.value?.products || []).filter((p) => !onlyMissing.value || !p.inCatalog).map((p) => ({ ...p, section: p.section }))));
+// ---------- Usar los códigos de una tienda en el maestro ----------
+const recodePrev = ref(null);
+const recodeBusy = ref(false);
+const recodeError = ref("");
+const recodeClear = ref(true);
+async function previewRecode() {
+  recodeBusy.value = true;
+  recodeError.value = "";
+  try {
+    recodePrev.value = await apiService.platformCatalogRecodePreview(catalog.value, storeId.value, recodeClear.value);
+  } catch (e) {
+    recodePrev.value = null;
+    recodeError.value = errText(e, "No pude calcular el cambio.");
+  } finally {
+    recodeBusy.value = false;
+  }
+}
+async function applyRecode() {
+  const c = recodePrev.value.counts;
+  const text = `Se cambiará el catálogo «${catalogLabel(catalog.value)}»:\n\n• ${c.recode} productos recibirán el código de ${store.value.businessName}\n• ${c.clear} productos quedarán SIN código de barras\n\nLas tiendas que ya cargaron el catálogo no se ven afectadas. ¿Continuar?`;
+  if (!window.confirm(text)) return;
+  recodeBusy.value = true;
+  recodeError.value = "";
+  try {
+    const r = await apiService.platformCatalogRecodeApply(catalog.value, storeId.value, recodeClear.value);
+    recodePrev.value = null;
+    say(`Listo: ${r.recoded} códigos reemplazados y ${r.cleared} quitados${r.errors.length ? `, ${r.errors.length} con error` : ""}.`);
+    await Promise.all([loadItems(), loadCatalogs()]);
+  } catch (e) {
+    recodeError.value = errText(e, "No pude aplicar el cambio.");
+  } finally {
+    recodeBusy.value = false;
+  }
+}
+
 async function loadStore() {
+  recodePrev.value = null;
   store.value = null;
   picked.value = new Set();
   if (!storeId.value) return;
@@ -791,6 +875,8 @@ onMounted(async () => {
 .cat-cand .body { flex: 1 1 auto; }
 @media (max-width: 40rem) { .cat-cand { flex-wrap: wrap; } }
 .pf-card-stack > .acts, .pf-fix > .acts { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+.pf-recode { display: grid; gap: 0.6rem; padding: 0.8rem 0; border-top: 1px solid var(--timber-line); }
+.pf-recode > .acts { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 .cat-reason { color: var(--timber-ink); }
 .cat-progress { align-self: center; margin-left: 0.75rem; }
 .pf-err-list { margin: 0.4rem 0 0; padding-left: 1.1rem; }

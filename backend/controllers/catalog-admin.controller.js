@@ -3,6 +3,7 @@ const admin = require('../services/master-catalog-admin.service');
 const { catalogKeyFor, CATALOGS } = require('../services/master-catalog.service');
 const audit = require('../services/platform-audit.service');
 const codeAudit = require('../services/catalog-audit.service');
+const recode = require('../services/catalog-recode.service');
 
 function fail(res, err, fallback) {
   if (err.status) return res.status(err.status).send(err.message);
@@ -89,6 +90,30 @@ async function codesOnline(req, res) {
   }
 }
 
+/** Vista previa: qué códigos del maestro cambiarían si se usan los de una tienda de confianza. */
+async function recodePreview(req, res) {
+  try {
+    return res.json(await recode.preview(db, req.params.catalog, req.body?.tenantId, { clearOthers: req.body?.clearOthers !== false }));
+  } catch (err) {
+    return fail(res, err, 'No se pudo preparar el cambio de códigos.');
+  }
+}
+
+/** Aplica el cambio: el maestro queda con los códigos de la tienda. */
+async function recodeApply(req, res) {
+  try {
+    const result = await recode.apply(db, req.params.catalog, req.body?.tenantId, { clearOthers: req.body?.clearOthers !== false });
+    await audit.record(req, {
+      type: 'catalog_codes_replaced',
+      message: `Cambió los códigos del catálogo ${label(req.params.catalog)} por los de una tienda: ${result.recoded} reemplazados, ${result.cleared} quitados`,
+      meta: { catalog: req.params.catalog, tenantId: String(req.body?.tenantId || ''), ...result, errors: result.errors.length },
+    });
+    return res.json(result);
+  } catch (err) {
+    return fail(res, err, 'No se pudieron cambiar los códigos.');
+  }
+}
+
 async function importRows(req, res) {
   try {
     const out = await admin.importRows(db, req.params.catalog, req.body?.rows);
@@ -125,4 +150,4 @@ async function addFromTenant(req, res) {
   }
 }
 
-module.exports = { summary, list, create, update, remove, importRows, tenantProducts, addFromTenant, codesReport, codesOnline, codesSuggest };
+module.exports = { summary, list, create, update, remove, importRows, tenantProducts, addFromTenant, codesReport, codesOnline, codesSuggest, recodePreview, recodeApply };

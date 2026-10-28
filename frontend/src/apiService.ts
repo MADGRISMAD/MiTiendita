@@ -572,6 +572,12 @@ export const apiService = {
   platformCatalogCodesSuggest(catalog: string, keys: string[]) {
     return axios.post(`/platform/catalogs/${catalog}/codes/suggest`, { keys }, { timeout: 60_000 }).then((r) => r.data);
   },
+  platformCatalogRecodePreview(catalog: string, tenantId: string, clearOthers: boolean) {
+    return axios.post(`/platform/catalogs/${catalog}/recode/preview`, { tenantId, clearOthers }, { timeout: 60_000 }).then((r) => r.data);
+  },
+  platformCatalogRecodeApply(catalog: string, tenantId: string, clearOthers: boolean) {
+    return axios.post(`/platform/catalogs/${catalog}/recode/apply`, { tenantId, clearOthers }, { timeout: 120_000 }).then((r) => r.data);
+  },
   platformCatalogDelete(catalog: string, key: string) {
     return axios.delete(`/platform/catalogs/${catalog}/items/${encodeURIComponent(key)}`).then((r) => r.data);
   },
