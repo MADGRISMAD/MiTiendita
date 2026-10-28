@@ -559,6 +559,12 @@ export const apiService = {
       ? axios.put(`/platform/catalogs/${catalog}/items/${encodeURIComponent(key)}`, item).then((r) => r.data)
       : axios.post(`/platform/catalogs/${catalog}/items`, item).then((r) => r.data);
   },
+  platformCatalogCodes(catalog: string, onlyUnverified: boolean) {
+    return axios.get(`/platform/catalogs/${catalog}/codes`, { params: { onlyUnverified: onlyUnverified ? 1 : 0 } }).then((r) => r.data);
+  },
+  platformCatalogCodesOnline(catalog: string, keys: string[]) {
+    return axios.post(`/platform/catalogs/${catalog}/codes/online`, { keys }, { timeout: 60_000 }).then((r) => r.data);
+  },
   platformCatalogDelete(catalog: string, key: string) {
     return axios.delete(`/platform/catalogs/${catalog}/items/${encodeURIComponent(key)}`).then((r) => r.data);
   },

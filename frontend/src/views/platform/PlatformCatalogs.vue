@@ -4,6 +4,7 @@
       <template v-if="mode === 'catalog'">
         <button type="button" class="adm-btn" :disabled="!items.length" @click="exportCatalog">Exportar</button>
         <button type="button" class="adm-btn" @click="showImport = !showImport">Importar archivo</button>
+        <button type="button" class="adm-btn" :aria-pressed="showCodes" @click="showCodes = !showCodes">Verificar códigos</button>
         <button type="button" class="adm-btn primary" @click="openEdit(null)">Agregar producto</button>
       </template>
     </template>
@@ -55,6 +56,77 @@
             <li v-if="importResult.errors.length > 15">…y {{ importResult.errors.length - 15 }} más.</li>
           </ul>
         </div>
+      </section>
+
+      <section v-if="showCodes" class="adm-card pf-card-stack">
+        <div class="adm-card-head">
+          <div>
+            <h2>Verificar códigos de barras</h2>
+            <p>
+              Primero revisa lo que se puede saber sin internet (dígito verificador, longitud, repetidos y sin código). Después compara el nombre de cada producto con
+              bases públicas (Open Food Facts y hermanas, UPCitemdb). Es una guía: nada se cambia solo.
+            </p>
+          </div>
+        </div>
+        <div class="acts">
+          <button type="button" class="adm-btn primary" :disabled="codesBusy || onlineRunning" @click="runCodes">{{ codesBusy ? "Revisando…" : "Revisar códigos" }}</button>
+          <label class="cat-checks"><span><input v-model="onlyUnverified" type="checkbox" :disabled="onlineRunning" /> Solo los que no están verificados</span></label>
+        </div>
+        <p v-if="codesError" class="pf-err" role="alert">{{ codesError }}</p>
+        <template v-if="codes">
+          <p class="adm-hint">
+            {{ codes.counts.total }} productos: <strong>{{ codes.counts.ok }}</strong> con código válido ·
+            <strong>{{ codes.counts.digit }}</strong> con dígito verificador mal · <strong>{{ codes.counts.length }}</strong> con longitud rara ·
+            <strong>{{ codes.counts.missing }}</strong> sin código · <strong>{{ codes.counts.duplicate }}</strong> repetidos ·
+            {{ codes.counts.internal }} con clave propia o PLU (no se revisan).
+          </p>
+          <p v-if="!codes.problems.length" class="pf-ok" role="status">Sin problemas en lo que se puede revisar sin internet.</p>
+          <ul v-else class="pf-list">
+            <li v-for="p in codes.problems" :key="p.key" class="cat-row">
+              <span class="body">
+                <strong>{{ p.name }}<template v-if="p.presentation"> · {{ p.presentation }}</template></strong>
+                <small>{{ p.code || "sin código" }} · {{ p.section }}<template v-if="p.sharedWith.length"> · mismo código que: {{ p.sharedWith.join(", ") }}</template></small>
+              </span>
+              <span class="adm-pill bad" v-for="i in p.issues" :key="i">{{ ISSUE_LABEL[i] }}</span>
+              <span class="acts"><button type="button" class="adm-btn sm" @click="editByKey(p.key)">Editar</button></span>
+            </li>
+          </ul>
+
+          <div class="acts">
+            <button v-if="!onlineRunning" type="button" class="adm-btn primary" :disabled="!codes.onlineKeys.length" @click="runOnline">
+              Comparar {{ codes.onlineKeys.length }} con internet
+            </button>
+            <button v-else type="button" class="adm-btn" @click="stopOnline = true">Detener</button>
+            <span v-if="onlineTotal" class="pf-muted cat-progress">{{ onlineDone }} de {{ onlineTotal }} revisados</span>
+          </div>
+          <p v-if="onlineNote" class="adm-hint">{{ onlineNote }}</p>
+          <template v-if="onlineDone">
+            <p class="adm-hint">
+              <strong>{{ onlineCount.same }}</strong> coinciden · <strong>{{ onlineCount.different }}</strong> con otro nombre ·
+              <strong>{{ onlineCount.notfound }}</strong> no aparecen en las bases<template v-if="onlineCount.unavailable"> · {{ onlineCount.unavailable }} sin respuesta</template>.
+            </p>
+            <div v-if="onlineCount.sure" class="acts">
+              <button type="button" class="adm-btn" :disabled="busy" @click="verifyMatching">Marcar como verificados los {{ onlineCount.sure }} que coinciden</button>
+            </div>
+            <ul v-if="onlineReview.length" class="pf-list">
+              <li v-for="r in onlineReview" :key="r.key" class="cat-row">
+                <span class="body">
+                  <strong>{{ nameOf(r.key) }}</strong>
+                  <small>{{ items.find((i) => i.key === r.key)?.code }}</small>
+                  <small v-if="r.online">En internet ({{ r.online.source }}): {{ [r.online.name, r.online.quantity].filter(Boolean).join(" · ") }}</small>
+                  <small v-else>No aparece en las bases públicas: eso no significa que esté mal.</small>
+                </span>
+                <span v-if="r.status === 'different'" class="adm-pill bad">Otro nombre</span>
+                <span v-else-if="r.status === 'same'" class="adm-pill warn">Tamaño distinto</span>
+                <span v-else class="adm-pill">No encontrado</span>
+                <span class="acts">
+                  <button type="button" class="adm-btn sm" @click="editByKey(r.key)">Editar</button>
+                  <button type="button" class="adm-btn sm" :disabled="busy" @click="verifyOne(r.key)">Está bien</button>
+                </span>
+              </li>
+            </ul>
+          </template>
+        </template>
       </section>
 
       <section class="adm-card pf-card-stack" :class="{ 'adm-loading': loading }">
@@ -281,6 +353,10 @@ function pickCatalog(key) {
   catalog.value = key;
   target.value = key;
   query.value = "";
+  codes.value = null;
+  onlineResults.value = {};
+  onlineDone.value = 0;
+  onlineTotal.value = 0;
   clearImport();
   loadItems();
 }
@@ -321,6 +397,99 @@ async function removeItem(item) {
     busy.value = false;
   }
 }
+
+// ---------- Verificar códigos ----------
+const ISSUE_LABEL = { digit: "Dígito verificador mal", length: "Longitud rara", missing: "Sin código", duplicate: "Repetido" };
+const showCodes = ref(false);
+const onlyUnverified = ref(true);
+const codes = ref(null);
+const codesBusy = ref(false);
+const codesError = ref("");
+const onlineResults = ref({}); // key → resultado de la comparación
+const onlineRunning = ref(false);
+const stopOnline = ref(false);
+const onlineDone = ref(0);
+const onlineTotal = ref(0);
+const onlineNote = ref("");
+
+const nameOf = (key) => items.value.find((i) => i.key === key)?.name || key;
+function editByKey(key) {
+  const item = items.value.find((i) => i.key === key);
+  if (item) openEdit(item);
+}
+const onlineList = computed(() => Object.entries(onlineResults.value).map(([key, r]) => ({ key, ...r })));
+const onlineCount = computed(() => {
+  const count = { same: 0, different: 0, notfound: 0, unavailable: 0, sure: 0 };
+  for (const r of onlineList.value) {
+    if (r.status in count) count[r.status] += 1;
+    if (r.status === "same" && !r.sizeDiffers) count.sure += 1;
+  }
+  return count;
+});
+// Lo que conviene mirar: otro nombre, tamaño distinto o no encontrado (lo que coincide y está bien no estorba)
+const onlineReview = computed(() => onlineList.value.filter((r) => r.status === "different" || r.status === "notfound" || (r.status === "same" && r.sizeDiffers)));
+
+async function runCodes() {
+  codesBusy.value = true;
+  codesError.value = "";
+  onlineResults.value = {};
+  onlineDone.value = 0;
+  onlineTotal.value = 0;
+  onlineNote.value = "";
+  try {
+    codes.value = await apiService.platformCatalogCodes(catalog.value, onlyUnverified.value);
+  } catch (e) {
+    codesError.value = errText(e, "No pude revisar los códigos.");
+  } finally {
+    codesBusy.value = false;
+  }
+}
+async function runOnline() {
+  const keys = [...codes.value.onlineKeys];
+  const size = codes.value.batch || 8;
+  onlineRunning.value = true;
+  stopOnline.value = false;
+  onlineResults.value = {};
+  onlineDone.value = 0;
+  onlineTotal.value = keys.length;
+  onlineNote.value = "";
+  let silent = 0;
+  try {
+    for (let i = 0; i < keys.length && !stopOnline.value; i += size) {
+      const { results } = await apiService.platformCatalogCodesOnline(catalog.value, keys.slice(i, i + size));
+      const next = { ...onlineResults.value };
+      for (const r of results) if (r.status !== "skipped") next[r.key] = r;
+      onlineResults.value = next;
+      onlineDone.value = Math.min(i + size, keys.length);
+      silent = results.every((r) => r.status === "unavailable") ? silent + 1 : 0;
+      if (silent >= 3) {
+        onlineNote.value = "Las bases públicas no están respondiendo; se detuvo. Intenta de nuevo en un rato.";
+        break;
+      }
+    }
+    if (stopOnline.value) onlineNote.value = "Se detuvo; lo revisado hasta ahora se conserva.";
+  } catch (e) {
+    onlineNote.value = errText(e, "Se cortó la comparación con internet.");
+  } finally {
+    onlineRunning.value = false;
+  }
+}
+async function markVerified(keys) {
+  busy.value = true;
+  try {
+    for (const key of keys) await apiService.platformCatalogSave(catalog.value, { verified: true }, key);
+    const gone = new Set(keys);
+    onlineResults.value = Object.fromEntries(Object.entries(onlineResults.value).filter(([k]) => !gone.has(k)));
+    say(`${keys.length} producto(s) marcados como verificados.`);
+    await Promise.all([loadItems(), loadCatalogs()]);
+  } catch (e) {
+    error.value = errText(e, "No pude marcar los productos.");
+  } finally {
+    busy.value = false;
+  }
+}
+const verifyOne = (key) => markVerified([key]);
+const verifyMatching = () => markVerified(onlineList.value.filter((r) => r.status === "same" && !r.sizeDiffers).map((r) => r.key));
 
 // ---------- Importar y exportar ----------
 const showImport = ref(false);
@@ -449,6 +618,7 @@ onMounted(async () => {
 .cat-pick { display: flex; align-items: center; gap: 0.6rem; flex: 1 1 auto; min-width: 0; cursor: pointer; }
 .cat-checks { display: grid; gap: 0.4rem; align-content: end; }
 .cat-checks label { display: flex; align-items: center; gap: 0.5rem; font-size: 0.9rem; }
+.cat-progress { align-self: center; margin-left: 0.75rem; }
 .pf-err-list { margin: 0.4rem 0 0; padding-left: 1.1rem; }
 @media (max-width: 40rem) {
   .cat-row { flex-wrap: wrap; }

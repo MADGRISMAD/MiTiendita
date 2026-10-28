@@ -826,7 +826,7 @@
                 <div class="link-row">
                   <div class="link-info">
                     <span>{{ onlineHit.name }}</span>
-                    <small v-if="onlineHit.quantity">{{ onlineHit.quantity }} · revisa que sea el mismo producto</small>
+                    <small>{{ [onlineHit.quantity, onlineHit.source].filter(Boolean).join(" · ") }} · revisa que sea el mismo producto</small>
                   </div>
                   <div class="link-acts">
                     <button type="button" class="link-hit" @click="startAddMissing(onlineHit)">Registrar con estos datos</button>

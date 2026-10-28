@@ -2,6 +2,7 @@ const db = require('../database/mongodb');
 const admin = require('../services/master-catalog-admin.service');
 const { catalogKeyFor, CATALOGS } = require('../services/master-catalog.service');
 const audit = require('../services/platform-audit.service');
+const codeAudit = require('../services/catalog-audit.service');
 
 function fail(res, err, fallback) {
   if (err.status) return res.status(err.status).send(err.message);
@@ -56,6 +57,26 @@ async function remove(req, res) {
   }
 }
 
+/** Revisión local de los códigos del catálogo (sin internet) y la lista de productos que se pueden comparar en línea. */
+async function codesReport(req, res) {
+  try {
+    const onlyUnverified = req.query.onlyUnverified !== '0';
+    const [report, keys] = await Promise.all([codeAudit.localReport(db, req.params.catalog), codeAudit.onlineKeys(db, req.params.catalog, { onlyUnverified })]);
+    return res.json({ ...report, onlineKeys: keys, batch: codeAudit.MAX_BATCH });
+  } catch (err) {
+    return fail(res, err, 'No se pudieron revisar los códigos.');
+  }
+}
+
+/** Compara con las bases públicas una tanda de productos (el panel va pidiendo tandas). */
+async function codesOnline(req, res) {
+  try {
+    return res.json(await codeAudit.checkOnline(db, req.params.catalog, req.body?.keys));
+  } catch (err) {
+    return fail(res, err, 'No se pudieron comparar los códigos.');
+  }
+}
+
 async function importRows(req, res) {
   try {
     const out = await admin.importRows(db, req.params.catalog, req.body?.rows);
@@ -92,4 +113,4 @@ async function addFromTenant(req, res) {
   }
 }
 
-module.exports = { summary, list, create, update, remove, importRows, tenantProducts, addFromTenant };
+module.exports = { summary, list, create, update, remove, importRows, tenantProducts, addFromTenant, codesReport, codesOnline };
