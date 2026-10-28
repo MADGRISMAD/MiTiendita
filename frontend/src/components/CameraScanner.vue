@@ -17,12 +17,14 @@
 <script setup>
 import { onBeforeUnmount, onMounted, ref } from "vue";
 import PosIcon from "./PosIcon";
+import { prepareBeep, weighBeep } from "../scale";
 
 const emit = defineEmits(["detect", "close"]);
 const video = ref(null);
 const error = ref("");
 let controls = null;
 let stopped = false;
+const beepCtx = prepareBeep();
 
 function messageFor(err) {
   if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) return "Este navegador no deja usar la cámara aquí (hace falta HTTPS).";
@@ -37,7 +39,7 @@ const CONSTRAINTS = { video: { facingMode: { ideal: "environment" } }, audio: fa
 function found(text) {
   if (stopped) return;
   stopped = true;
-  navigator.vibrate?.(40);
+  weighBeep({ ctx: beepCtx, volume: 0.4 });
   emit("detect", text);
 }
 
@@ -95,6 +97,7 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   stopped = true;
   controls?.stop();
+  setTimeout(() => beepCtx && beepCtx.state !== "closed" && beepCtx.close().catch(() => {}), 400);
 });
 </script>
 

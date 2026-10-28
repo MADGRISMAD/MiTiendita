@@ -212,8 +212,20 @@ export async function disconnectScale() {
   }
 }
 
-/** Pitido corto y vibración al tomar el peso. */
-export function weighBeep() {
+/** Contexto de audio listo para pitar: se crea al abrir la cámara (con el toque del usuario) para que el navegador no lo bloquee. */
+export function prepareBeep() {
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    const ctx = Ctx ? new Ctx() : null;
+    ctx?.resume?.();
+    return ctx;
+  } catch {
+    return null;
+  }
+}
+
+/** Pitido corto y vibración al tomar el peso (o al leer un código con la cámara, con un contexto de prepareBeep y más volumen). */
+export function weighBeep({ ctx: ready = null, volume = 0.08 } = {}) {
   try {
     navigator.vibrate?.(60);
   } catch {
@@ -221,12 +233,12 @@ export function weighBeep() {
   }
   try {
     const Ctx = window.AudioContext || window.webkitAudioContext;
-    if (!Ctx) return;
-    const ctx = new Ctx();
+    const ctx = ready || (Ctx ? new Ctx() : null);
+    if (!ctx) return;
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.frequency.value = 1320;
-    gain.gain.value = 0.08;
+    gain.gain.value = volume;
     osc.connect(gain).connect(ctx.destination);
     osc.start();
     osc.stop(ctx.currentTime + 0.12);
