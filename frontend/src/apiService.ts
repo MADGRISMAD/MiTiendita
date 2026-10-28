@@ -220,6 +220,9 @@ export const apiService = {
       .get('/foods/lookup', { params: { code } })
       .then((r) => r.data);
   },
+  lookupOnline(code: string) {
+    return axios.get('/foods/online', { params: { code } }).then((r) => r.data);
+  },
   getLowStockFoods() {
     return axios.get('/foods/low-stock').then((r) => r.data);
   },

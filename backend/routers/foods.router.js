@@ -1,6 +1,7 @@
 const router = require('express').Router();
 const { hideCostsFromCashiers } = require('../middleware/cost-guard');
 const menus = require('../controllers/menus.controller');
+const { limits } = require('../services/rate-limit.service');
 const { requireAuth, requireActiveSubscription, requireRoles } = require('../middleware/auth.middleware');
 
 const readRoles = requireRoles('admin', 'cashier');
@@ -11,6 +12,7 @@ router.use(hideCostsFromCashiers);
 
 router.get('/', requireAuth, requireActiveSubscription, readRoles, menus.listFoods);
 router.get('/lookup', requireAuth, requireActiveSubscription, readRoles, menus.lookupFood);
+router.get('/online', requireAuth, requireActiveSubscription, readRoles, limits.publicRead(), menus.lookupOnline);
 router.get('/low-stock', requireAuth, requireActiveSubscription, readRoles, menus.lowStockFoods);
 router.get('/search', requireAuth, requireActiveSubscription, readRoles, menus.searchFoods);
 router.get('/:id', requireAuth, requireActiveSubscription, readRoles, menus.getFood);

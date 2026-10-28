@@ -3,6 +3,7 @@ const { cleanAltCodes } = require('../utils/barcode');
 const { roundQty, saleUnitOf } = require('../utils/units');
 const limits = require('../services/plan-limits.service');
 const { ObjectId } = require('mongodb');
+const barcodeLookup = require('../services/barcode-lookup.service');
 const saleAudit = require('../services/sale-audit.service');
 const { sanitizePriceRows, MAX_ROWS } = require('../services/bulk-prices.service');
 
@@ -317,6 +318,16 @@ async function lookupFood(req, res) {
   }
 }
 
+/** Sugerencia de nombre para un código que no está en la tienda, buscada en línea (Open Food Facts). */
+async function lookupOnline(req, res) {
+  try {
+    return res.status(200).json(await barcodeLookup.lookup(req.query.code));
+  } catch (err) {
+    console.error(err);
+    return res.status(200).json({ found: false, unavailable: true });
+  }
+}
+
 /** Devuelve productos con stock bajo o igual al umbral mínimo. */
 async function lowStockFoods(req, res) {
   try {
@@ -381,6 +392,7 @@ async function deleteAllFoods(req, res) {
 }
 
 module.exports = {
+  lookupOnline,
   listMenus,
   getMenu,
   createMenu,

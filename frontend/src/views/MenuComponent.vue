@@ -819,6 +819,21 @@
                 </p>
               </div>
             </header>
+            <div v-if="onlineBusy || onlineHit" class="link-box online-box">
+              <p v-if="onlineBusy" class="dlg-note">Buscando el código en internet…</p>
+              <template v-else>
+                <p class="link-label">Lo encontré en internet:</p>
+                <div class="link-row">
+                  <div class="link-info">
+                    <span>{{ onlineHit.name }}</span>
+                    <small v-if="onlineHit.quantity">{{ onlineHit.quantity }} · revisa que sea el mismo producto</small>
+                  </div>
+                  <div class="link-acts">
+                    <button type="button" class="link-hit" @click="startAddMissing(onlineHit)">Registrar con estos datos</button>
+                  </div>
+                </div>
+              </template>
+            </div>
             <div v-if="pickFoods.length" class="link-box">
               <label class="link-label" for="link-term">
                 ¿Ya lo tienes en tu catálogo? Búscalo y le asigno este código.
@@ -864,7 +879,7 @@
               <p v-if="linkErr" class="dlg-err">{{ linkErr }}</p>
             </div>
             <div class="dlg-stack">
-              <button type="button" class="btn primary" @click="startAddMissing">Registrar producto</button>
+              <button type="button" class="btn primary" @click="startAddMissing()">Registrar producto</button>
               <button v-if="missingIntent === 'sale'" type="button" class="btn" @click="missingToMisc">
                 Cobrar como artículo varios
               </button>
@@ -1847,6 +1862,21 @@ export default {
     const priceErr = ref("");
     const missingCode = ref("");
     const missingIntent = ref("sale");
+    // Sugerencia de nombre buscada en línea (Open Food Facts) para el código que no existe
+    const onlineHit = ref(null);
+    const onlineBusy = ref(false);
+    async function searchOnline(code) {
+      onlineHit.value = null;
+      onlineBusy.value = true;
+      try {
+        const res = await apiService.lookupOnline(code);
+        if (missingCode.value === code && res?.found) onlineHit.value = res;
+      } catch {
+        /* sin internet o sin respuesta: no se sugiere nada */
+      } finally {
+        if (missingCode.value === code) onlineBusy.value = false;
+      }
+    }
     const addAfterSave = ref(false);
     const pendingIntent = ref("sale");
     const pendingBarcode = ref("");
@@ -3072,6 +3102,11 @@ export default {
       missingCode.value = code;
       missingIntent.value = intent;
       scanError.value = "";
+      if (intent !== "price" && navigator.onLine !== false) searchOnline(code);
+      else {
+        onlineHit.value = null;
+        onlineBusy.value = false;
+      }
       if (intent === "price") {
         priceErr.value = "Producto no encontrado";
         priceCode.value = "";
@@ -3085,8 +3120,9 @@ export default {
       focusScan();
     }
 
-    function startAddMissing() {
+    function startAddMissing(suggestion = null) {
       const code = missingCode.value;
+      const suggested = suggestion?.name ? [suggestion.name, suggestion.quantity].filter(Boolean).join(" ") : "";
       const intent = missingIntent.value;
       missingCode.value = "";
       openNewFood();
@@ -3095,6 +3131,7 @@ export default {
       pendingBarcode.value = code;
       nextTick(() => {
         foodForm.barcode = code;
+        if (suggested) foodForm.name = suggested;
       });
     }
 
@@ -4872,6 +4909,8 @@ export default {
       runPriceCheck,
       addFromPriceCheck,
       missingCode,
+      onlineHit,
+      onlineBusy,
       linkTerm,
       linkErr,
       linkBusy,
