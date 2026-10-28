@@ -86,3 +86,13 @@ test('código que no es de barras y sin nombre: no hace nada', async () => {
   assert.equal(r.found, false);
   assert.equal(calls.ai.length, 0);
 });
+
+test('si la IA no lo encuentra o falla, dice el motivo (para que el panel lo muestre)', async () => {
+  let { svc } = load({ ai: { found: false, reason: 'not_found' } });
+  assert.equal((await svc.suggest(base)).aiSkipped, 'not_found');
+  ({ svc } = load({ ai: { found: false, reason: 'low_confidence' } }));
+  assert.equal((await svc.suggest(base)).aiSkipped, 'low_confidence');
+  ({ svc } = load({ ai: Object.assign(new Error('Search Grounding is not supported'), { code: 'GEMINI_ERROR' }) }));
+  const r = await svc.suggest(base);
+  assert.deepEqual([r.aiSkipped, r.aiError], ['error', 'Search Grounding is not supported']);
+});

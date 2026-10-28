@@ -52,15 +52,15 @@ async function suggest({ tenantId, plan, code: codeInput, name: nameInput, categ
     try {
       ai = await gemini.identifyProduct({ code: validCode, name, categories });
     } catch (err) {
-      console.warn('[sugerencia IA]', err.message);
-      return { ...out, aiSkipped: 'error' };
+      console.warn('[sugerencia IA]', err.code || '', err.message);
+      return { ...out, aiSkipped: 'error', aiError: String(err.message || '').slice(0, 200) };
     }
     if (!name && ai.found) {
       if (searched.size >= MAX_CACHE) searched.delete(searched.keys().next().value);
       searched.set(validCode, { value: ai, until: Date.now() + CACHE_TTL_MS });
     }
   }
-  if (!ai.found) return out;
+  if (!ai.found) return { ...out, aiSkipped: ai.reason || 'not_found' };
   if (!out.name) out.name = ai.name;
   if (!out.presentation) out.presentation = ai.presentation;
   const exact = categories.find((c) => c.toLowerCase() === String(ai.category).toLowerCase());
@@ -73,6 +73,7 @@ async function suggest({ tenantId, plan, code: codeInput, name: nameInput, categ
     categoryExists: Boolean(exact),
     source: out.source || 'IA con búsqueda en Google',
     confidence: ai.confidence,
+    grounded: ai.search ? ai.grounded : undefined,
   });
   return out;
 }

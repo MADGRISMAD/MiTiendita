@@ -837,6 +837,7 @@
                 </p>
               </div>
             </header>
+            <p v-if="!onlineBusy && !onlineHit && onlineMiss" class="dlg-note online-miss" role="status">{{ onlineMiss }}</p>
             <div v-if="onlineBusy || onlineHit" class="link-box online-box">
               <p v-if="onlineBusy" class="dlg-note">Buscando información del producto…</p>
               <template v-else>
@@ -846,6 +847,7 @@
                     <span>{{ onlineHit.name }}</span>
                     <small>{{ [onlineHit.quantity, onlineHit.brand, onlineHit.category ? `Categoría: ${onlineHit.category}` : "", onlineHit.unit && onlineHit.unit !== "pz" ? `Se vende por ${SALE_UNITS[onlineHit.unit]?.label.toLowerCase()}` : ""].filter(Boolean).join(" · ") }}</small>
                     <small>{{ onlineHit.source }} · revisa que sea el mismo producto; solo te faltará el precio</small>
+                    <small v-if="onlineHit.grounded === false" class="online-warn">La IA no pudo respaldarlo con una búsqueda en internet: compara con el producto que tienes en la mano.</small>
                   </div>
                   <div class="link-acts">
                     <button type="button" class="link-hit" @click="startAddMissing(onlineHit)">Registrar con estos datos</button>
@@ -1944,6 +1946,8 @@ export default {
         if (res.found || res.category) {
           const done = fillFromSuggestion(res);
           aiNote.value = done.length ? `Se completó solo: ${done.join(", ")}. Revísalo y pon el precio.` : "";
+        } else if (res.aiSkipped) {
+          aiNote.value = missReason(res);
         }
       } catch {
         /* sin internet o sin respuesta: se llena a mano como siempre */
@@ -1960,14 +1964,35 @@ export default {
       return code.length >= 8 && code.length <= 14 ? code : "";
     };
     const onlineBusy = ref(false);
+    const onlineMiss = ref(""); // por qué no apareció nada (solo lo ve el dueño)
+    /** Explica por qué la búsqueda automática no dio resultado, para saber si la IA trabajó o por qué no. */
+    function missReason(res) {
+      switch (res?.aiSkipped) {
+        case "off":
+          return "La IA no está activada: falta la llave de Gemini en el servidor, o tu plan no la incluye. Solo se buscó en las bases gratuitas.";
+        case "limit":
+          return "Se llegó al tope diario de búsquedas con IA de esta tienda. Mañana vuelve a funcionar.";
+        case "error":
+          return `La IA no pudo responder${res.aiError ? `: ${res.aiError}` : "."}`;
+        case "low_confidence":
+          return "La IA encontró algo pero con poca seguridad, así que no lo propone.";
+        case "not_found":
+          return "Ni las bases gratuitas ni la IA encontraron este código.";
+        default:
+          return "No encontré información de este código.";
+      }
+    }
     async function searchOnline(code) {
       onlineHit.value = null;
+      onlineMiss.value = "";
       onlineBusy.value = true;
       try {
         const res = isAdminUser.value ? await apiService.suggestProduct({ code, categories: categoryNames() }) : await apiService.lookupOnline(code);
         if (missingCode.value === code && res?.found) onlineHit.value = res;
+        else if (missingCode.value === code && isAdminUser.value) onlineMiss.value = missReason(res);
       } catch {
         /* sin internet o sin respuesta: no se sugiere nada */
+        if (missingCode.value === code && isAdminUser.value) onlineMiss.value = "No se pudo consultar el servidor. Revisa la conexión; si el problema sigue, el servidor puede estar sin actualizar.";
       } finally {
         if (missingCode.value === code) onlineBusy.value = false;
       }
@@ -5054,6 +5079,7 @@ export default {
       addFromPriceCheck,
       missingCode,
       onlineHit,
+      onlineMiss,
       aiBusy,
       aiNote,
       aiCategory,
@@ -7848,6 +7874,7 @@ html[data-theme="dark"] .avatar {
 .cam-qty output { min-width: 3ch; text-align: center; font-size: 1.7rem; font-weight: 800; }
 .cam-more { display: flex; align-items: center; justify-content: center; gap: 0.4rem; flex-wrap: wrap; font-size: 0.85rem; color: var(--timber-muted, #667); }
 .cam-more button { padding: 0.35rem 0.7rem; border-radius: 999px; border: 1px solid var(--timber-line, #d5dae3); background: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+.online-warn { color: var(--timber-danger, #b3261e); }
 .cam-total { margin: 0.3rem 0 0.6rem; text-align: center; font-weight: 700; }
 .ai-note { color: var(--timber-muted, #667); }
 

@@ -690,7 +690,7 @@ async function identifyProduct({ code = '', name = '', categories = [] }) {
       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
       body: JSON.stringify({
         contents: [{ role: 'user', parts: [{ text: identifyPrompt({ code, name, categories, search }) }] }],
-        generationConfig: { temperature: 0.1, maxOutputTokens: 1024 },
+        generationConfig: { temperature: 0.1, maxOutputTokens: 4096 },
         ...(search ? { tools: [{ google_search: {} }] } : {}),
       }),
       signal: AbortSignal.timeout(IDENTIFY_TIMEOUT_MS),
@@ -701,17 +701,33 @@ async function identifyProduct({ code = '', name = '', categories = [] }) {
   }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw Object.assign(new Error(data?.error?.message || 'La IA no pudo buscar el producto.'), { code: 'GEMINI_ERROR', status: res.status });
-  const reply = data?.candidates?.[0]?.content?.parts?.map((p) => p.text || '').join('') || '';
+  if (!data?.candidates?.length) throw Object.assign(new Error(`La IA no respondió${data?.promptFeedback?.blockReason ? ` (${data.promptFeedback.blockReason})` : ''}.`), { code: 'GEMINI_EMPTY' });
+  const candidate = data?.candidates?.[0];
+  const reply = candidate?.content?.parts?.map((p) => p.text || '').join('') || '';
+  const debug = {
+    model,
+    finishReason: candidate?.finishReason || data?.promptFeedback?.blockReason || '',
+    queries: candidate?.groundingMetadata?.webSearchQueries || [],
+    sources: (candidate?.groundingMetadata?.groundingChunks || []).map((c) => c?.web?.uri).filter(Boolean).slice(0, 5),
+    reply: reply.slice(0, 600),
+  };
+  if (!reply.trim()) {
+    throw Object.assign(new Error(`La IA no devolvió texto${debug.finishReason ? ` (${debug.finishReason})` : ''}.`), { code: 'GEMINI_EMPTY', debug });
+  }
   const out = parseIdentify(reply, { categories });
-  const grounded = (data?.candidates?.[0]?.groundingMetadata?.groundingChunks || []).length > 0;
+  const grounded = debug.sources.length > 0;
+  let reason = '';
   if (search) {
-    // Sin una búsqueda que respalde la respuesta, o con dudas, no se ofrece: un código mal asignado cuesta ventas
-    out.found = out.found && Boolean(out.name) && grounded && out.confidence !== 'baja';
+    // Con dudas no se ofrece. Sin búsqueda que lo respalde sí se ofrece, pero marcado para que se verifique contra el producto en mano
+    if (!out.found || !out.name) reason = 'not_found';
+    else if (out.confidence === 'baja') reason = 'low_confidence';
+    out.found = !reason;
   } else {
     out.name = '';
     out.found = true;
   }
-  return { ...out, grounded, search };
+  console.log('[ia producto]', JSON.stringify({ code, search, found: out.found, reason, confidence: out.confidence, grounded, queries: debug.queries.length }));
+  return { ...out, grounded, search, reason, debug };
 }
 
 function publicItem(row) {
