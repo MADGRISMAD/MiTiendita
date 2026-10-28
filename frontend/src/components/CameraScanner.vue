@@ -1,15 +1,19 @@
 <template>
   <div class="cam-back" @click.self="$emit('close')">
-    <div class="cam" role="dialog" aria-modal="true" aria-label="Escanear con la cámara">
+    <div class="cam" :class="{ continuous }" role="dialog" aria-modal="true" aria-label="Escanear con la cámara">
       <header class="cam-head">
-        <strong>Escanear con la cámara</strong>
+        <strong>{{ continuous ? "Escaneando la venta" : "Escanear con la cámara" }}</strong>
         <button type="button" class="cam-x" aria-label="Cerrar" @click="$emit('close')"><PosIcon name="x" /></button>
       </header>
-      <div class="cam-view">
+      <div class="cam-view" :class="{ hit: flash }">
         <video ref="video" muted playsinline></video>
         <span v-if="!error" class="cam-line"></span>
       </div>
-      <p class="cam-msg" :class="{ err: !!error }">{{ error || "Apunta al código de barras. Se lee solo." }}</p>
+      <p class="cam-msg" :class="{ err: !!error }">
+        {{ error || (continuous ? "Sigue leyendo solo. Toca Listo cuando termines." : "Apunta al código de barras. Se lee solo.") }}
+      </p>
+      <slot />
+      <button v-if="continuous" type="button" class="cam-done" @click="$emit('close')">Listo</button>
     </div>
   </div>
 </template>
@@ -19,9 +23,12 @@ import { onBeforeUnmount, onMounted, ref } from "vue";
 import PosIcon from "./PosIcon";
 import { prepareBeep, weighBeep } from "../scale";
 
+// continuous: la cámara sigue abierta después de cada lectura (para vender varios productos); se cierra con «Listo»
+const props = defineProps({ continuous: { type: Boolean, default: false } });
 const emit = defineEmits(["detect", "close"]);
 const video = ref(null);
 const error = ref("");
+const flash = ref(false);
 let controls = null;
 let stopped = false;
 const beepCtx = prepareBeep();
@@ -36,9 +43,23 @@ function messageFor(err) {
 const FORMATS = ["ean_13", "ean_8", "upc_a", "upc_e", "code_128", "code_39", "itf", "qr_code"];
 const CONSTRAINTS = { video: { facingMode: { ideal: "environment" } }, audio: false };
 
+let pausedUntil = 0;
+let lastText = "";
+let lastAt = 0;
 function found(text) {
   if (stopped) return;
-  stopped = true;
+  const now = Date.now();
+  if (props.continuous) {
+    // Tras cada lectura se hace una pausa, y el mismo código no se vuelve a leer enseguida (el producto sigue frente a la cámara)
+    if (now < pausedUntil || (text === lastText && now - lastAt < 2500)) return;
+    pausedUntil = now + 1200;
+    lastText = text;
+    lastAt = now;
+    flash.value = true;
+    setTimeout(() => (flash.value = false), 350);
+  } else {
+    stopped = true;
+  }
   weighBeep({ ctx: beepCtx, volume: 0.4 });
   emit("detect", text);
 }
@@ -109,6 +130,9 @@ onBeforeUnmount(() => {
 .cam-view { position: relative; background: #000; aspect-ratio: 4 / 3; }
 .cam-view video { width: 100%; height: 100%; object-fit: cover; }
 .cam-line { position: absolute; left: 10%; right: 10%; top: 50%; height: 2px; background: #e5484d; box-shadow: 0 0 8px #e5484d; }
+.cam-view.hit { outline: 4px solid #2e9e5b; outline-offset: -4px; }
+.cam.continuous .cam-view { aspect-ratio: 16 / 10; }
+.cam-done { display: block; width: calc(100% - 28px); margin: 4px 14px 14px; padding: 12px; border: 0; border-radius: 12px; background: #1d4f9c; color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
 .cam-msg { margin: 0; padding: 12px 14px; font-size: 14px; text-align: center; }
 .cam-msg.err { color: #c0392b; }
 </style>

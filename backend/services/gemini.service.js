@@ -619,6 +619,101 @@ async function extractPrices({ text, images = [] }) {
   };
 }
 
+// ───────────── Identificar un producto y completar sus datos ─────────────
+const IDENTIFY_TIMEOUT_MS = 30_000;
+const UNITS = ['pz', 'kg', 'g', 'l'];
+const tidy = (v, max) => String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, max);
+
+function identifyPrompt({ code, name, categories, search }) {
+  const cats = categories.length ? categories.map((c) => `- ${c}`).join('\n') : '(la tienda todavía no tiene categorías)';
+  const task = search
+    ? `Busca en internet a qué producto corresponde el código de barras ${code}. Solo da una respuesta si lo encuentras en una página que lo muestre con ese código; si no estás seguro, responde found=false. NO adivines ni te bases en el prefijo del código.`
+    : `El producto se llama «${name}»${code ? ` (código ${code})` : ''}. No lo busques: completa sus datos a partir del nombre.`;
+  return `Eres el asistente de catálogo de una tienda en México (abarrotes, limpieza, farmacia, ferretería, electrónica). ${task}
+
+Responde SOLO un JSON, sin texto antes ni después, con esta forma:
+{"found":true,"name":"","brand":"","presentation":"","unit":"pz","category":"","confidence":"alta"}
+
+- name: marca y producto como se vende, sin la presentación (ej. "Coca-Cola Sabor Original"). ${search ? '' : 'Déjalo vacío: el nombre ya lo escribió el usuario.'}
+- presentation: contenido o medida (ej. "600 ml", "1 kg", "4 pzas"). Vacío si no se sabe.
+- unit: cómo se vende: "pz" (pieza, lo normal), "kg", "g" o "l" (solo si se vende a granel o por peso o volumen).
+- category: elige EXACTAMENTE una de estas categorías de la tienda si alguna encaja:
+${cats}
+  Si ninguna encaja, escribe una categoría general nueva y corta (ej. "Limpieza", "Electrónica", "Ferretería", "Papelería").
+- confidence: "alta" solo si estás seguro; "media" o "baja" si dudas.
+- found: false si no pudiste identificar el producto.`;
+}
+
+/** Lee el JSON que devuelve la IA (aunque venga con texto o con ```json alrededor) y lo deja limpio. */
+function parseIdentify(text, { categories = [] } = {}) {
+  const raw = String(text || '');
+  const start = raw.indexOf('{');
+  const end = raw.lastIndexOf('}');
+  if (start < 0 || end <= start) throw Object.assign(new Error('La respuesta de la IA no se pudo leer.'), { code: 'GEMINI_PARSE' });
+  let data;
+  try {
+    data = JSON.parse(raw.slice(start, end + 1));
+  } catch {
+    throw Object.assign(new Error('La respuesta de la IA no se pudo leer.'), { code: 'GEMINI_PARSE' });
+  }
+  const unit = String(data.unit || 'pz').trim().toLowerCase();
+  const asked = tidy(data.category, 40);
+  // Si eligió una categoría de la tienda, se usa tal cual está escrita en la tienda
+  const exact = categories.find((c) => c.toLowerCase() === asked.toLowerCase());
+  const confidence = ['alta', 'media', 'baja'].includes(String(data.confidence).toLowerCase()) ? String(data.confidence).toLowerCase() : 'baja';
+  return {
+    found: data.found !== false,
+    name: tidy(data.name, 120),
+    brand: tidy(data.brand, 60),
+    presentation: tidy(data.presentation, 40),
+    unit: UNITS.includes(unit) ? unit : 'pz',
+    category: exact || asked,
+    categoryExists: Boolean(exact),
+    confidence,
+  };
+}
+
+/**
+ * Último recurso para un producto que las bases gratuitas no conocen.
+ *  - con código y sin nombre: la IA lo busca en Google (hace falta que la búsqueda respalde la respuesta);
+ *  - con nombre: solo completa presentación, unidad y categoría (no cambia el nombre).
+ */
+async function identifyProduct({ code = '', name = '', categories = [] }) {
+  const key = String(process.env.GEMINI_API_KEY || '').trim();
+  if (!key) throw Object.assign(new Error('Falta GEMINI_API_KEY en el servidor.'), { code: 'GEMINI_NOT_CONFIGURED' });
+  const search = Boolean(code) && !name;
+  const model = geminiModel();
+  let res;
+  try {
+    res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+      body: JSON.stringify({
+        contents: [{ role: 'user', parts: [{ text: identifyPrompt({ code, name, categories, search }) }] }],
+        generationConfig: { temperature: 0.1, maxOutputTokens: 1024 },
+        ...(search ? { tools: [{ google_search: {} }] } : {}),
+      }),
+      signal: AbortSignal.timeout(IDENTIFY_TIMEOUT_MS),
+    });
+  } catch (err) {
+    if (isTimeoutError(err)) throw Object.assign(new Error('La IA tardó demasiado. Intenta de nuevo.'), { code: 'GEMINI_TIMEOUT', status: 504 });
+    throw err;
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw Object.assign(new Error(data?.error?.message || 'La IA no pudo buscar el producto.'), { code: 'GEMINI_ERROR', status: res.status });
+  const reply = data?.candidates?.[0]?.content?.parts?.map((p) => p.text || '').join('') || '';
+  const out = parseIdentify(reply, { categories });
+  const grounded = (data?.candidates?.[0]?.groundingMetadata?.groundingChunks || []).length > 0;
+  if (search) {
+    // Sin una búsqueda que respalde la respuesta, o con dudas, no se ofrece: un código mal asignado cuesta ventas
+    out.found = out.found && Boolean(out.name) && grounded && out.confidence !== 'baja';
+  } else {
+    out.name = '';
+    out.found = true;
+  }
+  return { ...out, grounded, search };
+}
+
 function publicItem(row) {
   return {
     name: row.name,
@@ -681,6 +776,8 @@ function flagRepeats(items) {
 }
 
 module.exports = {
+  identifyProduct,
+  parseIdentify,
   geminiModel,
   hasGeminiConfig,
   extractPrices,

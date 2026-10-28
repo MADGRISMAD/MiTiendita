@@ -50,7 +50,25 @@
                   <PosIcon name="camera" />
                   <span class="tool-label">Cámara</span>
                 </button>
-                <CameraScanner v-if="cameraFor === 'pos'" @close="cameraFor = ''" @detect="onCameraDetect" />
+                <!-- Cámara de la venta: sigue abierta tras cada lectura; se oculta mientras hay una ventana abierta y vuelve sola -->
+                <CameraScanner v-if="cameraFor === 'pos' && !posDialogOpen" continuous @close="cameraFor = ''" @detect="onCameraDetect">
+                  <div v-if="lastLineIdx >= 0" class="cam-last">
+                    <div class="cam-last-info">
+                      <strong>{{ lines[lastLineIdx].name }}</strong>
+                      <small>{{ money(lines[lastLineIdx].price) }} c/u</small>
+                    </div>
+                    <div class="cam-qty" role="group" aria-label="Cantidad de este producto">
+                      <button type="button" aria-label="Quitar una" @click="bumpQty(lastLineIdx, -1)">−</button>
+                      <output>{{ lines[lastLineIdx].quantity }}</output>
+                      <button type="button" aria-label="Agregar una" @click="bumpQty(lastLineIdx, 1)">+</button>
+                    </div>
+                    <div class="cam-more">
+                      <span>Llevo más:</span>
+                      <button v-for="n in [2, 5, 10, 12]" :key="n" type="button" @click="bumpQty(lastLineIdx, n)">+{{ n }}</button>
+                    </div>
+                  </div>
+                  <p class="cam-total">{{ itemCount }} artículo{{ itemCount === 1 ? "" : "s" }} · {{ money(total) }}</p>
+                </CameraScanner>
                 <button type="button" class="tool" title="Consultar precio (F4)" aria-label="Consultar precio" @click="openPriceCheck">
                   <PosIcon name="tag" />
                   <span class="tool-label">Precio</span>
@@ -820,13 +838,14 @@
               </div>
             </header>
             <div v-if="onlineBusy || onlineHit" class="link-box online-box">
-              <p v-if="onlineBusy" class="dlg-note">Buscando el código en internet…</p>
+              <p v-if="onlineBusy" class="dlg-note">Buscando información del producto…</p>
               <template v-else>
-                <p class="link-label">Lo encontré en internet:</p>
+                <p class="link-label">Esto encontré del producto:</p>
                 <div class="link-row">
                   <div class="link-info">
                     <span>{{ onlineHit.name }}</span>
-                    <small>{{ [onlineHit.quantity, onlineHit.source].filter(Boolean).join(" · ") }} · revisa que sea el mismo producto</small>
+                    <small>{{ [onlineHit.quantity, onlineHit.brand, onlineHit.category ? `Categoría: ${onlineHit.category}` : "", onlineHit.unit && onlineHit.unit !== "pz" ? `Se vende por ${SALE_UNITS[onlineHit.unit]?.label.toLowerCase()}` : ""].filter(Boolean).join(" · ") }}</small>
+                    <small>{{ onlineHit.source }} · revisa que sea el mismo producto; solo te faltará el precio</small>
                   </div>
                   <div class="link-acts">
                     <button type="button" class="link-hit" @click="startAddMissing(onlineHit)">Registrar con estos datos</button>
@@ -1499,16 +1518,18 @@
             <div class="product-body">
               <label class="field wide">
                 <span>Nombre</span>
-                <input v-model="foodForm.name" class="inp" :placeholder="namePlaceholder" required />
+                <input v-model="foodForm.name" class="inp" :placeholder="namePlaceholder" required @blur="autoFillFromName" />
               </label>
 
               <label class="field m-wide">
                 <span>Categoría</span>
                 <select v-model="foodForm.menuId" class="inp" @change="onFormMenuChange">
                   <option v-for="m in menus" :key="m.id" :value="m.id">{{ m.name }}</option>
+                  <option v-if="aiCategory" value="__ai">{{ aiCategory }} (nueva, sugerida)</option>
                   <option value="__new">+ Nueva categoría…</option>
                 </select>
               </label>
+              <small v-if="aiBusy || aiNote" class="field wide ai-note" role="status">{{ aiBusy ? "Completando los datos del producto…" : aiNote }}</small>
               <div class="field m-wide">
                 <span>Código de barras o clave</span>
                 <div class="code-row">
@@ -1569,7 +1590,7 @@
                 </label>
                 <label class="field">
                   <span>{{ foodForm.saleUnit !== 'pz' ? `Precio por ${SALE_UNITS[foodForm.saleUnit].label.toLowerCase()}` : 'Precio' }}<span v-if="foodForm.saleUnit === 'pz'" class="hide-mobile"> de venta</span></span>
-                  <input v-model.number="foodForm.price" class="inp num strong" type="number" min="0" step="0.01" required />
+                  <input ref="foodPriceInput" v-model.number="foodForm.price" class="inp num strong" type="number" min="0" step="0.01" required />
                 </label>
               </div>
 
@@ -1864,12 +1885,86 @@ export default {
     const missingIntent = ref("sale");
     // Sugerencia de nombre buscada en línea (Open Food Facts) para el código que no existe
     const onlineHit = ref(null);
+    // Datos del producto nuevo (nombre, presentación, categoría, unidad, marca): se completan solos, sin botones y sin gastar usos de IA del plan
+    const aiBusy = ref(false);
+    const aiNote = ref("");
+    const aiCategory = ref(""); // categoría nueva sugerida: se crea al guardar
+    const foodPriceInput = ref(null);
+    let catTouched = false;
+    let lastAutoKey = "";
+    const isAdminUser = computed(() => authStore.role === "admin");
+    const categoryNames = () => menus.value.map((m) => m.name);
+    function matchMenu(category) {
+      const c = fold(category);
+      if (!c) return null;
+      return menus.value.find((m) => fold(m.name) === c) || menus.value.find((m) => fold(m.name).includes(c) || c.includes(fold(m.name))) || null;
+    }
+    /** Elige la categoría de la tienda que corresponde; si no hay, deja una nueva lista para crearse al guardar. Devuelve cómo quedó. */
+    function applyCategory(category) {
+      const found = matchMenu(category);
+      if (found) {
+        foodForm.menuId = found.id;
+        aiCategory.value = "";
+        return found.name;
+      }
+      if (!category) return "";
+      aiCategory.value = category;
+      foodForm.menuId = "__ai";
+      return `${category} (nueva)`;
+    }
+    /** Llena en el formulario lo que falte. fresh = formulario recién abierto con la sugerencia (se pisa todo). */
+    function fillFromSuggestion(res, { fresh = false } = {}) {
+      const done = [];
+      if (res.name && (fresh || !foodForm.name.trim())) {
+        foodForm.name = [res.name, res.presentation].filter(Boolean).join(" ");
+        done.push("nombre");
+      }
+      if (res.brand && !String(foodForm.description || "").trim()) {
+        foodForm.description = res.brand;
+        done.push("marca");
+      }
+      if (res.unit && SALE_UNITS[res.unit] && res.unit !== "pz" && foodForm.saleUnit === "pz") {
+        foodForm.saleUnit = res.unit;
+        done.push(`se vende por ${SALE_UNITS[res.unit].label.toLowerCase()}`);
+      }
+      if (res.category && (fresh || !catTouched)) {
+        const cat = applyCategory(res.category);
+        if (cat) done.push(`categoría ${cat}`);
+      }
+      return done;
+    }
+    async function autoFill({ code = "", name = "" }) {
+      const key = `${code}|${name}`;
+      if (!isAdminUser.value || editingFood.value || key === lastAutoKey) return;
+      lastAutoKey = key;
+      aiBusy.value = true;
+      aiNote.value = "";
+      try {
+        const res = await apiService.suggestProduct({ code, name, categories: categoryNames() });
+        if (res.found || res.category) {
+          const done = fillFromSuggestion(res);
+          aiNote.value = done.length ? `Se completó solo: ${done.join(", ")}. Revísalo y pon el precio.` : "";
+        }
+      } catch {
+        /* sin internet o sin respuesta: se llena a mano como siempre */
+      } finally {
+        aiBusy.value = false;
+      }
+    }
+    function autoFillFromName() {
+      const name = foodForm.name.trim();
+      if (name.length >= 3 && !catTouched) autoFill({ code: barcodeForAuto(), name });
+    }
+    const barcodeForAuto = () => {
+      const code = String(foodForm.barcode || "").replace(/\D/g, "");
+      return code.length >= 8 && code.length <= 14 ? code : "";
+    };
     const onlineBusy = ref(false);
     async function searchOnline(code) {
       onlineHit.value = null;
       onlineBusy.value = true;
       try {
-        const res = await apiService.lookupOnline(code);
+        const res = isAdminUser.value ? await apiService.suggestProduct({ code, categories: categoryNames() }) : await apiService.lookupOnline(code);
         if (missingCode.value === code && res?.found) onlineHit.value = res;
       } catch {
         /* sin internet o sin respuesta: no se sugiere nada */
@@ -2574,6 +2669,8 @@ export default {
     });
 
     async function onFormMenuChange() {
+      if (foodForm.menuId === "__ai") return;
+      catTouched = true;
       if (foodForm.menuId !== "__new") return;
       const name = String(window.prompt("Nombre de la nueva categoría") || "").trim();
       if (!name) {
@@ -3102,6 +3199,7 @@ export default {
       missingCode.value = code;
       missingIntent.value = intent;
       scanError.value = "";
+      aiNote.value = "";
       if (intent !== "price" && navigator.onLine !== false) searchOnline(code);
       else {
         onlineHit.value = null;
@@ -3131,7 +3229,14 @@ export default {
       pendingBarcode.value = code;
       nextTick(() => {
         foodForm.barcode = code;
-        if (suggested) foodForm.name = suggested;
+        lastAutoKey = `${code}|`; // ya se buscó: que el formulario no lo repita
+        if (suggestion?.name) {
+          const done = fillFromSuggestion(suggestion, { fresh: true });
+          aiNote.value = done.length ? `Se completó solo: ${done.join(", ")}. Revísalo y pon el precio.` : "";
+          nextTick(() => foodPriceInput.value?.focus());
+        } else if (suggested) {
+          foodForm.name = suggested;
+        }
       });
     }
 
@@ -3455,14 +3560,24 @@ export default {
     let queuedCode = "";
 
     const cameraFor = ref(""); // "pos" (caja) o "form" (código del producto que se edita)
+    // Con la cámara de la venta abierta, cualquier ventana (producto nuevo, precio, peso, cobro…) la oculta y al cerrarse vuelve
+    const posDialogOpen = computed(
+      () =>
+        Boolean(missingCode.value || priceAsk.value) ||
+        showFoodForm.value || showMenuForm.value || showWeigh.value || showQty.value || showMisc.value || showPayment.value ||
+        showMagic.value || showDiscount.value || showHeld.value || showPriceCheck.value
+    );
+    // Línea del ticket del último producto escaneado (para cambiarle la cantidad sin escanearlo otra vez)
+    const lastLineIdx = computed(() => (lastAdded.value ? store.platillosSeleccionados.findIndex((p) => p.id === lastAdded.value.id) : -1));
     function onCameraDetect(code) {
-      const target = cameraFor.value;
-      cameraFor.value = "";
-      if (target === "form") foodForm.barcode = code;
-      else {
-        scanCode.value = code;
-        applyScannedCode(code);
+      if (cameraFor.value === "form") {
+        cameraFor.value = "";
+        foodForm.barcode = code;
+        return;
       }
+      // En la venta la cámara sigue abierta: el producto se agrega y se lee el siguiente
+      scanCode.value = code;
+      applyScannedCode(code);
     }
 
     async function applyScannedCode(raw) {
@@ -4535,8 +4650,24 @@ export default {
       photoFile.value = null;
     }
 
+    // Al escanear o escribir un código en un producto nuevo sin nombre, se busca solo
+    let autoTimer = null;
+    watch(
+      () => foodForm.barcode,
+      () => {
+        clearTimeout(autoTimer);
+        autoTimer = setTimeout(() => {
+          const code = barcodeForAuto();
+          if (code && !foodForm.name.trim() && showFoodForm.value) autoFill({ code });
+        }, 700);
+      }
+    );
     function closeFoodForm() {
       photoMenu.value = false;
+      aiNote.value = "";
+      aiCategory.value = "";
+      catTouched = false;
+      lastAutoKey = "";
       photoFile.value = null;
       showFoodForm.value = false;
       editingFood.value = null;
@@ -4574,6 +4705,17 @@ export default {
         }
       }
 
+      if (foodForm.menuId === "__ai" && aiCategory.value) {
+        try {
+          const created = await apiService.createMenu({ name: aiCategory.value, description: "" });
+          menus.value.push(created);
+          foodForm.menuId = created.id;
+          aiCategory.value = "";
+        } catch (e) {
+          foodError.value = (typeof e.response?.data === "string" && e.response.data) || "No se pudo crear la categoría.";
+          return;
+        }
+      }
       const shouldAdd = addAfterSave.value;
       const intent = pendingIntent.value;
       const payload = {
@@ -4904,12 +5046,19 @@ export default {
       priceErr,
       openPriceCheck,
       cameraFor,
+      posDialogOpen,
+      lastLineIdx,
       onCameraDetect,
       closePriceCheck,
       runPriceCheck,
       addFromPriceCheck,
       missingCode,
       onlineHit,
+      aiBusy,
+      aiNote,
+      aiCategory,
+      foodPriceInput,
+      autoFillFromName,
       onlineBusy,
       linkTerm,
       linkErr,
@@ -7689,6 +7838,18 @@ html[data-theme="dark"] .avatar {
 .point-acts .btn { min-height: 2.6rem; font-size: 0.88rem; }
 
 .photo-row { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+
+/* Cámara de la venta: lo último agregado, con su cantidad */
+.cam-last { display: grid; gap: 0.6rem; padding: 0 14px 0.4rem; }
+.cam-last-info { display: flex; justify-content: space-between; align-items: baseline; gap: 0.6rem; }
+.cam-last-info small { color: var(--timber-muted, #667); white-space: nowrap; }
+.cam-qty { display: flex; align-items: center; justify-content: center; gap: 1.2rem; }
+.cam-qty button { width: 46px; height: 46px; border-radius: 50%; border: 1px solid var(--timber-line, #d5dae3); background: #fff; font-size: 1.5rem; line-height: 1; cursor: pointer; }
+.cam-qty output { min-width: 3ch; text-align: center; font-size: 1.7rem; font-weight: 800; }
+.cam-more { display: flex; align-items: center; justify-content: center; gap: 0.4rem; flex-wrap: wrap; font-size: 0.85rem; color: var(--timber-muted, #667); }
+.cam-more button { padding: 0.35rem 0.7rem; border-radius: 999px; border: 1px solid var(--timber-line, #d5dae3); background: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+.cam-total { margin: 0.3rem 0 0.6rem; text-align: center; font-weight: 700; }
+.ai-note { color: var(--timber-muted, #667); }
 
 /* Multi-select */
 .select-bar {

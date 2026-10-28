@@ -4,6 +4,7 @@ const { roundQty, saleUnitOf } = require('../utils/units');
 const limits = require('../services/plan-limits.service');
 const { ObjectId } = require('mongodb');
 const barcodeLookup = require('../services/barcode-lookup.service');
+const productSuggest = require('../services/product-suggest.service');
 const saleAudit = require('../services/sale-audit.service');
 const { sanitizePriceRows, MAX_ROWS } = require('../services/bulk-prices.service');
 
@@ -318,6 +319,22 @@ async function lookupFood(req, res) {
   }
 }
 
+/** Registro de un producto nuevo: nombre, presentación, categoría y unidad sugeridos (bases gratuitas y, si hace falta, IA sin gastar usos del plan). */
+async function suggestProduct(req, res) {
+  try {
+    const categories = (Array.isArray(req.body?.categories) ? req.body.categories : [])
+      .map((c) => String(c || '').replace(/\s+/g, ' ').trim().slice(0, 40))
+      .filter(Boolean)
+      .slice(0, 60);
+    return res.status(200).json(
+      await productSuggest.suggest({ tenantId: req.tenantId, plan: req.tenant?.plan || 'basic', code: req.body?.code, name: req.body?.name, categories })
+    );
+  } catch (err) {
+    console.error(err);
+    return res.status(200).json({ found: false });
+  }
+}
+
 /** Sugerencia de nombre para un código que no está en la tienda, buscada en línea (Open Food Facts). */
 async function lookupOnline(req, res) {
   try {
@@ -393,6 +410,7 @@ async function deleteAllFoods(req, res) {
 
 module.exports = {
   lookupOnline,
+  suggestProduct,
   listMenus,
   getMenu,
   createMenu,

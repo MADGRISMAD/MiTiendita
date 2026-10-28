@@ -220,6 +220,10 @@ export const apiService = {
       .get('/foods/lookup', { params: { code } })
       .then((r) => r.data);
   },
+  /** Registro de un producto nuevo: nombre, presentación, categoría, unidad y marca sugeridos (bases gratuitas e IA). */
+  suggestProduct(payload: { code?: string; name?: string; categories?: string[] }) {
+    return axios.post('/foods/suggest', payload, { timeout: 45_000 }).then((r) => r.data);
+  },
   lookupOnline(code: string) {
     return axios.get('/foods/online', { params: { code } }).then((r) => r.data);
   },
