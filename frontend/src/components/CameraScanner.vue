@@ -31,22 +31,60 @@ function messageFor(err) {
   return "No se pudo abrir la cámara.";
 }
 
+const FORMATS = ["ean_13", "ean_8", "upc_a", "upc_e", "code_128", "code_39", "itf", "qr_code"];
+const CONSTRAINTS = { video: { facingMode: { ideal: "environment" } }, audio: false };
+
+function found(text) {
+  if (stopped) return;
+  stopped = true;
+  navigator.vibrate?.(40);
+  emit("detect", text);
+}
+
+/** Detector del navegador (en Android usa el motor de Google): más rápido. null si este navegador no lo trae. */
+async function startNative() {
+  if (!("BarcodeDetector" in window)) return null;
+  const known = (await window.BarcodeDetector.getSupportedFormats?.().catch(() => [])) || [];
+  const formats = FORMATS.filter((f) => known.includes(f));
+  if (!formats.includes("ean_13")) return null;
+  const detector = new window.BarcodeDetector({ formats });
+  const stream = await navigator.mediaDevices.getUserMedia(CONSTRAINTS);
+  const el = video.value;
+  el.srcObject = stream;
+  await el.play().catch(() => {});
+  let busy = false;
+  const timer = setInterval(async () => {
+    if (busy || stopped || el.readyState < 2) return;
+    busy = true;
+    try {
+      const [hit] = await detector.detect(el);
+      if (hit?.rawValue) found(hit.rawValue);
+    } catch {
+      /* un cuadro que no se pudo leer: se intenta con el siguiente */
+    }
+    busy = false;
+  }, 80);
+  return { stop: () => { clearInterval(timer); stream.getTracks().forEach((t) => t.stop()); el.srcObject = null; } };
+}
+
+/** Librería zxing para los navegadores sin detector propio (iPhone, etc.). Se baja solo cuando se necesita. */
+async function startZxing() {
+  const [{ BrowserMultiFormatReader }, { BarcodeFormat, DecodeHintType }] = await Promise.all([import("@zxing/browser"), import("@zxing/library")]);
+  const hints = new Map([[DecodeHintType.POSSIBLE_FORMATS, FORMATS.map((f) => BarcodeFormat[f.toUpperCase()])]]);
+  const reader = new BrowserMultiFormatReader(hints, { delayBetweenScanAttempts: 80 });
+  return reader.decodeFromConstraints(CONSTRAINTS, video.value, (result) => result && found(result.getText()));
+}
+
 onMounted(async () => {
   try {
     if (!navigator.mediaDevices?.getUserMedia) throw new Error("sin cámara");
-    // La librería pesa: solo se baja cuando alguien abre la cámara
-    const [{ BrowserMultiFormatReader }, { BarcodeFormat, DecodeHintType }] = await Promise.all([import("@zxing/browser"), import("@zxing/library")]);
-    const hints = new Map([
-      [DecodeHintType.POSSIBLE_FORMATS, [BarcodeFormat.EAN_13, BarcodeFormat.EAN_8, BarcodeFormat.UPC_A, BarcodeFormat.UPC_E, BarcodeFormat.CODE_128, BarcodeFormat.CODE_39, BarcodeFormat.ITF, BarcodeFormat.QR_CODE]],
-      [DecodeHintType.TRY_HARDER, true],
-    ]);
-    const reader = new BrowserMultiFormatReader(hints, { delayBetweenScanAttempts: 150 });
-    const started = await reader.decodeFromConstraints({ video: { facingMode: { ideal: "environment" } }, audio: false }, video.value, (result) => {
-      if (!result || stopped) return;
-      stopped = true;
-      navigator.vibrate?.(40);
-      emit("detect", result.getText());
-    });
+    let started = null;
+    try {
+      started = await startNative();
+    } catch (err) {
+      if (err?.name === "NotAllowedError" || err?.name === "NotFoundError") throw err;
+    }
+    started = started || (await startZxing());
     if (stopped) started.stop();
     else controls = started;
   } catch (err) {
