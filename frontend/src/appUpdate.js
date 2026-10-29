@@ -41,6 +41,24 @@ export function applyUpdate() {
 /** Para main.ts: registra el service worker y vigila las versiones nuevas (solo en producción). */
 export function initAppUpdate() {
   if (!import.meta.env.PROD || typeof window === "undefined") return;
+  // Una pantalla pide un archivo de una versión anterior que ya no está en el servidor: se limpia la copia guardada y se recarga (una vez por minuto, para no hacer ciclo)
+  window.addEventListener("vite:preloadError", (event) => {
+    event.preventDefault();
+    try {
+      if (Date.now() - Number(sessionStorage.getItem("mt-chunk-reload") || 0) < 60_000) return;
+      sessionStorage.setItem("mt-chunk-reload", String(Date.now()));
+    } catch {
+      /* sin almacenamiento: se intenta de todos modos */
+    }
+    Promise.resolve()
+      .then(async () => {
+        const regs = (await navigator.serviceWorker?.getRegistrations?.()) || [];
+        await Promise.all(regs.map((r) => r.unregister()));
+        if (window.caches) await Promise.all((await caches.keys()).map((k) => caches.delete(k)));
+      })
+      .catch(() => {})
+      .finally(() => window.location.reload());
+  });
   import("virtual:pwa-register")
     .then(({ registerSW }) => {
       applyFn = registerSW({
