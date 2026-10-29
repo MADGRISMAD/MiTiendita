@@ -82,7 +82,8 @@
           <p class="adm-hint">
             {{ codes.counts.total }} productos: <strong>{{ codes.counts.ok }}</strong> con código válido ·
             <strong>{{ codes.counts.digit }}</strong> con dígito verificador mal · <strong>{{ codes.counts.length }}</strong> con longitud rara ·
-            <strong>{{ codes.counts.missing }}</strong> sin código · <strong>{{ codes.counts.duplicate }}</strong> repetidos ·
+            <strong>{{ codes.counts.missing }}</strong> sin código · <strong>{{ codes.counts.duplicate }}</strong> con código repetido ·
+            <strong>{{ codes.counts.sameName }}</strong> con el mismo nombre y otro código ·
             {{ codes.counts.internal }} con clave propia o PLU (no se revisan).
           </p>
           <p v-if="!codes.problems.length" class="pf-ok" role="status">Sin problemas en lo que se puede revisar sin internet.</p>
@@ -90,7 +91,7 @@
             <li v-for="p in codes.problems" :key="p.key" class="cat-row">
               <span class="body">
                 <strong>{{ p.name }}<template v-if="p.presentation"> · {{ p.presentation }}</template></strong>
-                <small>{{ p.code || "sin código" }} · {{ p.section }}<template v-if="p.sharedWith.length"> · mismo código que: {{ p.sharedWith.join(", ") }}</template></small>
+                <small>{{ p.code || "sin código" }} · {{ p.section }}<template v-if="p.sharedWith.length"> · mismo código que: {{ p.sharedWith.join(", ") }}</template><template v-if="p.sameNameAs?.length"> · mismo nombre que: {{ p.sameNameAs.join(", ") }}</template></small>
               </span>
               <span class="adm-pill bad" v-for="i in p.issues" :key="i">{{ ISSUE_LABEL[i] }}</span>
               <span class="acts">
@@ -496,7 +497,7 @@ async function removeItem(item) {
 }
 
 // ---------- Verificar códigos ----------
-const ISSUE_LABEL = { digit: "Dígito verificador mal", length: "Longitud rara", missing: "Sin código", duplicate: "Repetido" };
+const ISSUE_LABEL = { digit: "Dígito verificador mal", length: "Longitud rara", missing: "Sin código", duplicate: "Código repetido", sameName: "Mismo producto, otro código" };
 const showCodes = ref(false);
 const onlyUnverified = ref(true);
 const codes = ref(null);
@@ -577,6 +578,8 @@ async function runOnline() {
 // Propuestas de código correcto: el servidor las busca, la persona autoriza cada cambio
 const CONFIDENCE = {
   confirmed: { label: "Confirmado", tone: "good" },
+  ai_confirmed: { label: "IA + base pública", tone: "good" },
+  ai_page: { label: "IA con página", tone: "warn" },
   check_digit: { label: "Sin confirmar", tone: "warn" },
   search: { label: "Por nombre", tone: "warn" },
 };
@@ -602,7 +605,7 @@ function reasonOf(key) {
 // Con problema de código, o con otro nombre en las bases públicas
 const fixKeys = computed(() => [
   ...new Set([
-    ...(codes.value?.problems || []).filter((p) => p.issues.some((i) => i !== "duplicate")).map((p) => p.key),
+    ...(codes.value?.problems || []).filter((p) => p.issues.some((i) => i !== "duplicate" && i !== "sameName")).map((p) => p.key),
     ...onlineList.value.filter((r) => r.status === "different").map((r) => r.key),
   ]),
 ]);

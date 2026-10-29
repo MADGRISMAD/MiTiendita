@@ -148,3 +148,78 @@ test('sugerencias: dígito corregido y confirmado, sin confirmar, y por nombre c
     lookup.clearCache();
   }
 });
+
+test('comparación estricta: una variante o una medida distinta no cuenta como el mismo producto', () => {
+  assert.equal(audit.sameProduct('Coca-Cola Original 600 ml', 'Coca-Cola Zero 600 ml'), false);
+  assert.equal(audit.sameProduct('Coca-Cola 600 ml', 'Coca-Cola Light'), false);
+  assert.equal(audit.sameProduct('Sabritas Sal 45 g', 'Sabritas'), true);
+  assert.equal(audit.sameProduct('Sabritas Sal 45 g', 'Gamesa Marías'), false);
+  assert.equal(audit.sameProduct('Coca-Cola Original 600 ml', 'Coca'), false, 'una sola palabra de coincidencia en un nombre largo no basta');
+  // medidas pegadas, con decimales y en otra unidad
+  assert.equal(audit.sizeDiffers('Coca-Cola 600ml', 'Coca-Cola 600 ml'), false);
+  assert.equal(audit.sizeDiffers('Azúcar 1 kg', 'Azúcar 1000 g'), false);
+  assert.equal(audit.sizeDiffers('Azúcar 1 kg', 'Azúcar 500 g'), true);
+  assert.equal(audit.sizeDiffers('Aceite 1,5 l', 'Aceite 1500 ml'), false);
+  assert.equal(audit.sizeDiffers('Donitas 7p 52.5g', 'Donitas 4p 52.5g'), true);
+});
+
+test('revisión local: avisa de productos con el mismo nombre y presentación pero otro código', async () => {
+  const db = fakeDb([
+    row('a', 'Coca-Cola Original', '7501055300075', { presentation: '600 ml' }),
+    row('b', 'COCA COLA original', '036000291452', { presentation: '600ml' }),
+    row('c', 'Coca-Cola Original', '7501055363070', { presentation: '355 ml' }), // otra presentación: no es repetido
+    row('d', 'Coca-Cola Zero', '7501055370009', { presentation: '600 ml' }), // otra variante: no es repetido
+  ]);
+  const { counts, problems } = await audit.localReport(db, 'abarrotes');
+  assert.deepEqual(problems.map((p) => [p.key, p.issues]), [['a', ['sameName']], ['b', ['sameName']]]);
+  assert.equal(counts.sameName, 2);
+  assert.match(problems[0].sameNameAs[0], /036000291452/);
+});
+
+test('IA: solo propone un código si hay páginas, medida igual y otra fuente que lo confirme', async () => {
+  const gemini = require('../services/gemini.service');
+  const lookup = require('../services/barcode-lookup.service');
+  const realFetch = global.fetch;
+  const realFind = gemini.findBarcode;
+  const realHas = gemini.hasGeminiConfig;
+  const db = fakeDb([row('a', 'Coca-Cola Original', '', { presentation: '600 ml' })]);
+  const json = (b, status = 200) => ({ ok: status < 400, status, json: async () => b, text: async () => '' });
+  let answer;
+  gemini.hasGeminiConfig = () => true;
+  gemini.findBarcode = async () => answer;
+  const good = { found: true, code: '7501055300075', name: 'Coca-Cola Original', presentation: '600 ml', confidence: 'alta', grounded: true, sources: ['https://tienda.test/p1'] };
+  const run = async () => (await audit.suggest(db, 'abarrotes', ['a'])).suggestions.a;
+  try {
+    global.fetch = async (url) => {
+      const u = String(url);
+      if (u.includes('/api/v2/product/7501055300075')) return json({ status: 1, product: { product_name: 'Coca-Cola Original', quantity: '600 ml' } });
+      return json({ status: 0, products: [] }, 404);
+    };
+    // 1) una base pública confirma el mismo producto
+    lookup.clearCache(); answer = good;
+    assert.deepEqual((await run()).map((c) => [c.code, c.confidence]), [['7501055300075', 'ai_confirmed']]);
+    // 2) la base pública lo atribuye a otro producto: se descarta
+    global.fetch = async (url) => (String(url).includes('/api/v2/product/7501055300075') ? json({ status: 1, product: { product_name: 'Papel higiénico' } }) : json({ status: 0, products: [] }, 404));
+    lookup.clearCache();
+    assert.deepEqual(await run(), []);
+    // 3) ninguna base lo tiene: solo vale si una página citada muestra el código
+    global.fetch = async (url) => (String(url).includes('tienda.test') ? { ok: true, status: 200, text: async () => '<p>Código 7501055300075</p>' } : json({ status: 0, products: [] }, 404));
+    lookup.clearCache();
+    assert.deepEqual((await run()).map((c) => c.confidence), ['ai_page']);
+    global.fetch = async (url) => (String(url).includes('tienda.test') ? { ok: true, status: 200, text: async () => '<p>sin código</p>' } : json({ status: 0, products: [] }, 404));
+    lookup.clearCache();
+    assert.deepEqual(await run(), [], 'sin otra fuente que lo muestre no se ofrece');
+    // 4) respuestas que no cumplen: confianza media, sin páginas, otra medida, dígito malo
+    for (const bad of [{ confidence: 'media' }, { grounded: false, sources: [] }, { presentation: '355 ml' }, { code: '7501055300076' }]) {
+      answer = { ...good, ...bad };
+      global.fetch = async (url) => (String(url).includes('/api/v2/product/') ? json({ status: 1, product: { product_name: 'Coca-Cola Original', quantity: '600 ml' } }) : json({ status: 0, products: [] }, 404));
+      lookup.clearCache();
+      assert.deepEqual(await run(), [], JSON.stringify(bad));
+    }
+  } finally {
+    global.fetch = realFetch;
+    gemini.findBarcode = realFind;
+    gemini.hasGeminiConfig = realHas;
+    lookup.clearCache();
+  }
+});

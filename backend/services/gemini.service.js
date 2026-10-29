@@ -730,6 +730,76 @@ async function identifyProduct({ code = '', name = '', categories = [] }) {
   return { ...out, grounded, search, reason, debug };
 }
 
+const BARCODE_TIMEOUT_MS = 25_000;
+
+function barcodePrompt(name) {
+  return `Busca en internet el código de barras (EAN-13, EAN-8 o UPC) del producto «${name}», que se vende en México.
+
+Reglas estrictas:
+- Responde un código SOLO si lo ves escrito junto a ESE producto en una página: misma marca, misma variante o sabor y misma presentación.
+- Si el código que encuentras es de otra presentación, otro sabor u otro producto parecido, responde found=false.
+- NO adivines, NO armes un código, NO te bases en el prefijo del país.
+- Si dudas, found=false.
+
+Responde SOLO un JSON, sin texto antes ni después:
+{"found":true,"code":"","name":"","presentation":"","confidence":"alta"}
+- code: solo los dígitos del código.
+- name: marca y producto como lo muestra la página, sin la presentación.
+- presentation: contenido o medida tal como la muestra la página (ej. "600 ml").
+- confidence: "alta" solo si la página muestra ese código junto a ese producto exacto; si no, "media" o "baja".`;
+}
+
+/** Lee la respuesta de la IA a barcodePrompt: código solo con dígitos, texto limpio y confianza válida. */
+function parseBarcodeAnswer(text) {
+  const raw = String(text || '');
+  const start = raw.indexOf('{');
+  const end = raw.lastIndexOf('}');
+  if (start < 0 || end <= start) throw Object.assign(new Error('La respuesta de la IA no se pudo leer.'), { code: 'GEMINI_PARSE' });
+  let data;
+  try {
+    data = JSON.parse(raw.slice(start, end + 1));
+  } catch {
+    throw Object.assign(new Error('La respuesta de la IA no se pudo leer.'), { code: 'GEMINI_PARSE' });
+  }
+  const confidence = ['alta', 'media', 'baja'].includes(String(data.confidence).toLowerCase()) ? String(data.confidence).toLowerCase() : 'baja';
+  const code = String(data.code == null ? '' : data.code).replace(/\D/g, '');
+  return { found: data.found !== false && Boolean(code), code, name: tidy(data.name, 120), presentation: tidy(data.presentation, 40), confidence };
+}
+
+/**
+ * Busca en Google el código de barras de un producto por su nombre. No decide nada: devuelve lo que dijo la IA
+ * junto con las páginas que la respaldan (`sources`) para que quien la use lo compruebe contra otra fuente.
+ */
+async function findBarcode({ name = '' }) {
+  const key = String(process.env.GEMINI_API_KEY || '').trim();
+  if (!key) throw Object.assign(new Error('Falta GEMINI_API_KEY en el servidor.'), { code: 'GEMINI_NOT_CONFIGURED' });
+  const product = tidy(name, 160);
+  if (!product) return { found: false, code: '', name: '', presentation: '', confidence: 'baja', grounded: false, sources: [] };
+  let res;
+  try {
+    res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(geminiModel())}:generateContent`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+      body: JSON.stringify({
+        contents: [{ role: 'user', parts: [{ text: barcodePrompt(product) }] }],
+        generationConfig: { temperature: 0, maxOutputTokens: 2048 },
+        tools: [{ google_search: {} }],
+      }),
+      signal: AbortSignal.timeout(BARCODE_TIMEOUT_MS),
+    });
+  } catch (err) {
+    if (isTimeoutError(err)) throw Object.assign(new Error('La IA tardó demasiado.'), { code: 'GEMINI_TIMEOUT', status: 504 });
+    throw err;
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw Object.assign(new Error(data?.error?.message || 'La IA no pudo buscar el código.'), { code: 'GEMINI_ERROR', status: res.status });
+  const candidate = data?.candidates?.[0];
+  const reply = candidate?.content?.parts?.map((p) => p.text || '').join('') || '';
+  if (!reply.trim()) throw Object.assign(new Error('La IA no devolvió texto.'), { code: 'GEMINI_EMPTY' });
+  const sources = (candidate?.groundingMetadata?.groundingChunks || []).map((c) => c?.web?.uri).filter(Boolean).slice(0, 5);
+  return { ...parseBarcodeAnswer(reply), grounded: sources.length > 0, sources };
+}
+
 function publicItem(row) {
   return {
     name: row.name,
@@ -793,6 +863,8 @@ function flagRepeats(items) {
 
 module.exports = {
   identifyProduct,
+  findBarcode,
+  parseBarcodeAnswer,
   parseIdentify,
   geminiModel,
   hasGeminiConfig,
