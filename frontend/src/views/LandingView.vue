@@ -724,6 +724,7 @@
       <div class="foot-brand">
         <BrandName />
         <p>Punto de venta en la nube para abarrotes y tiendas de barrio.</p>
+        <p>Un producto de <a href="https://www.hyperionmkt.com/">Hyperion Software</a></p>
       </div>
       <div class="foot-links">
         <router-link to="/login">Ingresar</router-link>
