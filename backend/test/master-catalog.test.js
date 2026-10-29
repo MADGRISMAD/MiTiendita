@@ -65,6 +65,11 @@ function memoryDb({ foods = [], menus = [], settings = [], catalogItems = catalo
       for (let i = catalogItems.length - 1; i >= 0; i -= 1) if (catalogItems[i].catalog === c) catalogItems.splice(i, 1);
       return before - catalogItems.length;
     },
+    async DeleteUnverifiedCatalogItems(c) {
+      const before = catalogItems.length;
+      for (let i = catalogItems.length - 1; i >= 0; i -= 1) if (catalogItems[i].catalog === c && !catalogItems[i].verified) catalogItems.splice(i, 1);
+      return before - catalogItems.length;
+    },
     async IsCatalogSeeded() {
       return seeded;
     },
@@ -331,7 +336,7 @@ test('al arrancar, el archivo pasa a la base una sola vez; si el equipo la vací
 test('eliminar un catálogo: pide la palabra de confirmación, borra solo ese catálogo y no se vuelve a llenar al reiniciar', async () => {
   const db = memoryDb({ catalogItems: [] });
   await catalog.ensureSeeded(db);
-  await admin.create(db, 'pharmacy', { section: 'Analgésicos', name: 'Paracetamol', code: '7502000000011' });
+  await admin.create(db, 'pharmacy', { section: 'Analgésicos', name: 'Paracetamol', code: '7502000000019' });
   await assert.rejects(admin.clear(db, 'abarrotes', ''), (e) => e.status === 400);
   await assert.rejects(admin.clear(db, 'abarrotes', 'si'), (e) => e.status === 400);
   await assert.rejects(admin.clear(db, 'nada', 'ELIMINAR'), (e) => e.status === 404);
@@ -345,8 +350,8 @@ test('eliminar un catálogo: pide la palabra de confirmación, borra solo ese ca
 
 test('farmacia: cuando el catálogo ya tiene productos, la tienda de farmacia los recibe; al cambiar de giro se cambia el catálogo', async () => {
   const db = memoryDb();
-  await admin.create(db, 'pharmacy', { section: 'Analgésicos', name: 'Paracetamol', presentation: '500 mg c/20', code: '7502000000011' });
-  await admin.create(db, 'pharmacy', { section: 'Vitaminas', name: 'Vitamina C', presentation: '1 g', code: '7502000000028' });
+  await admin.create(db, 'pharmacy', { section: 'Analgésicos', name: 'Paracetamol', presentation: '500 mg c/20', code: '7502000000019' });
+  await admin.create(db, 'pharmacy', { section: 'Vitaminas', name: 'Vitamina C', presentation: '1 g', code: '7502000000026' });
   const settings = { businessType: 'pharmacy' };
   assert.deepEqual(await catalog.syncForGiro(db, 't1', settings), { created: 2, menusCreated: 2 });
   assert.deepEqual(mine(db).map((f) => f.name).sort(), ['Paracetamol 500 mg c/20', 'Vitamina C 1 g']);
@@ -363,18 +368,18 @@ test('farmacia: cuando el catálogo ya tiene productos, la tienda de farmacia lo
 
 test('panel: agregar, editar, quitar y no repetir códigos', async () => {
   const db = memoryDb();
-  const item = await admin.create(db, 'hardware', { section: 'Tornillería', name: 'Tornillo', presentation: '1/4 x 1', code: '7503000000012', unit: 'pz' });
-  assert.equal(item.key, '7503000000012');
+  const item = await admin.create(db, 'hardware', { section: 'Tornillería', name: 'Tornillo', presentation: '1/4 x 1', code: '7503000000016', unit: 'pz' });
+  assert.equal(item.key, '7503000000016');
   const sinCodigo = await admin.create(db, 'hardware', { section: 'Pinturas', name: 'Brocha 2"' });
   assert.match(sinCodigo.key, /^g-/);
-  await assert.rejects(admin.create(db, 'hardware', { name: 'Otro', code: '7503000000012' }), (e) => e.status === 409);
+  await assert.rejects(admin.create(db, 'hardware', { name: 'Otro', code: '7503000000016' }), (e) => e.status === 409);
   await assert.rejects(admin.create(db, 'hardware', { name: 'X' }), (e) => e.status === 400);
   await assert.rejects(admin.create(db, 'hardware', { name: 'Cinta', unit: 'galón' }), (e) => e.status === 400);
   await assert.rejects(admin.create(db, 'nada', { name: 'Cinta' }), (e) => e.status === 404);
 
-  const edited = await admin.update(db, 'hardware', sinCodigo.key, { section: 'Brochas', code: '7503000000029' });
-  assert.deepEqual([edited.section, edited.code, edited.key, edited.name], ['Brochas', '7503000000029', sinCodigo.key, 'Brocha 2"'], 'la clave no cambia al ponerle código');
-  await assert.rejects(admin.update(db, 'hardware', sinCodigo.key, { code: '07503000000012' }), (e) => e.status === 409, 'ni escrito con un cero de más');
+  const edited = await admin.update(db, 'hardware', sinCodigo.key, { section: 'Brochas', code: '7503000000023' });
+  assert.deepEqual([edited.section, edited.code, edited.key, edited.name], ['Brochas', '7503000000023', sinCodigo.key, 'Brocha 2"'], 'la clave no cambia al ponerle código');
+  await assert.rejects(admin.update(db, 'hardware', sinCodigo.key, { code: '07503000000016' }), (e) => e.status === 409, 'ni escrito con un cero de más');
   await admin.remove(db, 'hardware', item.key);
   await assert.rejects(admin.remove(db, 'hardware', item.key), (e) => e.status === 404);
   const sum = (await admin.summary(db)).find((c) => c.key === 'hardware');
@@ -384,34 +389,34 @@ test('panel: agregar, editar, quitar y no repetir códigos', async () => {
 test('panel: importar un archivo crea lo nuevo, actualiza lo que ya existe y reporta las filas con error', async () => {
   const db = memoryDb();
   const rows = [
-    { section: 'Analgésicos', name: 'Paracetamol', presentation: '500 mg', code: '7502000000011' },
+    { section: 'Analgésicos', name: 'Paracetamol', presentation: '500 mg', code: '7502000000019' },
     { section: 'Analgésicos', name: 'Ibuprofeno', presentation: '400 mg' }, // sin código
-    { section: '', name: 'Suero oral', code: '7502000000035', unit: 'pz', plu: 'sí', verificado: 'x' },
+    { section: '', name: 'Suero oral', code: '7502000000033', unit: 'pz', plu: 'sí', verificado: 'x' },
     { section: 'Mal', name: '' }, // sin nombre
     { section: 'Mal', name: 'Algo', unit: 'tonelada' }, // unidad inválida
-    { section: 'Analgésicos', name: 'Paracetamol', presentation: '500 mg', code: '7502000000011' }, // repetida
+    { section: 'Analgésicos', name: 'Paracetamol', presentation: '500 mg', code: '7502000000019' }, // repetida
   ];
   const first = await admin.importRows(db, 'pharmacy', rows);
   assert.deepEqual([first.created, first.updated], [3, 0]);
   assert.deepEqual(first.errors.map((e) => e.row), [4, 5, 6]);
-  const suero = (await db.GetCatalogItem('pharmacy', '7502000000035'));
+  const suero = (await db.GetCatalogItem('pharmacy', '7502000000033'));
   assert.equal(suero.section, 'General');
   assert.equal(suero.plu, true);
 
   // volver a subirlo (con una corrección) actualiza, no duplica
   const again = await admin.importRows(db, 'pharmacy', [
-    { section: 'Analgésicos y fiebre', name: 'Paracetamol', presentation: '500 mg c/20', code: '07502000000011' },
+    { section: 'Analgésicos y fiebre', name: 'Paracetamol', presentation: '500 mg c/20', code: '07502000000019' },
     { section: 'Analgésicos', name: 'Ibuprofeno', presentation: '400 mg' },
   ]);
   assert.deepEqual([again.created, again.updated], [0, 2]);
   assert.equal(await db.CountCatalogItems('pharmacy'), 3);
-  assert.equal((await db.GetCatalogItem('pharmacy', '7502000000011')).section, 'Analgésicos y fiebre');
+  assert.equal((await db.GetCatalogItem('pharmacy', '7502000000019')).section, 'Analgésicos y fiebre');
 
   // con precio y costo el producto nace con precio; sin ellos, sin precio
-  await admin.importRows(db, 'pharmacy', [{ name: 'Con precio', code: '7502000000099', price: '$12.50', cost: '9' }]);
-  const priced = catalog.toFood(await db.GetCatalogItem('pharmacy', '7502000000099'), { menuId: 'm1', tenantId: 't1' });
+  await admin.importRows(db, 'pharmacy', [{ name: 'Con precio', code: '7502000000095', price: '$12.50', cost: '9' }]);
+  const priced = catalog.toFood(await db.GetCatalogItem('pharmacy', '7502000000095'), { menuId: 'm1', tenantId: 't1' });
   assert.deepEqual([priced.price, priced.cost, priced.needsPrice], [12.5, 9, false]);
-  const bare = catalog.toFood(await db.GetCatalogItem('pharmacy', '7502000000035'), { menuId: 'm1', tenantId: 't1' });
+  const bare = catalog.toFood(await db.GetCatalogItem('pharmacy', '7502000000033'), { menuId: 'm1', tenantId: 't1' });
   assert.deepEqual([bare.price, bare.needsPrice], [0, true]);
   const bad = await admin.importRows(db, 'pharmacy', [{ name: 'Mal precio', price: 'abc' }]);
   assert.equal(bad.errors.length, 1);
@@ -442,4 +447,32 @@ test('panel: el catálogo de una tienda muestra lo que falta en el maestro, sin 
   assert.deepEqual([added.name, added.section], ['Pan de la esquina', 'Mis cosas']);
   assert.equal((await admin.tenantProducts(db, 't1', 'abarrotes')).notInCatalog, 0);
   await assert.rejects(admin.addFromTenant(db, 'abarrotes', 't1', []), (e) => e.status === 400);
+});
+
+test('panel: no deja guardar un código con el dígito verificador mal, pero sí editar otros datos de uno que ya estaba mal', async () => {
+  const db = memoryDb({ catalogItems: [] });
+  await assert.rejects(admin.create(db, 'pharmacy', { name: 'Paracetamol', code: '7502000000011' }), (e) => e.status === 400 && /dígito verificador/.test(e.message));
+  const ok = await admin.create(db, 'pharmacy', { name: 'Paracetamol', code: '7502000000019' });
+  await assert.rejects(admin.update(db, 'pharmacy', ok.key, { code: '7502000000011' }), (e) => e.status === 400);
+  // un producto que ya traía el código mal puede cambiar de sección sin que se lo impida
+  await db.UpsertCatalogItem('pharmacy', 'viejo', { section: 'A', name: 'Viejo', presentation: '', code: '7502000000026x', plu: false, unit: 'pz', verified: false });
+  await db.UpsertCatalogItem('pharmacy', 'malo', { section: 'A', name: 'Malo', presentation: '', code: '7502000000028', plu: false, unit: 'pz', verified: false });
+  const moved = await admin.update(db, 'pharmacy', 'malo', { section: 'B' });
+  assert.equal(moved.section, 'B');
+  // las claves propias y los PLU no son códigos de barras
+  assert.ok(await admin.create(db, 'pharmacy', { name: 'Clave propia', code: 'MT-0001' }));
+});
+
+test('eliminar en grupo los no verificados: pide la palabra, deja los verificados y no toca otros catálogos', async () => {
+  const db = memoryDb({ catalogItems: [] });
+  await admin.create(db, 'pharmacy', { name: 'Verificado', code: '7502000000019', verified: true });
+  await admin.create(db, 'pharmacy', { name: 'Sin verificar A', code: '7502000000026' });
+  await admin.create(db, 'pharmacy', { name: 'Sin verificar B' });
+  await admin.create(db, 'hardware', { name: 'Otro catálogo' });
+  await assert.rejects(admin.removeUnverified(db, 'pharmacy', ''), (e) => e.status === 400);
+  await assert.rejects(admin.removeUnverified(db, 'nada', 'ELIMINAR'), (e) => e.status === 404);
+  assert.equal(await db.CountCatalogItems('pharmacy'), 3, 'sin confirmar no se borra nada');
+  assert.deepEqual(await admin.removeUnverified(db, 'pharmacy', ' eliminar '), { removed: 2 });
+  assert.deepEqual((await db.ListCatalogItems('pharmacy')).map((i) => i.name), ['Verificado']);
+  assert.equal(await db.CountCatalogItems('hardware'), 1);
 });

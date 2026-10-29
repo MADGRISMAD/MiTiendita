@@ -8,6 +8,7 @@ const { CATALOGS } = require('./master-catalog.service');
 const { SALE_UNITS } = require('../utils/units');
 const { httpError } = require('../utils/http-error');
 const { canon } = require('../utils/barcode');
+const { gtinStatus } = require('./catalog-audit.service');
 
 const MAX_IMPORT_ROWS = 3000;
 const clean = (v, max) => String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, max);
@@ -44,6 +45,12 @@ function cleanItem(input) {
   return out;
 }
 
+/** Un código de barras numérico con el dígito verificador mal es un error de captura: cobraría el producto equivocado. */
+function assertCheckDigit(data) {
+  if (!data.code || data.plu || gtinStatus(data.code) !== 'digit') return;
+  throw httpError(400, `El código ${data.code} no es válido: su dígito verificador no cuadra. Revísalo con el producto en mano.`);
+}
+
 async function codeTaken(db, catalog, code, exceptKey) {
   if (!code) return null;
   const q = canon(code);
@@ -68,6 +75,7 @@ async function list(db, catalog) {
 async function create(db, catalog, input) {
   assertCatalog(catalog);
   const data = cleanItem(input);
+  assertCheckDigit(data);
   const clash = await codeTaken(db, catalog, data.code, null);
   if (clash) throw httpError(409, `El código ${data.code} ya es de «${clash.name}».`);
   const key = data.code || `g-${crypto.randomBytes(5).toString('hex')}`;
@@ -80,6 +88,7 @@ async function update(db, catalog, key, input) {
   const current = await db.GetCatalogItem(catalog, key);
   if (!current) throw httpError(404, 'Producto no encontrado.');
   const data = cleanItem({ ...current, ...input });
+  if (canon(data.code) !== canon(current.code)) assertCheckDigit(data); // los que ya estaban mal se corrigen, no estorban al editar otros datos
   const clash = await codeTaken(db, catalog, data.code, current.key);
   if (clash) throw httpError(409, `El código ${data.code} ya es de «${clash.name}».`);
   return db.UpsertCatalogItem(catalog, current.key, data);
@@ -100,6 +109,15 @@ async function clear(db, catalog, confirm) {
   assertCatalog(catalog);
   if (String(confirm || '').trim().toUpperCase() !== CLEAR_WORD) throw httpError(400, `Para eliminar el catálogo escribe ${CLEAR_WORD}.`);
   const removed = await db.DeleteAllCatalogItems(catalog);
+  await db.MarkCatalogSeeded();
+  return { removed };
+}
+
+/** Elimina de golpe los productos del catálogo que no están marcados como verificados (los verificados se quedan). */
+async function removeUnverified(db, catalog, confirm) {
+  assertCatalog(catalog);
+  if (String(confirm || '').trim().toUpperCase() !== CLEAR_WORD) throw httpError(400, `Para eliminar los no verificados escribe ${CLEAR_WORD}.`);
+  const removed = await db.DeleteUnverifiedCatalogItems(catalog);
   await db.MarkCatalogSeeded();
   return { removed };
 }
@@ -186,4 +204,4 @@ async function addFromTenant(db, catalog, tenantId, foodIds) {
   return { ...result, skipped: wanted.size - rows.length };
 }
 
-module.exports = { summary, list, create, update, remove, clear, importRows, tenantProducts, addFromTenant, cleanItem };
+module.exports = { summary, list, create, update, remove, clear, removeUnverified, importRows, tenantProducts, addFromTenant, cleanItem };

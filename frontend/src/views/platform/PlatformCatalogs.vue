@@ -5,6 +5,7 @@
         <button type="button" class="adm-btn" :disabled="!items.length" @click="exportCatalog">Exportar</button>
         <button type="button" class="adm-btn" @click="showImport = !showImport">Importar archivo</button>
         <button type="button" class="adm-btn" :aria-pressed="showCodes" @click="showCodes = !showCodes">Verificar códigos</button>
+        <button type="button" class="adm-btn danger-ghost" :disabled="busy || !unverifiedCount" @click="clearUnverified">Eliminar no verificados ({{ unverifiedCount }})</button>
         <button type="button" class="adm-btn danger-ghost" :disabled="busy || !items.length" @click="clearCatalog">Eliminar catálogo</button>
         <button type="button" class="adm-btn primary" @click="openEdit(null)">Agregar producto</button>
       </template>
@@ -128,7 +129,7 @@
                       <span class="body">
                         <strong>{{ c.code }}</strong>
                         <small v-if="c.name">{{ [c.name, c.quantity].filter(Boolean).join(" · ") }} · {{ c.source }}<template v-if="c.mexico"> · México</template></small>
-                        <small v-else>Dígito verificador corregido; no aparece en las bases.</small>
+                        <small v-else>Solo se ajustó el último dígito para que cuadre la cuenta; ninguna fuente lo confirma. Revísalo con el producto en mano antes de usarlo.</small>
                       </span>
                       <span class="adm-pill" :class="CONFIDENCE[c.confidence].tone">{{ CONFIDENCE[c.confidence].label }}</span>
                       <button type="button" class="adm-btn sm" :disabled="busy" @click="useCode(k, c)">Usar este código</button>
@@ -660,7 +661,9 @@ function dropFixed(key) {
 }
 async function useCode(key, cand) {
   const named = (cand.name ? `\nSegún ${cand.source}: ${[cand.name, cand.quantity].filter(Boolean).join(" · ")}` : "") + (reasonOf(key) ? `\n\nMotivo: ${reasonOf(key)}` : "");
-  if (!window.confirm(`¿Cambiar el código de «${nameOf(key)}»?\n\nAntes: ${codeOf(key) || "sin código"}\nAhora: ${cand.code}${named}`)) return;
+  const sure = ["confirmed", "ai_confirmed", "ai_page"].includes(cand.confidence);
+  const warn = sure ? "" : "\n\nATENCIÓN: este código NO está confirmado; ninguna fuente lo muestra con este producto. Un código equivocado cobra el producto que no es. Úsalo solo si lo verificaste con el producto en mano.";
+  if (!window.confirm(`¿Cambiar el código de «${nameOf(key)}»?\n\nAntes: ${codeOf(key) || "sin código"}\nAhora: ${cand.code}${named}${warn}`)) return;
   busy.value = true;
   try {
     await apiService.platformCatalogSave(catalog.value, { code: cand.code }, key);
@@ -730,6 +733,33 @@ async function clearCatalog() {
     await Promise.all([loadItems(), loadCatalogs()]);
   } catch (e) {
     error.value = errText(e, "No pude eliminar el catálogo.");
+  } finally {
+    busy.value = false;
+  }
+}
+
+// ---------- Eliminar en grupo los no verificados ----------
+const unverifiedCount = computed(() => items.value.filter((i) => !i.verified).length);
+async function clearUnverified() {
+  const name = catalogLabel(catalog.value);
+  const total = unverifiedCount.value;
+  const word = window.prompt(
+    `Vas a ELIMINAR ${total} productos NO verificados del catálogo «${name}». Los ${items.value.length - total} verificados se quedan.\n\nAntes de borrar se descarga una copia en CSV de todo el catálogo. Las tiendas que ya lo cargaron no se ven afectadas.\n\nPara confirmar escribe ELIMINAR:`
+  );
+  if (word === null) return;
+  if (String(word).trim().toUpperCase() !== "ELIMINAR") {
+    error.value = "No se eliminó nada: no escribiste ELIMINAR.";
+    return;
+  }
+  busy.value = true;
+  error.value = "";
+  try {
+    exportCatalog(); // copia de respaldo antes de borrar
+    const r = await apiService.platformCatalogClearUnverified(catalog.value, "ELIMINAR");
+    say(`Se eliminaron ${r.removed} productos no verificados de «${name}». La copia se descargó como catalogo-${catalog.value}.csv.`);
+    await Promise.all([loadItems(), loadCatalogs()]);
+  } catch (e) {
+    error.value = errText(e, "No pude eliminar los productos no verificados.");
   } finally {
     busy.value = false;
   }
@@ -911,5 +941,15 @@ onMounted(async () => {
 .pf-err-list { margin: 0.4rem 0 0; padding-left: 1.1rem; }
 @media (max-width: 40rem) {
   .cat-row { flex-wrap: wrap; }
+  .cat-row .body, .cat-cand .body { min-width: 0; overflow-wrap: anywhere; }
+  .cat-row .acts { flex: 1 1 100%; flex-wrap: wrap; }
+  .cat-row .acts .adm-btn { flex: 1 1 auto; }
+  .cat-section { padding: 0.3rem 0.6rem; }
+  .cat-cand .adm-btn { flex: 1 1 100%; }
+  .adm-btn { white-space: normal; text-align: center; line-height: 1.2; padding-block: 0.45rem; }
+  .pf-card-stack > .acts .adm-btn, .pf-fix > .acts .adm-btn, .pf-recode > .acts .adm-btn { flex: 1 1 100%; }
+  .cat-progress { margin-left: 0; }
+  .pf nav.adm-tabs { flex-wrap: wrap; overflow: visible; }
+  .pf nav.adm-tabs button { flex: 1 1 9rem; white-space: normal; text-align: center; line-height: 1.2; padding-block: 0.4rem; }
 }
 </style>

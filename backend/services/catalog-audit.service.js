@@ -216,7 +216,10 @@ async function suggestFor(db, catalog, item, usedCodes) {
     if (found.found && sameProduct(mine, `${found.name} ${found.quantity || ''}`)) take({ code: fixed, name: found.name, quantity: found.quantity || '', source: found.source, confidence: 'confirmed' });
     else if (!found.found && !found.unavailable) take({ code: fixed, name: '', quantity: '', source: '', confidence: 'check_digit' });
   }
-  const [found, viaAi] = await Promise.all([barcodeLookup.searchByName(mine), aiCandidate(mine, usedCodes)]);
+  // Se busca con el nombre completo y, si es distinto, solo con el nombre (sin presentación) para no perder resultados
+  const queries = [...new Set([mine.trim(), String(item.name || '').trim()].filter(Boolean))];
+  const [lists, viaAi] = await Promise.all([Promise.all(queries.map((q) => barcodeLookup.searchByName(q))), aiCandidate(mine, usedCodes, item.section)]);
+  const found = [...new Map(lists.flat().map((c) => [c.code, c])).values()];
   if (viaAi && !seen.has(canon(viaAi.code))) {
     seen.add(canon(viaAi.code));
     out.push(viaAi);
@@ -225,10 +228,39 @@ async function suggestFor(db, catalog, item, usedCodes) {
     .filter((c) => sameProduct(mine, `${c.name} ${c.quantity}`) && !sizeDiffers(mine, `${c.name} ${c.quantity}`))
     .sort((a, b) => Number(b.code.replace(/^0+/, '').startsWith('750')) - Number(a.code.replace(/^0+/, '').startsWith('750')) || Number(b.mexico) - Number(a.mexico));
   for (const c of ranked) take({ code: c.code, name: c.name, quantity: c.quantity, source: c.source, confidence: 'search', mexico: c.mexico || c.code.replace(/^0+/, '').startsWith('750') });
-  return out.sort((a, b) => RANK[a.confidence] - RANK[b.confidence]).slice(0, MAX_CANDIDATES);
+  // Un código que no viene confirmado por una base se comprueba al revés: ¿a qué producto dicen las páginas que pertenece?
+  let budget = 2; // como mucho 2 comprobaciones con IA por producto
+  const verdicts = await Promise.all(out.map((c) => ((c.confidence === 'check_digit' || c.confidence === 'search') && budget-- > 0 ? verifyByPages(c.code, mine) : null)));
+  const checked = [];
+  out.forEach((c, i) => {
+    const v = verdicts[i];
+    if (v === 'conflict') return; // páginas con el código muestran otro producto: no se ofrece
+    checked.push(v ? { ...c, name: v.name, quantity: v.quantity, source: 'IA con búsqueda en Google', confidence: 'ai_page' } : c);
+  });
+  return checked.sort((a, b) => RANK[a.confidence] - RANK[b.confidence]).slice(0, MAX_CANDIDATES);
 }
 
-const RANK = { confirmed: 0, ai_confirmed: 1, check_digit: 2, ai_page: 3, search: 4 };
+/**
+ * Comprobación al revés de un código: la IA busca en Google a qué producto pertenece y se compara con el del catálogo.
+ * Devuelve { name, quantity } si una página que muestra el código habla de este mismo producto (nombre y medida),
+ * 'conflict' si habla de otro, o null si no hay forma de saberlo.
+ */
+async function verifyByPages(code, mine) {
+  if (!gemini.hasGeminiConfig()) return null;
+  let ai;
+  try {
+    ai = await gemini.identifyProduct({ code, name: '', categories: [] });
+  } catch (err) {
+    console.warn('[catálogo IA]', err.code || '', err.message);
+    return null;
+  }
+  if (!ai.found || ai.confidence !== 'alta' || !ai.grounded) return null;
+  const theirs = `${ai.name} ${ai.presentation}`;
+  if (!sameProduct(mine, theirs) || sizeDiffers(mine, theirs)) return 'conflict';
+  return (await pagesShowCode(ai.debug?.sources, code)) ? { name: ai.name, quantity: ai.presentation } : null;
+}
+
+const RANK = { confirmed: 0, ai_confirmed: 1, ai_page: 2, check_digit: 3, search: 4 };
 
 /** ¿Alguna de estas páginas muestra el código? (las páginas que citó la IA; si no cargan, no cuenta) */
 async function pagesShowCode(urls, code) {
@@ -253,11 +285,11 @@ async function pagesShowCode(urls, code) {
  * confianza alta, páginas que la respaldan, dígito verificador válido, nombre y medida iguales a los del catálogo,
  * y otra fuente que lo confirma (una base pública con el mismo producto, o una página que muestra el código).
  */
-async function aiCandidate(mine, usedCodes) {
+async function aiCandidate(mine, usedCodes, section = '') {
   if (!gemini.hasGeminiConfig()) return null;
   let ai;
   try {
-    ai = await gemini.findBarcode({ name: mine });
+    ai = await gemini.findBarcode({ name: section ? `${mine} (categoría: ${section})` : mine });
   } catch (err) {
     console.warn('[catálogo IA]', err.code || '', err.message);
     return null;

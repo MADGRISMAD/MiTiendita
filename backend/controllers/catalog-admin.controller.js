@@ -125,6 +125,17 @@ async function clearCatalog(req, res) {
   }
 }
 
+/** Elimina de golpe los productos no verificados del catálogo (pide escribir ELIMINAR) y lo anota en la bitácora. */
+async function clearUnverified(req, res) {
+  try {
+    const result = await admin.removeUnverified(db, req.params.catalog, req.body?.confirm);
+    await audit.record(req, { type: 'catalog_unverified_cleared', message: `Eliminó los productos no verificados del catálogo ${label(req.params.catalog)} (${result.removed} productos)`, meta: { catalog: req.params.catalog, removed: result.removed } });
+    return res.json(result);
+  } catch (err) {
+    return fail(res, err, 'No se pudieron eliminar los productos no verificados.');
+  }
+}
+
 async function importRows(req, res) {
   try {
     const out = await admin.importRows(db, req.params.catalog, req.body?.rows);
@@ -161,4 +172,4 @@ async function addFromTenant(req, res) {
   }
 }
 
-module.exports = { summary, list, create, update, remove, importRows, tenantProducts, addFromTenant, codesReport, codesOnline, codesSuggest, recodePreview, recodeApply, clearCatalog };
+module.exports = { summary, list, create, update, remove, importRows, tenantProducts, addFromTenant, codesReport, codesOnline, codesSuggest, recodePreview, recodeApply, clearCatalog, clearUnverified };

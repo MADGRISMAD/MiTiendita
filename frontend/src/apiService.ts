@@ -581,6 +581,9 @@ export const apiService = {
   platformCatalogClear(catalog: string, confirm: string) {
     return axios.post(`/platform/catalogs/${catalog}/clear`, { confirm }).then((r) => r.data);
   },
+  platformCatalogClearUnverified(catalog: string, confirm: string) {
+    return axios.post(`/platform/catalogs/${catalog}/clear-unverified`, { confirm }).then((r) => r.data);
+  },
   platformCatalogDelete(catalog: string, key: string) {
     return axios.delete(`/platform/catalogs/${catalog}/items/${encodeURIComponent(key)}`).then((r) => r.data);
   },

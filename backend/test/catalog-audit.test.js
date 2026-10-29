@@ -223,3 +223,38 @@ test('IA: solo propone un código si hay páginas, medida igual y otra fuente qu
     lookup.clearCache();
   }
 });
+
+test('un código sin confirmar se comprueba al revés con IA: se confirma con la página, se descarta si es de otro producto', async () => {
+  const gemini = require('../services/gemini.service');
+  const lookup = require('../services/barcode-lookup.service');
+  const realFetch = global.fetch;
+  const realIdentify = gemini.identifyProduct;
+  const realFind = gemini.findBarcode;
+  const realHas = gemini.hasGeminiConfig;
+  const db = fakeDb([row('b', 'Galletas Marías Gamesa', '7501000111101', { presentation: '170 g' })]); // el dígito corregido es ...107
+  const json = (b, status = 200) => ({ ok: status < 400, status, json: async () => b, text: async () => '' });
+  gemini.hasGeminiConfig = () => true;
+  gemini.findBarcode = async () => ({ found: false, code: '', name: '', presentation: '', confidence: 'baja', grounded: false, sources: [] });
+  const ai = (extra) => async () => ({ found: true, name: 'Galletas Marías Gamesa', presentation: '170 g', confidence: 'alta', grounded: true, debug: { sources: ['https://tienda.test/p'] }, ...extra });
+  const run = async () => (await audit.suggest(db, 'abarrotes', ['b'])).suggestions.b.map((c) => [c.code, c.confidence]);
+  global.fetch = async (url) => (String(url).includes('tienda.test') ? { ok: true, status: 200, text: async () => 'Marías 7501000111107' } : json({ status: 0, products: [] }, 404));
+  try {
+    lookup.clearCache(); gemini.identifyProduct = ai({});
+    assert.deepEqual(await run(), [['7501000111107', 'ai_page']], 'la página muestra el código con este producto');
+    lookup.clearCache(); gemini.identifyProduct = ai({ name: 'Shampoo Pantene' });
+    assert.deepEqual(await run(), [], 'las páginas lo atribuyen a otro producto: no se ofrece');
+    lookup.clearCache(); gemini.identifyProduct = ai({ presentation: '85 g' });
+    assert.deepEqual(await run(), [], 'es el mismo producto pero de otra presentación: no se ofrece');
+    lookup.clearCache(); gemini.identifyProduct = ai({ confidence: 'media' });
+    assert.deepEqual(await run(), [['7501000111107', 'check_digit']], 'sin certeza queda solo como «sin confirmar»');
+    lookup.clearCache(); gemini.identifyProduct = ai({});
+    global.fetch = async (url) => (String(url).includes('tienda.test') ? { ok: true, status: 200, text: async () => 'sin código' } : json({ status: 0, products: [] }, 404));
+    assert.deepEqual(await run(), [['7501000111107', 'check_digit']], 'si ninguna página muestra el código no se da por confirmado');
+  } finally {
+    global.fetch = realFetch;
+    gemini.identifyProduct = realIdentify;
+    gemini.findBarcode = realFind;
+    gemini.hasGeminiConfig = realHas;
+    lookup.clearCache();
+  }
+});
