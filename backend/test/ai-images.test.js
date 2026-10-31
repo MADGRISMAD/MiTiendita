@@ -191,3 +191,58 @@ test('"RP 8", "PET 24U" y "TT4" dan las piezas por caja', () => {
   assert.equal(parsePackNotation('SANTA CLARA CHOCO 180ML TT4').packSize, 4);
   assert.equal(parsePackNotation('pasta la fina'), null);
 });
+
+test('factura de distribuidora: "N/M UNIDAD", "C/N" y "N PIEZAS" dan las piezas por caja; fracciones y fechas no', () => {
+  const { parsePackNotation } = require('../utils/pack-notation');
+  const piezas = (t) => parsePackNotation(t)?.packSize ?? null;
+  assert.equal(piezas('CAFE NESCAFE CLASICO 16/42 GRS'), 16);
+  assert.equal(piezas('SOPA KNORR LETRAS 12/95 GRS'), 12);
+  assert.equal(piezas('HARINA DE MAIZ MASECA 10/1 KG'), 10);
+  assert.equal(piezas('LIMPIADOR FABULOSO LAVANDA 12/1lt'), 12);
+  assert.equal(piezas('FRIJOL BAYOS ISADORA (CAJA GDE) 24/430 GRS'), 24);
+  assert.equal(piezas('PROMOCION SOPA RAMEN CAM/LIMM/HAB C/24'), 24);
+  assert.equal(piezas('SALSA HABANERA ROJA CAJA C/24 PZ (CJA GRANDE)'), 24);
+  assert.equal(piezas('CINCUENTA PIEZAS ENCENDEDOR REGULAR BIC (50 PIEZAS)'), 50);
+  assert.equal(piezas('84 PIEZAS RASTRILLO EXHIBIDOR'), 84);
+  assert.equal(piezas('TORNILLO 3/4'), null, 'una fracción de ferretería no son piezas');
+  assert.equal(piezas('TUERCA 5/16'), null);
+  assert.equal(piezas('HARINA 1 KG - Caducidad: 22/02/2027'), null, 'una fecha no son piezas');
+});
+
+test('nombre limpio: sin promociones, tipo de caja ni piezas por caja; deja lo que trae cada pieza', () => {
+  const { cleanProductName: limpio } = require('../utils/product-name');
+  assert.equal(limpio('PROMOCION SOPA RAMEN CAM/LIMM/HAB C/24'), 'SOPA RAMEN CAM/LIMM/HAB');
+  assert.equal(limpio('CAFE NESCAFE CLASICO 16/42 GRS'), 'CAFE NESCAFE CLASICO 42 g');
+  assert.equal(limpio('SALSA HABANERA ROJA CAJA C/24 PZ (CJA GRANDE)'), 'SALSA HABANERA ROJA');
+  assert.equal(limpio('MOLE DONA MARIA (MEDIA CAJA)12/235 GRS'), 'MOLE DONA MARIA 235 g');
+  assert.equal(limpio('FRIJOL REF. BAYOS ISADORA (CAJA GDE) 24/430 GRS'), 'FRIJOL REF. BAYOS ISADORA 430 g');
+  assert.equal(limpio('CINCUENTA PIEZAS ENCENDEDOR REGULAR BIC (50 PIEZAS)'), 'ENCENDEDOR REGULAR BIC');
+  assert.equal(limpio('84 PIEZAS RASTRILLO EXHIBIDOR'), 'RASTRILLO');
+  assert.equal(limpio('PAPEL HIG. BIG FACIAL QUALITY (600+50 HD GRATIS) 8/6'), 'PAPEL HIG. BIG FACIAL QUALITY 8/6');
+  assert.equal(limpio('HARINA DE MAIZ MASECA 10/1 KG'), 'HARINA DE MAIZ MASECA 1 kg');
+  assert.equal(limpio('Gelatina oferta'), 'Gelatina');
+  // lo que sí es del producto no se toca
+  assert.equal(limpio('Coca Cola 600 ml'), 'Coca Cola 600 ml');
+  assert.equal(limpio('Tornillo 3/4'), 'Tornillo 3/4');
+  assert.equal(limpio('Promocional'), 'Promocional');
+  assert.equal(limpio('Café con regalo'), 'Café con');
+});
+
+test('factura de distribuidora: aunque la IA lea 1 pieza, el renglón original manda y el nombre sale limpio', () => {
+  const out = gem.parseItems(JSON.stringify({ items: [
+    { raw: '220502 1 CAJA XBX 50191507 PROMOCION SOPA RAMEN CAM/LIMM/HAB C/24 $0.38', code: '220502', name: 'PROMOCION SOPA RAMEN CAM/LIMM/HAB C/24', packs: 1, packSize: 1, cost: 0.38, lineTotal: 0.38 },
+    { raw: '232094 1 CAJA XBX 50201706 CAFE NESCAFE CLASICO 16/42 GRS $660.64', code: '232094', name: 'Café Nescafé Clásico 16/42 grs', packs: 1, packSize: 1, cost: 660.64, lineTotal: 660.64 },
+    { raw: '230210 2 CAJA XBX 50191507 SOPA VASO MARUCHAN CON CAMARON C/12 $159.19 $318.38', code: '230210', name: 'Sopa Vaso Maruchan con Camarón', packs: 2, packSize: 12, cost: 159.19, lineTotal: 318.38 },
+  ] }));
+  assert.deepEqual(out.map((i) => [i.name, i.packs, i.packSize]), [
+    ['SOPA RAMEN CAM/LIMM/HAB', 1, 24],
+    ['Café Nescafé Clásico 42 g', 1, 16],
+    ['Sopa Vaso Maruchan con Camarón', 2, 12],
+  ]);
+  assert.equal(inv.enrichItem(out[2]).stockIn, 24, '2 cajas de 12 son 24 piezas');
+});
+
+test('el prompt de la IA explica el formato de factura de distribuidora y pide un nombre limpio', () => {
+  const src = require('fs').readFileSync(require.resolve('../services/gemini.service'), 'utf8');
+  for (const frase of ['N/M UNIDAD', 'C/N', 'CLAVE / CANT / UNIDAD', 'NOMBRE LIMPIO', 'GRATIS']) assert.ok(src.includes(frase), frase);
+});

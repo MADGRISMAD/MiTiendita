@@ -4,6 +4,7 @@
  */
 
 const { parsePackNotation, mentionsPack, WORDS: PACK_WORDS } = require('../utils/pack-notation');
+const { cleanProductName } = require('../utils/product-name');
 const DEFAULT_MODEL = 'gemini-3.5-flash-lite';
 const TEXT_TIMEOUT_MS = 60_000;
 const IMAGE_TIMEOUT_MS = 120_000;
@@ -35,6 +36,41 @@ Cada producto ocupa DOS líneas impresas:
 - Ejemplo con 2 cajas: "34 COCA-COLA 3L PET 6" / "2 635.00" → code "34", name "Coca Cola 3 L", packs 2, packSize 6, lineTotal 635 (cada caja cuesta 317.5, pero NO lo calcules: copia 635).
 - El mismo CÓDIGO es el mismo producto. Un código no se repite dentro de una misma nota.
 - Los renglones con código distinto son productos distintos aunque se parezcan (sabores, tamaños).
+
+═══ OTRO FORMATO MUY COMÚN: factura (CFDI) de distribuidora con columnas CLAVE / CANT / UNIDAD / ... / DESCRIPCION / IVA / UNITARIO / IMPORTE ═══
+Cada producto es UN renglón. Cada columna va con SU encabezado:
+- CLAVE → "code" (clave del proveedor, NO es código de barras). Las columnas U.SAT y C.SAT (XBX, XKI, 50191507…) son claves del SAT: ignóralas.
+- CANT → "packs": cuántas unidades de compra se compraron (casi siempre cajas). NO es la cantidad de piezas.
+- UNIDAD (CAJA, MED CAJ, BULTO, EXHIB, DZN…) → solo dice con qué se compró. No es parte del nombre. Las piezas de cada una están en la DESCRIPCION.
+- UNITARIO → "cost" (precio de UNA caja/bulto/exhibidor). IMPORTE → "lineTotal". IVA e IEP son porcentajes por renglón, no dinero: no los uses como cost ni como lineTotal.
+- La DESCRIPCION trae cuánto incluye cada caja, con la forma "N/M UNIDAD" o "C/N":
+  · "N/M UNIDAD": N son las PIEZAS que trae la caja (packSize) y "M UNIDAD" es lo que trae CADA pieza (va en el nombre).
+    "CAFE NESCAFE CLASICO 16/42 GRS" → name "Café Nescafé Clásico 42 g", packSize 16 (16 piezas de 42 g).
+    "SOPA KNORR LETRAS 12/95 GRS" → name "Sopa Knorr Letras 95 g", packSize 12.
+    "HARINA DE MAIZ MASECA 10/1 KG" → name "Harina de Maíz Maseca 1 kg", packSize 10.
+    "LIMPIADOR DE PISO FABULOSO FRESCO LAVANDA 12/1lt" → name "Limpiador de Piso Fabuloso Fresco Lavanda 1 L", packSize 12.
+    "FRIJOL REF. BAYOS ISADORA (CAJA GDE) 24/430 GRS" → name "Frijol Refrito Bayos Isadora 430 g", packSize 24.
+    "PASTA TALIA CODO LISO (BOLSA) 36/200 GRS" → name "Pasta Talia Codo Liso 200 g", packSize 36.
+    "PLATO DESECHABLE CHAROLA 855 TERMICA 10/50" (sin unidad después de la diagonal) → packSize 10 (10 paquetes), name "Plato Desechable Charola 855 Térmica 50 pzas".
+    "PAPEL HIG. BIG FACIAL QUALITY (600+50 HD GRATIS) 8/6" → packSize 8, name "Papel Higiénico Big Facial Quality 6 rollos".
+    Ojo: 24/430 NO es una fecha ni una fracción: el primer número son las piezas de la caja.
+  · "C/N" (o "CAJA C/N", "C/N PZ"): N son las piezas por caja. "SALSA HABANERA ROJA CAJA C/24 PZ" → name "Salsa Habanera Roja", packSize 24. "SOPA RAMEN CAM/LIMM/HAB C/24" → packSize 24 (CAM/LIMM/HAB son sabores: déjalos en el nombre).
+  · "CINCUENTA PIEZAS ENCENDEDOR REGULAR BIC (50 PIEZAS)" en un EXHIB → packSize 50, name "Encendedor Regular BIC". "84 PIEZAS RASTRILLO EXHIBIDOR" → packSize 84, name "Rastrillo".
+  · "MOLE DONA MARIA (MEDIA CAJA)12/235 GRS" con unidad MED CAJ → packSize 12 (lo que dice la descripción), name "Mole Doña María 235 g".
+- Si la descripción no dice cuánto trae cada caja, packSize = 0 (no lo adivines).
+- Ejemplo completo: renglón "232094 | 1 | CAJA | CAFE NESCAFE CLASICO 16/42 GRS | $660.64 | $660.64" → code "232094", packs 1, packSize 16, name "Café Nescafé Clásico 42 g", cost 660.64, lineTotal 660.64.
+- Ejemplo con 2 cajas: "230210 | 2 | CAJA | SOPA VASO MARUCHAN CON CAMARON C/12 | $159.19 | $318.38" → packs 2, packSize 12, cost 159.19, lineTotal 318.38.
+- Un renglón de promoción con importe simbólico (menos de $1, p. ej. $0.38) igual es un item: copia su importe tal cual.
+- "Comentarios" al final: si trae "CLAVE - PRODUCTO - Caducidad: DD/MM/AAAA", esa fecha es el expiresAt del renglón con esa clave (conviértela a YYYY-MM-DD). El texto de la tienda (cliente, domicilio, vendedor, "paga al recibir"), sellos, QR, marcas de agua y notas escritas a mano NO son productos.
+- Los totales de la factura están abajo: Sub Total → documentSubtotal, IVA → documentTax, Total → documentTotal.
+
+═══ NOMBRE LIMPIO (aplica a todas las notas) ═══
+En "name" deja SOLO el producto: marca + producto + sabor/variante + lo que trae cada pieza. Quita todo lo que no sea el producto:
+- promociones y regalos: PROMOCION, PROMO, OFERTA, GRATIS, REGALO, "(600+50 HD GRATIS)";
+- el tipo de caja o empaque: CAJA GRANDE, (CAJA GDE), (MEDIA CAJA), (BOLSA), EXHIBIDOR, BULTO;
+- las piezas por caja (C/24, 16/, "84 PIEZAS"): eso va en packSize, no en el nombre;
+- claves, folios y códigos del SAT.
+"raw" sí conserva el renglón completo tal cual.
 
 ═══ CÓMO LEER (sigue este orden) ═══
 1. Busca los ENCABEZADOS de columnas (Cant., Descripción, P. Unit., Importe, Precio, Total, Desc., IVA…). Cada número va con SU columna; no mezcles columnas ni renglones.
@@ -209,7 +245,7 @@ function brandName(words) {
   return words
     .replace(/\s+/g, ' ')
     .trim()
-    .replace(/\b([a-záéíóúñ])/gi, (ch) => ch.toUpperCase());
+    .replace(/(^|[^\p{L}\d])(\p{L})/gu, (_all, before, ch) => before + ch.toUpperCase());
 }
 
 const PACK_WORD = new RegExp(`(?:^|[^a-z0-9])(?:${PACK_WORDS})(?![a-z])`, 'i');
@@ -221,7 +257,7 @@ function parseLooseLine(line) {
 
   let price = 0;
   let cost = 0;
-  raw = raw.replace(/\b(?:costo|compra)\s+(\d+(?:[.,]\d{1,2})?)\b/gi, (_, n) => {
+  raw = raw.replace(/(?<![\p{L}\d])(?:costo|compra)\s+(\d+(?:[.,]\d{1,2})?)\b/giu, (_, n) => {
     cost = moneyToken(n);
     return ' ';
   });
@@ -229,7 +265,7 @@ function parseLooseLine(line) {
     if (!price) price = moneyToken(n);
     return ' ';
   });
-  raw = raw.replace(/\b(?:a|en|por)\s+(\d+(?:[.,]\d{1,2})?)\s*(?:pesos|mxn|varos)?\b/gi, (_, n) => {
+  raw = raw.replace(/(?<![\p{L}\d])(?:a|en|por)\s+(\d+(?:[.,]\d{1,2})?)\s*(?:pesos|mxn|varos)?\b/giu, (_, n) => {
     if (!price) price = moneyToken(n);
     return ' ';
   });
@@ -257,7 +293,7 @@ function parseLooseLine(line) {
     explicitQty = true;
     raw = raw.slice(lead[0].length);
   }
-  const marked = raw.match(/\bx\s*(\d{1,4})\b|\b(\d{1,4})\s*(?:pzas?|piezas|unidades|uds?)\b/i);
+  const marked = raw.match(/(?<![\p{L}\d])x\s*(\d{1,4})\b|\b(\d{1,4})\s*(?:pzas?|piezas|unidades|uds?)(?![\p{L}\d])/iu);
   if (marked) {
     const n = Number(marked[1] || marked[2]);
     if (PACK_WORD.test(line) && n >= 2 && n <= 200) petPacks = petPacks || n; // "caja de 25 pzas": son las piezas de cada caja
@@ -311,7 +347,7 @@ function parseLooseLine(line) {
     }
   }
 
-  raw = raw.replace(/\bde\b/gi, ' ').replace(/\s+/g, ' ').trim();
+  raw = raw.replace(/(?<![\p{L}\d])de(?![\p{L}\d])/giu, ' ').replace(/\s+/g, ' ').trim();
   if (!raw || !/[a-záéíóúñ]/i.test(raw)) return null;
 
   const name = `${brandName(raw)}${size ? ` ${size} ${unit}` : ''}`.replace(/\s+/g, ' ').trim();
@@ -368,10 +404,10 @@ function absorbLoose(row) {
 function absorbLooseRow(row) {
   const lot = String(row?.lot || row?.lote || '').trim().slice(0, 60);
   const expiresAt = parseDocDate(row?.expiresAt || row?.caducidad || row?.expiry);
-  const loose = parseLooseLine(row?.name);
+  const loose = parseLooseLine(cleanProductName(row?.name));
   if (!loose) {
     return {
-      name: String(row?.name || '').trim(),
+      name: cleanProductName(row?.name),
       cost: num(row?.cost),
       price: num(row?.price),
       barcode: String(row?.barcode || '').replace(/\s/g, ''),
@@ -393,8 +429,10 @@ function absorbLooseRow(row) {
     price = loose.price || 0;
     cost = loose.cost || 0;
   }
+  // Si no sacó cantidad, precio ni paquete, el renglón ya venía bien separado y se conserva el nombre tal cual lo dejó la IA ("Harina de Maíz")
+  const absorbed = loose.explicitQty || loose.packSize !== 1 || loose.price || loose.cost;
   return {
-    name: loose.name,
+    name: absorbed ? cleanProductName(loose.name) : cleanProductName(row?.name),
     cost,
     price,
     barcode: String(row?.barcode || '').replace(/\s/g, ''),

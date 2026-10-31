@@ -9,6 +9,13 @@ const LEAD = '(?:^|[^a-z0-9áéíóúñ])';
 const COUNT_FIRST = new RegExp(`${LEAD}(\\d{1,2})\\s*(?:${WORDS})${SEP}(\\d{1,3})(?!\\d)`, 'i');
 const WORD_FIRST = new RegExp(`${LEAD}(?:${WORDS})${SEP}(\\d{1,3})(?!\\d)`, 'i');
 const SIXPACK = /\b(?:six\s*-?\s*pack|sixpack)\b/i;
+// «24/430 GRS», «12/1 LT», «10/1 KG»: el primer número son las piezas de la caja y lo que sigue es lo que trae cada una. Pide la unidad para no
+// confundirlo con fracciones de ferretería (3/4, 5/16) ni con fechas (22/02/2027).
+const SLASH_UNIT = /(?<![\d/.])(\d{1,3})\s*\/\s*\d+(?:[.,]\d+)?\s*(?:grs?|gramos?|kgs?|kilos?|mls?|lts?|litros?|l|pzas?|pzs?|pz|oz)(?![a-z0-9/])/i;
+// «C/24», «CAJA C/24 PZ»
+const C_SLASH = /(?<![a-z0-9])c\s*\/\s*(\d{1,3})(?![\d/])/i;
+// «84 PIEZAS», «(50 PIEZAS)»
+const PIECES = /(?<![\d/.])(\d{2,3})\s*pi[eé]zas?(?![a-záéíóúñ])/i;
 const ANY_WORD = new RegExp(`${LEAD}(?:${WORDS})(?![a-záéíóúñ])`, 'i');
 
 /** ¿El texto habla de paquetes/pets/cajas? */
@@ -34,6 +41,11 @@ function parsePackNotation(text) {
     if (size >= 2 && size <= 200) return { packs: null, packSize: size, rest: raw.replace(m[0], ' ').replace(/\s+/g, ' ').trim() };
   }
   if (SIXPACK.test(raw)) return { packs: null, packSize: 6, rest: raw.replace(SIXPACK, ' ').replace(/\s+/g, ' ').trim() };
+  for (const re of [SLASH_UNIT, C_SLASH, PIECES]) {
+    m = raw.match(re);
+    const size = m ? Number(m[1]) : 0;
+    if (size >= 2 && size <= 200) return { packs: null, packSize: size, rest: raw.replace(m[0], ' ').replace(/\s+/g, ' ').trim() };
+  }
   return null;
 }
 
