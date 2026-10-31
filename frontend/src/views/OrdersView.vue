@@ -272,6 +272,14 @@
         </div>
       </section>
 
+      <PrintAskDialog
+        :open="Boolean(printCorteAsk)"
+        title="¿Quieres imprimir el corte de caja?"
+        label="El turno ya quedó cerrado"
+        yes-label="Imprimir corte"
+        @answer="answerCorte"
+      />
+
       <!-- Corte de caja -->
       <Teleport to="body">
         <div v-if="showClose" class="dlg-bg">
@@ -482,7 +490,8 @@ import { offlineStore } from "../offlineFlags";
 import { flushOfflineSales, listDeviceSales, retrySales } from "../offlineSync";
 import { isNetworkError } from "../net";
 import { cardFeeRateOf, lineBreakdown, rateOf } from "../tax";
-import { directPrinting } from "../thermalPrinter";
+import { directPrinting, printerStore } from "../thermalPrinter";
+import PrintAskDialog from "../components/PrintAskDialog.vue";
 import { printCashCloseById } from "../cashCloseData";
 import { errText, fold } from "../textUtils";
 
@@ -961,8 +970,16 @@ async function closeCash() {
   } finally {
     cashBusy.value = false;
   }
-  // Ya con el turno cerrado y la pantalla actualizada, se imprime sin salir de aquí
-  if (closedId) printCorte(closedId);
+  // Ya con el turno cerrado y la pantalla actualizada, se imprime sin salir de aquí (o se pregunta, si así lo pidieron en Ajustes → Impresora)
+  if (!closedId) return;
+  if (printerStore.askPrint) printCorteAsk.value = closedId;
+  else printCorte(closedId);
+}
+const printCorteAsk = ref("");
+function answerCorte(yes) {
+  const id = printCorteAsk.value;
+  printCorteAsk.value = "";
+  if (id && yes) printCorte(id);
 }
 
 function openPay(o) {

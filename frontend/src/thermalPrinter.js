@@ -8,7 +8,7 @@
 //  - "image": imprime el mismo diseño de la ventana de impresión (se convierte en imagen). Es el valor por defecto.
 //  - "text":  ticket en texto plano ESC/POS (más rápido, sin diseño).
 import { reactive } from "vue";
-import { buildReceipt, buildTestPage, buildCashClose, money } from "./escpos";
+import { EscPos, buildReceipt, buildTestPage, buildCashClose, money } from "./escpos";
 import { renderTicketBitmap, buildRasterTicket } from "./ticketRaster";
 import { lineBreakdown, rateOf, round2 } from "./tax";
 import { storeParts } from "./storeTime";
@@ -37,6 +37,7 @@ function readSettings() {
       mode: ["browser", "usb", "serial", "bluetooth"].includes(raw.mode) ? raw.mode : "browser",
       paper: raw.paper === "58" ? "58" : "80",
       drawer: Boolean(raw.drawer),
+      askPrint: Boolean(raw.askPrint),
       baudRate: Number(raw.baudRate) || 9600,
       deviceName: String(raw.deviceName || ""),
       portInfo: raw.portInfo && typeof raw.portInfo === "object" ? raw.portInfo : null,
@@ -44,7 +45,7 @@ function readSettings() {
       dots: Number(raw.dots) || 0, // 0 = automático (80 mm → 512, 58 mm → 384)
     };
   } catch {
-    return { mode: "browser", paper: "80", drawer: false, baudRate: 9600, deviceName: "", portInfo: null, style: "image", dots: 0 };
+    return { mode: "browser", paper: "80", drawer: false, askPrint: false, baudRate: 9600, deviceName: "", portInfo: null, style: "image", dots: 0 };
   }
 }
 
@@ -61,6 +62,7 @@ export function savePrinterSettings(patch = {}) {
         mode: printerStore.mode,
         paper: printerStore.paper,
         drawer: printerStore.drawer,
+        askPrint: printerStore.askPrint,
         baudRate: printerStore.baudRate,
         deviceName: printerStore.deviceName,
         portInfo: printerStore.portInfo,
@@ -423,6 +425,15 @@ export function receiptData(order) {
     note: closingNote(venueStore.businessType),
     invoiceUrl: paid && o.invoiceToken && !o.offlinePending ? `${appPublicOrigin()}/factura/${o.invoiceToken}` : "",
   };
+}
+
+/** Solo el pulso del cajón (cuando se cobra en efectivo y se decide no imprimir el ticket). */
+export function openCashDrawer() {
+  if (!printerStore.drawer) return Promise.resolve();
+  const p = new EscPos({ cols: cols() });
+  p.init();
+  p.drawer();
+  return printBytes(p.build());
 }
 
 /**

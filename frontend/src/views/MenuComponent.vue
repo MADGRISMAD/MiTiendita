@@ -910,6 +910,15 @@
         </div>
       </Teleport>
 
+      <!-- ¿Imprimir el ticket de esta compra? -->
+      <PrintAskDialog
+        :open="Boolean(printAsk)"
+        :label="printAsk ? `Ticket ${String(printAsk.order.id || '').slice(-6).toUpperCase()}` : ''"
+        :amount="printAsk && Number(printAsk.order.total) > 0 ? money(printAsk.order.total) : ''"
+        :note="printAsk?.cash && printerStore.drawer && directPrinting() ? 'El cajón se abre de todos modos.' : ''"
+        @answer="answerPrint"
+      />
+
       <!-- Descuento (F9) -->
       <Teleport to="body">
         <div v-if="showDiscount" class="dlg-bg">
@@ -1707,6 +1716,7 @@ import AppShell from "../components/AppShell.vue";
 import MagicPricesSheet from "../components/MagicPricesSheet.vue";
 import BulkPricesDialog from "../components/BulkPricesDialog.vue";
 import PhotoCropDialog from "../components/PhotoCropDialog.vue";
+import PrintAskDialog from "../components/PrintAskDialog.vue";
 import CameraScanner from "../components/CameraScanner.vue";
 import PosIcon from "../components/PosIcon.js";
 import { ref, reactive, computed, onMounted, onUnmounted, watch, nextTick } from "vue";
@@ -1748,7 +1758,7 @@ import {
   listPending,
   saleToPrintOrder,
 } from "../offlineDb";
-import { directPrinting, printReceiptDirect, printerStore } from "../thermalPrinter";
+import { directPrinting, openCashDrawer, printReceiptDirect, printerStore } from "../thermalPrinter";
 import { printRoute } from "../printRoute";
 import { flushOfflineSales, offlineStore, queueSale } from "../offlineSync";
 
@@ -1789,7 +1799,7 @@ function round2(n) {
 const CATEGORY_HUES = [212, 28, 152, 274, 342, 46, 190, 118, 8, 236];
 
 export default {
-  components: { AppShell, MagicPricesSheet, BulkPricesDialog, PhotoCropDialog, CameraScanner, PosIcon },
+  components: { AppShell, MagicPricesSheet, BulkPricesDialog, PhotoCropDialog, PrintAskDialog, CameraScanner, PosIcon },
   directives: { selectOnFocus: vSelectOnFocus },
   props: {
     initialMode: { type: String, default: "pos" },
@@ -2498,9 +2508,25 @@ export default {
     function printReceipt(order, offline = false, cash = false) {
       if (!order?.id) return;
       lastPrint = { order, offline, cash };
-      if (remotePrinting.value && !offline) printRemote(lastPrint);
-      else if (directPrinting()) printDirect(lastPrint, { drawer: true });
-      else printInBrowser(order.id, offline);
+      if (printerStore.askPrint) {
+        printAsk.value = lastPrint;
+        return;
+      }
+      runPrint(lastPrint);
+    }
+    function runPrint(job) {
+      if (remotePrinting.value && !job.offline) printRemote(job);
+      else if (directPrinting()) printDirect(job, { drawer: true });
+      else printInBrowser(job.order.id, job.offline);
+    }
+    // Ajustes → Impresora → «Preguntar si imprimir el ticket en cada compra»
+    const printAsk = ref(null);
+    function answerPrint(yes) {
+      const job = printAsk.value;
+      printAsk.value = null;
+      if (job && yes) runPrint(job);
+      else if (job?.cash && directPrinting() && !(remotePrinting.value && !job.offline)) openCashDrawer().catch(() => {});
+      focusScan();
     }
     function retryPrint() {
       if (!lastPrint) return;
@@ -3624,7 +3650,8 @@ export default {
         showWeigh.value ||
         showMisc.value ||
         priceAsk.value ||
-        showHeld.value
+        showHeld.value ||
+        printAsk.value
       ) {
         return;
       }
@@ -4350,7 +4377,8 @@ export default {
         showWeigh.value ||
         showMisc.value ||
         priceAsk.value ||
-        showHeld.value
+        showHeld.value ||
+        printAsk.value
       ) {
         return;
       }
@@ -4439,13 +4467,15 @@ export default {
           showMisc.value ||
           priceAsk.value ||
           showHeld.value ||
-          missingCode.value
+          missingCode.value ||
+          printAsk.value
       )
     );
 
     /** Esc: cierra lo que esté encima; si no hay nada, limpia la búsqueda. */
     function closeTopLayer() {
-      if (priceAsk.value) closePriceAsk();
+      if (printAsk.value) answerPrint(false);
+      else if (priceAsk.value) closePriceAsk();
       else if (missingCode.value) dismissMissing();
       else if (showWeigh.value) closeWeigh();
       else if (showQty.value) closeQty();
@@ -5053,6 +5083,8 @@ export default {
       scaleRead,
       weighHint,
       printIssue,
+      printAsk,
+      answerPrint,
       printerStore,
       directPrinting,
       remotePrinting,

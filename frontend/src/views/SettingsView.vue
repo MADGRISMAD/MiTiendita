@@ -412,6 +412,25 @@
                 </p>
               </template>
             </section>
+            <section class="adm-card cfg-card">
+              <div class="switch-head">
+                <div>
+                  <h3>Preguntar si imprimir el ticket en cada compra</h3>
+                  <p class="adm-hint">
+                    Al terminar de cobrar sale la pregunta «¿Quieres imprimir el ticket de esta compra?». Si respondes que no, no se imprime;
+                    en efectivo el cajón sí se abre. Se guarda solo en este dispositivo.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  class="adm-switch"
+                  :aria-checked="printerStore.askPrint"
+                  aria-label="Preguntar si imprimir el ticket en cada compra"
+                  @click="savePrinterSettings({ askPrint: !printerStore.askPrint })"
+                ></button>
+              </div>
+            </section>
             <section v-if="printRoute.mode !== 'remote'" class="adm-card cfg-card">
               <h3>Cómo sale el ticket</h3>
               <p class="adm-hint">Se guarda solo en este dispositivo: cada caja elige su impresora. No necesita «Guardar cambios».</p>
