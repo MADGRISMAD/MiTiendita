@@ -78,11 +78,40 @@
         </button>
       </nav>
 
+      <!-- Contar escaneando: el lector (o la cámara en el celular) abre la ventana para capturar cuántos hay -->
+      <div v-if="mode === 'count' && isOpen" class="st-scan">
+        <label class="adm-search st-scan-field">
+          <PosIcon name="barcode" :size="17" />
+          <input
+            ref="scanInput"
+            v-model="scanText"
+            class="adm-inp"
+            type="search"
+            inputmode="search"
+            enterkeyhint="done"
+            placeholder="Escanea el producto a contar"
+            aria-label="Escanea o escribe el código del producto a contar"
+            autocomplete="off"
+            autocapitalize="off"
+            spellcheck="false"
+            @keydown.enter.prevent="submitScan"
+          />
+        </label>
+        <button type="button" class="adm-btn st-cam" @click="startCamera">
+          <PosIcon name="camera" :size="18" /> <span>Cámara</span>
+        </button>
+      </div>
+      <p v-if="scanMsg" class="st-scan-msg" :class="scanMsg.tone" role="status">{{ scanMsg.text }}</p>
+
       <div class="adm-tools">
         <label class="adm-search">
           <PosIcon name="search" :size="16" />
           <input v-model="q" class="adm-inp" type="search" placeholder="Buscar producto o código" autocomplete="off" />
         </label>
+        <select v-if="mode === 'count' && isOpen && categories.length > 1" v-model="catFilter" class="adm-inp st-filter" aria-label="Categoría">
+          <option value="">Todas las categorías</option>
+          <option v-for="c in categories" :key="c" :value="c">{{ c }}</option>
+        </select>
         <select v-if="mode === 'count' && isOpen" v-model="filter" class="adm-inp st-filter" aria-label="Filtrar renglones">
           <option value="all">Todos</option>
           <option value="pending">Por contar</option>
@@ -98,7 +127,12 @@
 
       <!-- Capturar -->
       <ul v-if="mode === 'count' && isOpen" class="st-lines">
-        <li v-for="l in countRows" :key="l.foodId" class="st-line" :class="{ done: l.counted != null }">
+        <template v-for="g in countGroups" :key="g.name">
+        <li v-if="countGroups.length > 1 || g.name" class="st-cat">
+          <strong>{{ g.name || "Sin categoría" }}</strong>
+          <small>{{ g.done }} de {{ g.rows.length }} contados</small>
+        </li>
+        <li v-for="l in g.rows" :key="l.foodId" class="st-line" :class="{ done: l.counted != null }">
           <div class="st-name">
             <strong>{{ l.name }}</strong>
             <small>{{ [l.category, l.code].filter(Boolean).join(" · ") || "—" }}</small>
@@ -119,6 +153,7 @@
             <em>{{ unitLabel(l.unit) }}</em>
           </label>
         </li>
+        </template>
         <li v-if="!countRows.length" class="adm-hint st-none">Ningún producto coincide.</li>
       </ul>
 
@@ -178,6 +213,42 @@
       </p>
     </template>
 
+    <!-- Cámara (celular): lee un código, abre la ventana de cantidad y, al guardar, vuelve a abrirse para el siguiente -->
+    <CameraScanner v-if="cameraOpen" @detect="onCameraDetect" @close="stopCamera" />
+
+    <!-- Cuántos hay del producto escaneado (no se muestra lo que dice el sistema, para contar sin sesgo) -->
+    <div v-if="scanLine" class="adm-dlg-bg st-dlg-bg" @click.self="cancelScan">
+      <form class="adm-dlg st-dlg" role="dialog" aria-modal="true" aria-labelledby="st-scan-title" @submit.prevent="saveScan">
+        <div class="adm-dlg-head">
+          <div>
+            <h3 id="st-scan-title">{{ scanLine.name }}</h3>
+            <p class="adm-hint">{{ [scanLine.category, scanLine.code].filter(Boolean).join(" · ") }}</p>
+          </div>
+        </div>
+        <label class="adm-field">
+          ¿Cuántos hay? ({{ unitLabel(scanLine.unit) }})
+          <input
+            ref="scanQtyInput"
+            v-model="scanQty"
+            class="adm-inp st-big"
+            type="number"
+            inputmode="decimal"
+            min="0"
+            step="any"
+            placeholder="0"
+            autocomplete="off"
+            @focus="$event.target.select()"
+          />
+        </label>
+        <p v-if="scanLine.counted != null" class="adm-hint">Ya lo contaste antes: {{ qty(scanLine.counted) }}. Lo que captures lo reemplaza.</p>
+        <p v-if="scanErr" class="adm-err" role="alert">{{ scanErr }}</p>
+        <div class="adm-dlg-acts">
+          <button type="button" class="adm-btn" @click="cancelScan">Cancelar</button>
+          <button type="submit" class="adm-btn primary" :disabled="scanBusy">Guardar</button>
+        </div>
+      </form>
+    </div>
+
     <!-- Confirmar -->
     <div v-if="confirming" class="adm-dlg-bg" @click.self="confirming = false">
       <div class="adm-dlg" role="dialog" aria-modal="true" aria-label="Aplicar conteo">
@@ -200,8 +271,9 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from "vue";
 import PosIcon from "./PosIcon.js";
+import CameraScanner from "./CameraScanner.vue";
 import { apiService } from "../apiService";
 import { money } from "../textUtils";
 
@@ -245,13 +317,30 @@ const matches = (l) => {
   const term = norm(q.value);
   return !term || norm(l.name).includes(term) || norm(l.code).includes(term) || norm(l.category).includes(term);
 };
+const catFilter = ref("");
+const categories = computed(() => [...new Set((current.value?.lines || []).map((l) => l.category || "").filter(Boolean))].sort((a, b) => a.localeCompare(b, "es")));
 const countRows = computed(() =>
-  (current.value?.lines || []).filter(matches).filter((l) => {
-    if (filter.value === "pending") return l.counted == null;
-    if (filter.value === "done") return l.counted != null;
-    return true;
-  })
+  (current.value?.lines || [])
+    .filter((l) => !catFilter.value || l.category === catFilter.value)
+    .filter(matches)
+    .filter((l) => {
+      if (filter.value === "pending") return l.counted == null;
+      if (filter.value === "done") return l.counted != null;
+      return true;
+    })
 );
+// Los productos a contar, agrupados por categoría (cada una con su avance)
+const countGroups = computed(() => {
+  const map = new Map();
+  for (const l of countRows.value) {
+    const name = l.category || "";
+    if (!map.has(name)) map.set(name, { name, rows: [], done: 0 });
+    const g = map.get(name);
+    g.rows.push(l);
+    if (l.counted != null) g.done += 1;
+  }
+  return [...map.values()].sort((a, b) => a.name.localeCompare(b.name, "es"));
+});
 const reviewRows = computed(() =>
   (current.value?.lines || [])
     .filter((l) => l.counted != null && matches(l))
@@ -375,6 +464,97 @@ async function cancelCount() {
   }
 }
 
+// ---- Contar escaneando ----
+const scanInput = ref(null);
+const scanQtyInput = ref(null);
+const scanText = ref("");
+const scanMsg = ref(null);
+const scanLine = ref(null);
+const scanQty = ref("");
+const scanErr = ref("");
+const scanBusy = ref(false);
+const cameraOpen = ref(false);
+let viaCamera = false;
+
+// Un mismo código puede venir con ceros al inicio (UPC-A contra EAN-13) o en mayúsculas
+const canon = (c) => {
+  const t = String(c || "").trim();
+  return /^\d+$/.test(t) ? t.replace(/^0+/, "") || "0" : t.toLowerCase();
+};
+function findLine(code) {
+  const key = canon(code);
+  if (!key) return null;
+  return (current.value?.lines || []).find((l) => canon(l.code) === key || (l.altCodes || []).some((a) => canon(a) === key)) || null;
+}
+function focusScan() {
+  nextTick(() => {
+    if (!window.matchMedia?.("(pointer: coarse)").matches) scanInput.value?.focus();
+  });
+}
+function handleCode(raw) {
+  const code = String(raw || "").trim();
+  if (!code || !isOpen.value) return;
+  const line = findLine(code);
+  if (!line) {
+    scanMsg.value = { tone: "warn", text: `El código ${code} no está en este conteo. Puede ser de otra categoría o no tener ese código registrado.` };
+    if (viaCamera) cameraOpen.value = true;
+    else focusScan();
+    return;
+  }
+  scanMsg.value = null;
+  scanErr.value = "";
+  scanLine.value = line;
+  scanQty.value = line.counted == null ? "" : String(line.counted);
+  nextTick(() => scanQtyInput.value?.focus());
+}
+function submitScan() {
+  const code = scanText.value;
+  scanText.value = "";
+  viaCamera = false;
+  handleCode(code);
+}
+function startCamera() {
+  viaCamera = true;
+  scanMsg.value = null;
+  cameraOpen.value = true;
+}
+function onCameraDetect(code) {
+  cameraOpen.value = false;
+  handleCode(code);
+}
+function stopCamera() {
+  cameraOpen.value = false;
+  viaCamera = false;
+}
+function afterScan() {
+  scanLine.value = null;
+  if (viaCamera) cameraOpen.value = true; // sigue con el siguiente producto
+  else focusScan();
+}
+function cancelScan() {
+  afterScan();
+}
+async function saveScan() {
+  const line = scanLine.value;
+  if (!line || scanBusy.value) return;
+  const text = String(scanQty.value).trim();
+  const n = text === "" ? null : Number(text);
+  if (n != null && (!Number.isFinite(n) || n < 0)) {
+    scanErr.value = "Escribe una cantidad válida (0 o más).";
+    return;
+  }
+  scanBusy.value = true;
+  draft[line.foodId] = n == null ? "" : String(n);
+  const ok = await saveNow();
+  scanBusy.value = false;
+  if (!ok) {
+    scanErr.value = error.value || "No se pudo guardar.";
+    return;
+  }
+  scanMsg.value = { tone: "ok", text: n == null ? `${line.name}: sin contar` : `${line.name}: ${qty(n)} ${unitLabel(line.unit)}` };
+  afterScan();
+}
+
 onMounted(loadList);
 onBeforeUnmount(() => {
   clearTimeout(saveTimer);
@@ -432,7 +612,22 @@ onBeforeUnmount(() => {
 .st-kpis { grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); }
 .st-foot { display: grid; gap: 0.5rem; padding-bottom: env(safe-area-inset-bottom, 0px); }
 .st-acts { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.5rem; }
+.st-scan { display: flex; gap: 0.5rem; align-items: center; }
+.st-scan-field { flex: 1 1 auto; max-width: none; }
+.st-cam { flex: 0 0 auto; min-height: 2.75rem; }
+.st-scan-msg { margin: 0; padding: 0.5rem 0.75rem; border-radius: 0.7rem; font-size: 0.88rem; font-weight: 700; background: var(--timber-surface); }
+.st-scan-msg.ok { color: #1f9d57; }
+.st-scan-msg.warn { background: var(--timber-warning-soft); color: var(--timber-ink); }
+.st-cat { display: flex; align-items: baseline; justify-content: space-between; gap: 0.6rem; padding: 0.45rem 0.8rem; background: var(--timber-surface); border-top: 1px solid var(--timber-line); }
+.st-cat:first-child { border-top: none; }
+.st-cat small { color: var(--timber-muted); font-weight: 700; }
+.st-dlg-bg { z-index: 400; }
+.st-dlg { display: grid; gap: 0.75rem; }
+.st-big { font-size: 1.6rem; font-weight: 800; text-align: center; min-height: 3.4rem; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+@media (max-width: 520px) {
+  .st-cam span { display: none; }
+}
 @media (max-width: 420px) {
   .st-qty .adm-inp { width: 5rem; }
   .st-acts .adm-btn { flex: 1 1 100%; }

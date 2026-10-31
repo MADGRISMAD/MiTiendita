@@ -22,7 +22,7 @@ const EXTRACT_PROMPT = `Eres el lector de notas de proveedor de una tienda de ab
 La nota puede ser una factura impresa, un ticket, una remisión, una nota escrita a mano o una lista corta en texto, con o sin precios.
 
 SALIDA: responde SOLO un JSON, sin texto antes ni después, con esta forma exacta:
-{"supplier":{"name":"","contact":"","whatsapp":"","date":"","expiresAt":""},"documentTotal":0,"documentSubtotal":0,"documentTax":0,"documentDiscount":0,"items":[{"raw":"","code":"","name":"","cost":0,"lineTotal":0,"price":0,"barcode":"","packs":1,"packSize":1,"lot":"","expiresAt":""}]}
+{"supplier":{"name":"","contact":"","whatsapp":"","date":"","expiresAt":""},"documentTotal":0,"documentSubtotal":0,"documentTax":0,"documentDiscount":0,"items":[{"raw":"","code":"","name":"","cost":0,"lineTotal":0,"price":0,"barcode":"","packs":1,"packSize":1,"lot":"","expiresAt":"","variants":[]}]}
 
 ═══ FORMATO MUY COMÚN: notas de distribuidora (PRO / DESCRIPCION / CAJAS / IMPORTE) ═══
 Cada producto ocupa DOS líneas impresas:
@@ -63,6 +63,14 @@ Cada producto es UN renglón. Cada columna va con SU encabezado:
 - Un renglón de promoción con importe simbólico (menos de $1, p. ej. $0.38) igual es un item: copia su importe tal cual.
 - "Comentarios" al final: si trae "CLAVE - PRODUCTO - Caducidad: DD/MM/AAAA", esa fecha es el expiresAt del renglón con esa clave (conviértela a YYYY-MM-DD). El texto de la tienda (cliente, domicilio, vendedor, "paga al recibir"), sellos, QR, marcas de agua y notas escritas a mano NO son productos.
 - Los totales de la factura están abajo: Sub Total → documentSubtotal, IVA → documentTax, Total → documentTotal.
+
+═══ UN RENGLÓN CON VARIOS SABORES O PRESENTACIONES ("variants") ═══
+Si UN solo renglón agrupa varios sabores o presentaciones del mismo producto, sepáralos en "variants" (lista de textos). Ejemplos:
+- "PROMOCION SOPA RAMEN CAM/LIMM/HAB C/24" → name "Sopa Ramen Maruchan" (sin los sabores), variants ["Camarón","Limón","Habanero"], packs 1, packSize 24.
+- "GALLETAS SURTIDAS CHOCOLATE, FRESA Y VAINILLA 12/150 GRS" → variants ["Chocolate","Fresa","Vainilla"].
+- Cada elemento de "variants" es el sabor o presentación completo y legible (expande las abreviaturas obvias: CAM = camarón, LIM/LIMM = limón, HAB = habanero, POL = pollo, QSO = queso). Si no estás seguro de qué significa una abreviatura, déjala como está escrita.
+- Solo cuando el renglón LISTA al menos 2 sabores o presentaciones (separados por "/", "," o "y"). Un producto con un solo sabor, o sin sabores listados, lleva "variants": [].
+- NO repartas tú las cantidades ni el importe: deja packs, packSize, cost y lineTotal tal cual los dice el renglón completo; el sistema los divide después.
 
 ═══ NOMBRE LIMPIO (aplica a todas las notas) ═══
 En "name" deja SOLO el producto: marca + producto + sabor/variante + lo que trae cada pieza. Quita todo lo que no sea el producto:
@@ -401,6 +409,21 @@ function absorbLoose(row) {
   return withRawPack(absorbLooseRow(row), row);
 }
 
+/** Sabores o presentaciones que la IA separó de un renglón: textos limpios, sin repetir, de 2 a 8 (menos de 2 no es una lista). */
+function cleanVariants(list) {
+  const seen = new Set();
+  const out = [];
+  for (const v of Array.isArray(list) ? list : []) {
+    const text = String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, 30);
+    const key = itemKey(text);
+    if (!text || seen.has(key)) continue;
+    seen.add(key);
+    out.push(text);
+    if (out.length >= 8) break;
+  }
+  return out.length >= 2 ? out : [];
+}
+
 function absorbLooseRow(row) {
   const lot = String(row?.lot || row?.lote || '').trim().slice(0, 60);
   const expiresAt = parseDocDate(row?.expiresAt || row?.caducidad || row?.expiry);
@@ -419,6 +442,7 @@ function absorbLooseRow(row) {
       raw: String(row?.raw || '').trim().slice(0, 160),
       code: String(row?.code || '').trim().slice(0, 40),
       photo: photoNo(row?.photo),
+      variants: cleanVariants(row?.variants),
       fromLoose: false,
     };
   }
@@ -445,6 +469,7 @@ function absorbLooseRow(row) {
     lineTotal: num(row?.lineTotal),
     raw: String(row?.raw || '').trim().slice(0, 160),
     code: String(row?.code || '').trim().slice(0, 40),
+    variants: cleanVariants(row?.variants),
     fromLoose: true,
   };
 }
@@ -852,6 +877,7 @@ function publicItem(row) {
     raw: String(row.raw || '').trim().slice(0, 160),
     code: String(row.code || '').trim().slice(0, 40),
     photo: photoNo(row.photo),
+    variants: cleanVariants(row.variants),
   };
 }
 
@@ -899,7 +925,49 @@ function flagRepeats(items) {
   return { items: kept, repeats };
 }
 
+/**
+ * Un renglón que trae varios sabores ("CAM/LIMM/HAB C/24") se convierte en un renglón por sabor. Las piezas se reparten en partes
+ * iguales (lo que sobra va a los primeros) y el importe se reparte en proporción, de modo que el total de la nota no cambia.
+ * Después la persona ajusta a mano cuántas llegaron de cada uno. No se separa si hay menos piezas que sabores o si no se sabe cuántas trae.
+ */
+function expandVariants(items) {
+  const out = [];
+  for (const item of items || []) {
+    const variants = cleanVariants(item.variants);
+    const packs = Math.max(1, Number(item.packs) || 1);
+    const size = Number(item.packSize);
+    const pieces = packs * (size >= 1 ? size : 0);
+    if (variants.length < 2 || pieces < variants.length) {
+      out.push({ ...item, variants: [] });
+      continue;
+    }
+    const amount = Math.round(((Number(item.lineTotal) > 0 ? Number(item.lineTotal) : (Number(item.cost) || 0) * packs) || 0) * 100) / 100;
+    const base = Math.floor(pieces / variants.length);
+    const extra = pieces % variants.length;
+    const qty = variants.map((_v, i) => base + (i < extra ? 1 : 0));
+    const share = qty.map((q) => Math.round(((amount * q) / pieces) * 100) / 100);
+    if (amount > 0) share[0] = Math.round((share[0] + amount - share.reduce((a, b) => a + b, 0)) * 100) / 100; // los centavos sobrantes no se pierden
+    const common = String(item.name || '').replace(/(?<![\p{L}\d])\p{L}{2,8}(?:\/\p{L}{2,8})+(?![\p{L}\d])/gu, ' ').replace(/\s+/g, ' ').trim() || String(item.name || '').trim();
+    const note = ` → repartido en partes iguales entre ${variants.length} presentaciones`;
+    variants.forEach((variant, i) => {
+      out.push({
+        ...item,
+        name: `${common} ${variant}`.replace(/\s+/g, ' ').trim(),
+        packs: 1,
+        packSize: qty[i],
+        cost: amount > 0 ? share[i] : 0,
+        lineTotal: amount > 0 ? share[i] : 0,
+        code: item.code ? `${item.code}-${i + 1}`.slice(0, 40) : '',
+        raw: `${item.raw || ''}${note}`.slice(0, 200),
+        variants: [],
+      });
+    });
+  }
+  return out;
+}
+
 module.exports = {
+  expandVariants,
   identifyProduct,
   findBarcode,
   parseBarcodeAnswer,

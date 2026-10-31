@@ -246,3 +246,42 @@ test('el prompt de la IA explica el formato de factura de distribuidora y pide u
   const src = require('fs').readFileSync(require.resolve('../services/gemini.service'), 'utf8');
   for (const frase of ['N/M UNIDAD', 'C/N', 'CLAVE / CANT / UNIDAD', 'NOMBRE LIMPIO', 'GRATIS']) assert.ok(src.includes(frase), frase);
 });
+
+test('un renglón con varios sabores se separa: piezas en partes iguales, importe repartido y total intacto', () => {
+  const [row] = gem.parseItems(JSON.stringify({ items: [
+    { raw: '220502 1 CAJA PROMOCION SOPA RAMEN CAM/LIMM/HAB C/24 $0.38', code: '220502', name: 'Sopa Ramen Maruchan', packs: 1, packSize: 24, cost: 0.38, lineTotal: 0.38, variants: ['Camarón', 'Limón', 'Habanero'] },
+  ] }));
+  assert.deepEqual(row.variants, ['Camarón', 'Limón', 'Habanero']);
+  const out = gem.expandVariants([row]);
+  assert.deepEqual(out.map((i) => [i.name, i.packs, i.packSize]), [
+    ['Sopa Ramen Maruchan Camarón', 1, 8],
+    ['Sopa Ramen Maruchan Limón', 1, 8],
+    ['Sopa Ramen Maruchan Habanero', 1, 8],
+  ]);
+  assert.equal(Math.round(out.reduce((s, i) => s + i.lineTotal, 0) * 100) / 100, 0.38, 'el importe de la nota no cambia');
+  assert.equal(new Set(out.map((i) => i.code)).size, 3, 'cada sabor con su propio código para que no se confundan entre sí');
+  assert.ok(out.every((i) => /repartido en partes iguales entre 3/.test(i.raw)));
+  assert.equal(out.map((i) => inv.enrichItem(i).stockIn).reduce((a, b) => a + b, 0), 24, 'las 24 piezas se reparten completas');
+});
+
+test('varios sabores: si no divide exacto, lo que sobra va a los primeros; 2 cajas se cuentan completas', () => {
+  const row = { name: 'Galletas Surtidas CHO/FRE/VAI', packs: 2, packSize: 10, cost: 100, lineTotal: 200, code: '', raw: '', variants: ['Chocolate', 'Fresa', 'Vainilla'] };
+  const out = gem.expandVariants([row]);
+  assert.deepEqual(out.map((i) => i.packSize), [7, 7, 6], '20 piezas entre 3');
+  assert.equal(out[0].name, 'Galletas Surtidas Chocolate', 'el nombre común pierde la lista de sabores abreviados');
+  assert.equal(Math.round(out.reduce((s, i) => s + i.lineTotal, 0) * 100) / 100, 200);
+});
+
+test('varios sabores: sin sabores suficientes, o menos piezas que sabores, no se toca', () => {
+  const uno = { name: 'Sopa', packs: 1, packSize: 12, cost: 50, lineTotal: 50, variants: ['Limón'] };
+  assert.equal(gem.expandVariants([uno]).length, 1);
+  const pocas = { name: 'Sopa', packs: 1, packSize: 2, cost: 50, lineTotal: 50, variants: ['A', 'B', 'C'] };
+  assert.equal(gem.expandVariants([pocas]).length, 1);
+  const sinTamano = { name: 'Sopa', packs: 1, packSize: 0, cost: 50, lineTotal: 50, variants: ['A', 'B'] };
+  assert.equal(gem.expandVariants([sinTamano]).length, 1, 'si no se sabe cuántas trae, no se inventa el reparto');
+});
+
+test('el prompt pide separar los sabores en "variants" sin repartir cantidades', () => {
+  const src = require('fs').readFileSync(require.resolve('../services/gemini.service'), 'utf8');
+  for (const frase of ['"variants"', 'CAM/LIMM/HAB', 'NO repartas tú las cantidades']) assert.ok(src.includes(frase), frase);
+});

@@ -35,6 +35,7 @@ function buildLines(foods, { menuId = '', menuNames = {} } = {}) {
       foodId: String(f.id),
       name: String(f.name || 'Producto'),
       code: String(f.barcode || f.sku || ''),
+      altCodes: (Array.isArray(f.altCodes) ? f.altCodes : []).map(String).filter(Boolean).slice(0, 10),
       category: String(menuNames[String(f.menuId || '')] || ''),
       unit: String(f.saleUnit || 'pieza'),
       expected: round3(f.stock),

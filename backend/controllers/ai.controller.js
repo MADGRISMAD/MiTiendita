@@ -201,7 +201,7 @@ async function preview(req, res) {
       images,
     });
     const found = gemini.flagRepeats(extractedItems(extracted));
-    const items = reconcileLines(found.items, extracted);
+    const items = reconcileLines(gemini.expandVariants(found.items), extracted);
     const repeats = found.repeats;
     const supplier = await matchSupplier(tenantId, extracted?.supplier);
 

@@ -1419,7 +1419,8 @@ onMounted(() => {
 /* Existencias */
 .stock-list {
   list-style: none;
-  margin: 0;
+  margin-inline: 0;
+  margin-bottom: 0;
   padding: 0.25rem 0.9rem;
   border: 1px solid var(--timber-line);
   border-radius: 1rem;
@@ -1517,7 +1518,8 @@ onMounted(() => {
 /* Caducidad */
 .exp-list {
   list-style: none;
-  margin: 0;
+  margin-inline: 0;
+  margin-bottom: 0;
   padding: 0.25rem 0.9rem;
   border: 1px solid var(--timber-line);
   border-radius: 1rem;
@@ -1554,7 +1556,8 @@ onMounted(() => {
 /* Compras */
 .buy-list {
   list-style: none;
-  margin: 0;
+  margin-inline: 0;
+  margin-bottom: 0;
   padding: 0.3rem;
   border: 1px solid var(--timber-line);
   border-radius: 1rem;
