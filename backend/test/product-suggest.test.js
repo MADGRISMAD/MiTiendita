@@ -53,7 +53,17 @@ test('lo ya buscado por código se recuerda: la segunda tienda no vuelve a gasta
   assert.equal(again.name, 'Steren Removedor de polvo');
 });
 
-test('tope diario por tienda: pasado el tope devuelve lo gratuito y avisa', async () => {
+test('sin tope por defecto: una tienda puede buscar cuantas veces quiera en el día', async () => {
+  delete process.env.AI_AUTO_DAILY_LIMIT;
+  const { svc, calls } = load();
+  for (let i = 0; i < 150; i += 1) {
+    const r = await svc.suggest({ ...base, code: String(7501000000000 + i) });
+    assert.equal(r.aiSkipped, undefined);
+  }
+  assert.equal(calls.ai.length, 150);
+});
+
+test('tope diario opcional por tienda (AI_AUTO_DAILY_LIMIT): pasado el tope devuelve lo gratuito y avisa', async () => {
   process.env.AI_AUTO_DAILY_LIMIT = '2';
   try {
     const { svc, calls } = load({ free: { found: true, name: 'Algo', quantity: '', source: 'Open Food Facts' } });

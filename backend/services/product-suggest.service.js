@@ -2,13 +2,14 @@
  * Sugerencia automática al registrar un producto nuevo, para que solo falte el precio:
  *  1. busca el código en las bases gratuitas (nombre y presentación);
  *  2. con la IA completa lo que falta (categoría de la tienda, unidad de venta, marca) o, si ninguna base lo conoce, lo busca en Google.
- * No gasta los usos de IA del plan (la IA la paga la plataforma), por eso tiene un tope diario por tienda y recuerda lo ya buscado.
+ * No gasta los usos de IA del plan (la IA la paga la plataforma) y no tiene tope por defecto; recuerda lo ya buscado para no repetir consultas.
  */
 const barcodeLookup = require('./barcode-lookup.service');
 const gemini = require('./gemini.service');
 const { hasAiFeatures } = require('./plans.catalog');
 
-const DAILY_LIMIT = () => Math.max(0, Number(process.env.AI_AUTO_DAILY_LIMIT) || 60);
+// Sin tope por defecto. Si algún día hace falta, AI_AUTO_DAILY_LIMIT=N pone un máximo de N búsquedas con IA por tienda y por día.
+const DAILY_LIMIT = () => Math.max(0, Math.floor(Number(process.env.AI_AUTO_DAILY_LIMIT) || 0));
 const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_CACHE = 1000;
 
@@ -20,6 +21,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 /** true si la tienda todavía puede usar la IA hoy (y lo anota). */
 function takeDaily(tenantId) {
   const limit = DAILY_LIMIT();
+  if (!limit) return true;
   const row = usage.get(tenantId);
   const n = row && row.day === today() ? row.n : 0;
   if (n >= limit) return false;
