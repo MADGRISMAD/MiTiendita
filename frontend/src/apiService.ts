@@ -682,6 +682,13 @@ export const apiService = {
   platformActivateMySeller() {
     return axios.post('/platform/my-seller').then((r) => r.data);
   },
+  /** Eliminar una tienda (solo socios): hay que mandar su nombre exacto como confirmación. */
+  platformRemoveTenant(id: string, confirm: string) {
+    return axios.post(`/platform/tenants/${id}/remove`, { confirm }, { timeout: 60_000 }).then((r) => r.data);
+  },
+  platformRemoveReferrer(id: string, confirm: string) {
+    return axios.post(`/platform/referrers/${id}/remove`, { confirm }, { timeout: 60_000 }).then((r) => r.data);
+  },
   platformReferrers() {
     return cachedGet('/platform/referrers');
   },

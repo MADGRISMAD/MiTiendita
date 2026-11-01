@@ -25,6 +25,7 @@
           <button v-else type="button" class="adm-btn sm" :class="detail.status === 'active' ? 'danger-ghost' : 'primary'" :disabled="busy" @click="toggle">
             {{ detail.status === "active" ? "Pausar" : "Reactivar" }}
           </button>
+          <button v-if="detail.canDelete" type="button" class="adm-btn sm danger-ghost" :disabled="busy" @click="openRemove">Eliminar</button>
         </div>
       </div>
 
@@ -52,6 +53,18 @@
     </section>
 
     <ReferrerDialog v-if="showEdit" :referrer="detail" @close="showEdit = false" @saved="saved" />
+    <DeleteConfirmDialog
+      v-if="showRemove && detail"
+      :title="`Eliminar a ${detail.name}`"
+      :expected="detail.name"
+      :removes="REFERRER_REMOVES"
+      :keeps="REFERRER_KEEPS"
+      confirm-label="Eliminar vendedor"
+      :busy="removing"
+      :error="removeError"
+      @confirm="removeReferrer"
+      @close="showRemove = false"
+    />
   </div>
 </template>
 
@@ -63,11 +76,40 @@ import ReferrerSummaryTab from "./ReferrerSummaryTab.vue";
 import ReferrerClientsTab from "./ReferrerClientsTab.vue";
 import ReferrerCommissionsTab from "./ReferrerCommissionsTab.vue";
 import ReferrerDialog from "./ReferrerDialog.vue";
+import DeleteConfirmDialog from "./DeleteConfirmDialog.vue";
 import ReferrerAccessTab from "./ReferrerAccessTab.vue";
 import { apiService } from "../../apiService";
 
 const props = defineProps({ id: { type: String, required: true } });
-const emit = defineEmits(["close", "updated"]);
+const emit = defineEmits(["close", "updated", "removed"]);
+
+// Eliminar al vendedor (solo socios): hay que escribir su nombre
+const showRemove = ref(false);
+const removing = ref(false);
+const removeError = ref("");
+const REFERRER_REMOVES = [
+  "Su código de vendedor: ya no servirá para registros nuevos",
+  "Sus accesos al portal de socios",
+  "Sus tiendas se quedan sin vendedor asignado (las tiendas no se tocan)",
+];
+const REFERRER_KEEPS = ["Sus comisiones y pagos ya hechos, para que Finanzas no cambie (saldrá como «vendedor eliminado»)"];
+function openRemove() {
+  removeError.value = "";
+  showRemove.value = true;
+}
+async function removeReferrer(typed) {
+  removing.value = true;
+  removeError.value = "";
+  try {
+    await apiService.platformRemoveReferrer(props.id, typed);
+    showRemove.value = false;
+    emit("removed", props.id);
+  } catch (e) {
+    removeError.value = typeof e.response?.data === "string" && e.response.data ? e.response.data : "No pude eliminar al vendedor.";
+  } finally {
+    removing.value = false;
+  }
+}
 
 const route = useRoute();
 const router = useRouter();

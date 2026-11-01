@@ -54,6 +54,8 @@ router.get('/tenants/:id/products', ...adminOnly, catalogs.tenantProducts);
 
 router.get('/inbox', ...staff, platform.inbox);
 router.get('/support', ...staff, platform.support);
+router.post('/tenants/:id/remove', ...adminOnly, writeLimit, notBranch, platform.removeTenant);
+router.post('/referrers/:id/remove', ...adminOnly, writeLimit, platform.removeReferrer);
 router.get('/tenants', ...staff, platform.listTenants);
 router.get('/tenants/:id', ...staff, platform.getTenant);
 router.get('/tenants/:id/mail', ...staff, platform.clientMail);

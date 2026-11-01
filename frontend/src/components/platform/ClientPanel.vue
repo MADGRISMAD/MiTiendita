@@ -22,6 +22,7 @@
               Suspender
             </button>
             <button v-else type="button" class="adm-btn sm primary" @click="showReactivate = true">Reactivar</button>
+            <button v-if="detail.canDelete" type="button" class="adm-btn sm danger-ghost" @click="openRemove">Eliminar</button>
           </div>
         </div>
 
@@ -100,6 +101,18 @@
           </div>
         </div>
       </div>
+      <DeleteConfirmDialog
+        v-if="showRemove"
+        :title="`Eliminar ${detail?.businessName}`"
+        :expected="detail?.businessName || ''"
+        :removes="TENANT_REMOVES"
+        :keeps="TENANT_KEEPS"
+        confirm-label="Eliminar tienda"
+        :busy="removing"
+        :error="removeError"
+        @confirm="removeTenant"
+        @close="showRemove = false"
+      />
     </Teleport>
   </div>
 </template>
@@ -108,6 +121,7 @@
 import { computed, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import ClientAvatar from "./ClientAvatar.vue";
+import DeleteConfirmDialog from "./DeleteConfirmDialog.vue";
 import StatusPill from "./StatusPill.vue";
 import ClientSummaryTab from "./ClientSummaryTab.vue";
 import ClientLicenseTab from "./ClientLicenseTab.vue";
@@ -124,7 +138,7 @@ const props = defineProps({
   waiting: { type: Number, default: 0 },
   initialTicket: { type: String, default: "" },
 });
-const emit = defineEmits(["updated", "close"]);
+const emit = defineEmits(["updated", "close", "removed"]);
 
 const route = useRoute();
 const router = useRouter();
@@ -151,6 +165,34 @@ const ok = ref("");
 const busy = ref(false);
 const showSuspend = ref(false);
 const showReactivate = ref(false);
+
+// Eliminar la tienda (solo socios): hay que escribir su nombre
+const showRemove = ref(false);
+const removing = ref(false);
+const removeError = ref("");
+const TENANT_REMOVES = [
+  "Todos sus datos: productos, ventas, clientes, caja, compras y proveedores",
+  "Sus usuarios: nadie de esta tienda podrá volver a entrar",
+  "Su suscripción de Mercado Pago (se cancela antes, para que no le sigan cobrando)",
+];
+const TENANT_KEEPS = ["El historial de cobros y de comisiones, para que Finanzas no cambie (la tienda saldrá como «eliminada»)"];
+function openRemove() {
+  removeError.value = "";
+  showRemove.value = true;
+}
+async function removeTenant(typed) {
+  removing.value = true;
+  removeError.value = "";
+  try {
+    await apiService.platformRemoveTenant(props.id, typed);
+    showRemove.value = false;
+    emit("removed", props.id);
+  } catch (e) {
+    removeError.value = typeof e.response?.data === "string" && e.response.data ? e.response.data : "No pude eliminar la tienda.";
+  } finally {
+    removing.value = false;
+  }
+}
 const reason = ref("");
 const ticketCount = ref(null);
 let version = 0;

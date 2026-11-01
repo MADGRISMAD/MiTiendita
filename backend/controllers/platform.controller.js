@@ -15,6 +15,8 @@ const promoSvc = require('../services/promo.service');
 const refTiers = require('../services/referral.tiers');
 const { isPermanentAdmin, PERMANENT_ADMINS } = require('../configurations/platform-owners');
 const ownerIncome = require('../services/owner-income.service');
+const removal = require('../services/removal.service');
+const refDbRaw = require('../database/referral.db');
 const { round2 } = require('../utils/tax');
 const { zonedToInstant } = require('../utils/store-time');
 
@@ -209,7 +211,7 @@ async function getTenant(req, res) {
       referrals.brief(tenant.referrerId).catch(() => null),
       branchInfo(tenant),
     ]);
-    return res.status(200).json({ ...card, usage, referrer, ...relatives });
+    return res.status(200).json({ ...card, usage, referrer, ...relatives, canDelete: !tenant.isBranch && (await isOwnerRequest(req)) });
   } catch (err) {
     console.error(err);
     return res.status(500).send(err.message || 'No pude abrir ese cliente.');
@@ -973,6 +975,50 @@ async function listReferrers(req, res) {
   }
 }
 
+/** ¿Quien consulta es socio (puede eliminar)? */
+async function isOwnerRequest(req) {
+  try {
+    return isPermanentAdmin({ email: await currentStaffEmail(req) });
+  } catch {
+    return false;
+  }
+}
+
+function removalDeps() {
+  return {
+    db,
+    mp,
+    refDb: refDbRaw,
+    col: (name) => db.getCollection(name),
+    revokeSessions: (userId) => db.RevokeUserSessions(userId, 'account_removed'),
+  };
+}
+
+/** Eliminar una tienda o un vendedor: solo los socios, y hay que escribir el nombre exacto. */
+async function removeEntity(req, res, kind) {
+  try {
+    const email = await currentStaffEmail(req);
+    if (!isPermanentAdmin({ email })) return res.status(403).send('Eliminar solo lo pueden hacer los socios.');
+    const confirm = req.body?.confirm;
+    const result =
+      kind === 'tenant'
+        ? await removal.removeTenant(removalDeps(), req.params.id, confirm)
+        : await removal.removeReferrer(removalDeps(), req.params.id, confirm);
+    await audit.record(req, {
+      type: kind === 'tenant' ? 'tenant_removed' : 'referrer_removed',
+      message: kind === 'tenant' ? `Eliminó la tienda «${result.name}»` : `Eliminó al vendedor «${result.name}» (${result.code})`,
+      meta: { id: result.id, removed: result.removed },
+    }).catch(() => {});
+    return res.status(200).json({ ok: true, ...result });
+  } catch (err) {
+    if (err instanceof removal.RemovalError) return res.status(err.status).send(err.message);
+    console.error(err);
+    return res.status(500).send('No pude eliminarlo. No se borró nada a medias que pueda revisar; intenta de nuevo.');
+  }
+}
+const removeTenant = (req, res) => removeEntity(req, res, 'tenant');
+const removeReferrer = (req, res) => removeEntity(req, res, 'referrer');
+
 /** Mi código de vendedor (solo socios): el vendedor ligado a mi cuenta, o que aún no lo he activado. */
 async function mySeller(req, res) {
   try {
@@ -1003,7 +1049,7 @@ async function activateMySeller(req, res) {
 
 async function getReferrer(req, res) {
   try {
-    return res.status(200).json(await referrals.detail(req.params.id));
+    return res.status(200).json({ ...(await referrals.detail(req.params.id)), canDelete: await isOwnerRequest(req) });
   } catch (err) {
     return refFail(res, err);
   }
@@ -1263,6 +1309,8 @@ async function manualPayment(req, res) {
 }
 
 module.exports = {
+  removeTenant,
+  removeReferrer,
   mySeller,
   activateMySeller,
   referrerUsers,

@@ -63,6 +63,7 @@
           :initial-ticket="String(route.query.t || '')"
           @updated="patch"
           @close="close"
+          @removed="removed"
         />
         <div v-else class="adm-card adm-empty">
           <h3>Elige un cliente</h3>
@@ -141,6 +142,10 @@ function setFilter(f) {
 }
 function open(cid) {
   router.push({ name: "platformClient", params: { id: cid }, query: { f: route.query.f } }).catch(() => {});
+}
+async function removed() {
+  close();
+  await load();
 }
 function close() {
   router.push({ name: "platformClients", query: { f: route.query.f } }).catch(() => {});

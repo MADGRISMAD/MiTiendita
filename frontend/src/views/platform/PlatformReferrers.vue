@@ -92,7 +92,7 @@
       </section>
 
       <div class="pf-pane-detail pf-fixed">
-        <ReferrerPanel v-if="id" :id="id" @updated="patch" @close="close" />
+        <ReferrerPanel v-if="id" :id="id" @updated="patch" @close="close" @removed="removed" />
         <div v-else class="adm-card adm-empty">
           <h3>Elige un vendedor</h3>
           <p>Verás sus clientes, su nivel de comisión, lo que se le debe y el historial de pagos.</p>
@@ -182,6 +182,11 @@ const shown = computed(() => {
 
 function open(rid) {
   router.push({ name: "platformReferrer", params: { id: rid } }).catch(() => {});
+}
+async function removed() {
+  close();
+  say("Vendedor eliminado.");
+  await Promise.all([load(), loadMine()]);
 }
 function close() {
   router.push({ name: "platformReferrers" }).catch(() => {});
