@@ -29,7 +29,7 @@
         <div class="adm-kpi">
           <span>Tu parte de la utilidad</span>
           <strong class="pf-num">{{ money(data.profitPerPartner) }}</strong>
-          <small>después de IA y gastos ÷ {{ data.partners }}</small>
+          <small>después de IA, gastos y comisiones ÷ {{ data.partners }}</small>
         </div>
         <div class="adm-kpi">
           <span>Cobrado en el mes</span>
@@ -47,22 +47,23 @@
         <div class="adm-card-head">
           <div>
             <h2>Mi parte total del mes</h2>
-            <p>Lo que te toca como socio (de la utilidad) más lo que ganaste como vendedor con tu propio código.</p>
+            <p>Lo que te toca como socio más lo que ganaste como vendedor con tu propio código.</p>
           </div>
         </div>
-        <dl class="pf-split">
-          <div><dt>Mi parte como dueño</dt><dd>{{ money(data.me.ownerShare) }}</dd></div>
+        <dl class="pf-split chain">
+          <div><dt>Utilidad a repartir <small class="pf-muted">(abajo se ve cómo sale)</small></dt><dd>{{ money(data.profit) }}</dd></div>
+          <div><dt>÷ {{ data.partners }} socios = mi parte como dueño</dt><dd>{{ money(data.me.ownerShare) }}</dd></div>
           <div>
             <dt>
-              Comisiones como vendedor
+              + Mis comisiones como vendedor
               <small v-if="data.me.commissions" class="pf-muted"> · {{ data.me.commissions.code }} · {{ data.me.commissions.count }} {{ data.me.commissions.count === 1 ? "cobro" : "cobros" }}</small>
             </dt>
             <dd>+ {{ money(data.me.commissions ? data.me.commissions.earned : 0) }}</dd>
           </div>
-          <div class="sum"><dt>Mi parte total</dt><dd>{{ money(data.me.total) }}</dd></div>
+          <div class="sum"><dt>= Mi parte total</dt><dd>{{ money(data.me.total) }}</dd></div>
         </dl>
         <p v-if="data.me.commissions" class="pf-muted">
-          De tus comisiones del mes: {{ money(data.me.commissions.pending) }} por pagar · {{ money(data.me.commissions.paid) }} ya pagadas.
+          De mis comisiones del mes: {{ money(data.me.commissions.pending) }} por pagar · {{ money(data.me.commissions.paid) }} ya pagadas.
         </p>
         <p v-else class="pf-muted">
           Aún no activas tu código de vendedor.
@@ -73,17 +74,70 @@
       <section class="adm-card pf-card-stack">
         <div class="adm-card-head">
           <div>
-            <h2>Cómo sale tu parte</h2>
-            <p>Partes iguales entre los {{ data.partners }} socios. No descuenta comisiones de vendedores ni comisiones de Mercado Pago.</p>
+            <h2>Cómo sale la utilidad a repartir</h2>
+            <p>
+              Partes iguales entre los {{ data.partners }} socios. Las comisiones de vendedores salen del dinero cobrado, así que se descuentan antes de repartir. No descuenta la comisión de
+              Mercado Pago.
+            </p>
           </div>
         </div>
-        <dl class="pf-split">
-          <div><dt>Cobrado</dt><dd>{{ money(data.collected) }}</dd></div>
+        <dl class="pf-split chain">
+          <div><dt>Cobrado <small class="pf-muted">· {{ data.count }} {{ data.count === 1 ? "cobro" : "cobros" }}</small></dt><dd>{{ money(data.collected) }}</dd></div>
           <div><dt>Gasto de IA</dt><dd>− {{ money(data.costs.ai) }}</dd></div>
           <div><dt>Otros gastos</dt><dd>− {{ money(data.costs.expenses) }}</dd></div>
-          <div class="sum"><dt>Utilidad</dt><dd>{{ money(data.profit) }}</dd></div>
+          <div class="sum"><dt>Utilidad antes de comisiones</dt><dd>{{ money(data.profitBeforeCommissions) }}</dd></div>
+          <div>
+            <dt>Comisiones de vendedores <small class="pf-muted">· {{ data.commissions.count }} {{ data.commissions.count === 1 ? "comisión" : "comisiones" }}</small></dt>
+            <dd>− {{ money(data.commissions.total) }}</dd>
+          </div>
+          <div class="sum"><dt>Utilidad a repartir</dt><dd>{{ money(data.profit) }}</dd></div>
           <div class="sum"><dt>÷ {{ data.partners }} = por socio</dt><dd>{{ money(data.profitPerPartner) }}</dd></div>
         </dl>
+      </section>
+
+      <section class="adm-card pf-card-stack">
+        <div class="adm-card-head">
+          <div>
+            <h2>Comisiones de vendedores del mes</h2>
+            <p>Cada comisión se cuenta en el mes en que se generó (cuando la tienda pagó), no cuando se le paga al vendedor.</p>
+          </div>
+        </div>
+        <p v-if="!data.commissions.bySeller.length" class="pf-muted">No se generaron comisiones en este mes.</p>
+        <div v-else class="pf-table-wrap">
+          <table class="pf-table">
+            <thead>
+              <tr>
+                <th scope="col">Vendedor</th>
+                <th scope="col" class="num">Cobros</th>
+                <th scope="col" class="num">Comisión</th>
+                <th scope="col" class="num">Por pagar</th>
+                <th scope="col" class="num">Pagada</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="s in data.commissions.bySeller" :key="s.id">
+                <td>
+                  {{ s.name }} <small class="pf-muted">· {{ s.code }}</small>
+                  <span v-if="s.mine" class="adm-pill good">Tú</span>
+                  <span v-else-if="s.isOwner" class="adm-pill">Socio</span>
+                </td>
+                <td class="num">{{ s.count }}</td>
+                <td class="num">{{ money(s.earned) }}</td>
+                <td class="num">{{ money(s.pending) }}</td>
+                <td class="num">{{ money(s.paid) }}</td>
+              </tr>
+            </tbody>
+            <tfoot>
+              <tr>
+                <th scope="row">Total</th>
+                <td class="num">{{ data.commissions.count }}</td>
+                <td class="num">{{ money(data.commissions.total) }}</td>
+                <td class="num">{{ money(data.commissions.pending) }}</td>
+                <td class="num">{{ money(data.commissions.paid) }}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
       </section>
 
       <section class="adm-card pf-card-stack">
@@ -176,4 +230,5 @@ onMounted(load);
 .pf-split dt { opacity: 0.8; }
 .pf-split dd { margin: 0; font-weight: 700; font-variant-numeric: tabular-nums; }
 .pf-split .sum dt, .pf-split .sum dd { font-weight: 800; opacity: 1; }
+.chain { grid-template-columns: minmax(0, 1fr) !important; }
 </style>

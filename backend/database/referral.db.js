@@ -141,6 +141,25 @@ async function SumCommissionsBetween(referrerId, from, to) {
   return { pending: get('pending').total, paid: get('paid').total, count: rows.reduce((n, r) => n + r.count, 0) };
 }
 
+/** Comisiones del rango (sin las anuladas), por vendedor: pendientes, pagadas y cuántas. */
+async function SumCommissionsByReferrerBetween(from, to) {
+  const rows = await (await col('referral_commissions'))
+    .aggregate([
+      { $match: { status: { $ne: 'void' }, createdAt: { $gte: from, $lte: to } } },
+      { $group: { _id: { referrerId: '$referrerId', status: '$status' }, total: { $sum: '$commission' }, count: { $sum: 1 } } },
+    ])
+    .toArray();
+  const byId = new Map();
+  for (const r of rows) {
+    const cur = byId.get(r._id.referrerId) || { referrerId: r._id.referrerId, pending: 0, paid: 0, count: 0 };
+    if (r._id.status === 'paid') cur.paid += r.total;
+    else cur.pending += r.total;
+    cur.count += r.count;
+    byId.set(r._id.referrerId, cur);
+  }
+  return [...byId.values()];
+}
+
 // ───────── Liquidaciones ─────────
 async function CreatePayout(doc) {
   const r = await (await col('referral_payouts')).insertOne(doc);
@@ -174,6 +193,6 @@ module.exports = {
   CreateReferrer, DeleteReferrer, GetReferrerById, GetReferrerByCode, GetReferrerByEmail, GetReferrerByOwnerEmail, ListReferrers, UpdateReferrer,
   ListTenantsByReferrer, ListReferredTenants,
   InsertCommission, GetCommission, FindCommissionByKey, ListCommissions, UpdateCommission,
-  CountClosedTenants, ListPayingTenantIds, SumCommissions, SumCommissionsBetween,
+  CountClosedTenants, ListPayingTenantIds, SumCommissions, SumCommissionsBetween, SumCommissionsByReferrerBetween,
   CreatePayout, ListPayouts, MarkPendingPaid,
 };

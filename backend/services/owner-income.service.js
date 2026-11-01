@@ -23,8 +23,9 @@ function monthRange(month, zonedToInstant) {
  * @param names    Map tenantId → { businessName, planName }
  * @param partners cuántos socios se reparten (partes iguales)
  * @param costs    { ai, expenses } del mismo mes
+ * @param commissions comisiones de vendedores generadas en el mes (referral.commissionsBook); salen de la utilidad antes de repartirla
  */
-function summarizePayments({ events, names = new Map(), partners = 3, costs = {} }) {
+function summarizePayments({ events, names = new Map(), partners = 3, costs = {}, commissions = null }) {
   const n = Math.max(1, Math.floor(Number(partners)) || 1);
   const payments = events
     .filter((e) => Number(e.amount) > 0)
@@ -45,12 +46,19 @@ function summarizePayments({ events, names = new Map(), partners = 3, costs = {}
   const collected = round2(payments.reduce((a, p) => a + p.amount, 0));
   const ai = round2(costs.ai);
   const expenses = round2(costs.expenses);
-  const profit = round2(collected - ai - expenses);
+  const profitBeforeCommissions = round2(collected - ai - expenses);
+  const commissionsTotal = round2(commissions ? commissions.total : 0);
+  const profit = round2(profitBeforeCommissions - commissionsTotal);
   return {
     payments,
     count: payments.length,
     collected,
     costs: { ai, expenses },
+    // La utilidad a repartir ya descuenta lo que se le debe a los vendedores (incluidos los socios que venden con su propio código)
+    profitBeforeCommissions,
+    commissions: commissions
+      ? { total: commissionsTotal, pending: round2(commissions.pending), paid: round2(commissions.paid), count: commissions.count || 0, bySeller: commissions.bySeller || [] }
+      : { total: 0, pending: 0, paid: 0, count: 0, bySeller: [] },
     profit,
     // Parte de cada socio: partes iguales de lo cobrado y de la utilidad
     partners: n,

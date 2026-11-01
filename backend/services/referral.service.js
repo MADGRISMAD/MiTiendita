@@ -124,6 +124,36 @@ async function linkOwner({ email, name, phone }) {
   return refDb.UpdateReferrer(created.id, { ownerEmail: mail });
 }
 
+/**
+ * Todas las comisiones generadas en el rango, vendedor por vendedor (para descontarlas de la utilidad de los socios).
+ * `ownerEmail` marca cuál es el vendedor ligado al socio que mira la pantalla.
+ */
+async function commissionsBook(range, ownerEmail = '') {
+  const [rows, referrers] = await Promise.all([refDb.SumCommissionsByReferrerBetween(range.from, range.to), refDb.ListReferrers()]);
+  const byId = new Map(referrers.map((r) => [r.id, r]));
+  const me = String(ownerEmail || '').toLowerCase();
+  const bySeller = rows
+    .map((r) => {
+      const ref = byId.get(r.referrerId);
+      const pending = tiers.round2(r.pending);
+      const paid = tiers.round2(r.paid);
+      return {
+        id: r.referrerId,
+        name: ref?.name || 'Vendedor eliminado',
+        code: ref?.code || '',
+        isOwner: Boolean(ref?.ownerEmail),
+        mine: Boolean(me && ref?.ownerEmail === me),
+        count: r.count,
+        pending,
+        paid,
+        earned: tiers.round2(pending + paid),
+      };
+    })
+    .sort((a, b) => b.earned - a.earned || a.name.localeCompare(b.name, 'es'));
+  const sum = (key) => tiers.round2(bySeller.reduce((a, s) => a + s[key], 0));
+  return { total: sum('earned'), pending: sum('pending'), paid: sum('paid'), count: bySeller.reduce((a, s) => a + s.count, 0), bySeller };
+}
+
 /** El vendedor ligado a la cuenta de un dueño (o null). */
 const ownerSeller = (email) => refDb.GetReferrerByOwnerEmail(String(email || '').toLowerCase());
 
@@ -337,6 +367,7 @@ module.exports = {
   createReferrer,
   updateReferrer,
   linkOwner,
+  commissionsBook,
   ownerSeller,
   ownerEarnings,
   findActiveByCode,

@@ -1179,6 +1179,7 @@ async function ownerPayments(req, res) {
         names,
         partners: PERMANENT_ADMINS.length,
         costs: { ai: usage.reduce((a, u) => a + u.count, 0) * costPerUse, expenses: expenses.reduce((a, e) => a + e.amount, 0) },
+        commissions: await referrals.commissionsBook(range, email),
       }),
     };
     // Mi parte total: lo que me toca como socio (de la utilidad) + lo que gané como vendedor con mi propio código

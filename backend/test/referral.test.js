@@ -32,6 +32,18 @@ const fakeDb = {
     const sum = (status) => rows.filter((c) => c.status === status).reduce((a, c) => a + c.commission, 0);
     return { pending: sum('pending'), paid: sum('paid'), count: rows.length };
   },
+  async SumCommissionsByReferrerBetween(from, to) {
+    const byId = new Map();
+    for (const c of mem.commissions) {
+      if (c.status === 'void' || c.createdAt < from || c.createdAt > to) continue;
+      const cur = byId.get(c.referrerId) || { referrerId: c.referrerId, pending: 0, paid: 0, count: 0 };
+      if (c.status === 'paid') cur.paid += c.commission;
+      else cur.pending += c.commission;
+      cur.count += 1;
+      byId.set(c.referrerId, cur);
+    }
+    return [...byId.values()];
+  },
   async ListReferrers() {
     return mem.referrers.map(copy);
   },
@@ -302,4 +314,52 @@ test('mi parte total = lo que me toca como dueño + lo que gané como vendedor',
   // sin código activado: solo su parte de dueño
   assert.deepEqual(income.myShare(1000, null), { linked: false, ownerShare: 1000, commissions: null, total: 1000 });
   assert.equal(income.myShare(-200, { code: 'X', earned: 50, pending: 50, paid: 0, count: 1 }).total, -150, 'una utilidad negativa también suma');
+});
+
+test('libro de comisiones del mes: cada vendedor con lo suyo, sin anuladas ni de otros meses, y marca cuál es el mío', async () => {
+  const range = { from: new Date('2031-11-01T00:00:00Z'), to: new Date('2031-11-30T23:59:59Z') };
+  const mine = await svc.linkOwner({ email: 'libro-dueno@mitiendita.software', name: 'Dueño Libro' });
+  const other = await svc.createReferrer({ name: 'Vendedor Externo', email: 'externo@correo.mx' });
+  const [a, b, c] = [newTenant(mine, 'A'), newTenant(other, 'B'), newTenant(other, 'C')];
+  await svc.recordPayment({ tenant: a, amount: 349, source: 'payment', key: 'lib-1' });
+  await svc.recordPayment({ tenant: b, amount: 750, source: 'payment', key: 'lib-2' });
+  await svc.recordPayment({ tenant: c, amount: 349, source: 'payment', key: 'lib-3' });
+  const rows = mem.commissions.filter((x) => x.key.startsWith('lib-'));
+  rows.forEach((r) => { r.createdAt = new Date('2031-11-10T12:00:00Z'); });
+  rows[2].createdAt = new Date('2031-10-30T12:00:00Z'); // octubre: fuera
+  await svc.payOut(other.id, { by: 'test' }); // lo pendiente del externo pasa a pagado
+
+  const book = await svc.commissionsBook(range, 'LIBRO-DUENO@mitiendita.software');
+  assert.equal(book.bySeller.length, 2);
+  const ext = book.bySeller.find((s) => s.id === other.id);
+  const own = book.bySeller.find((s) => s.id === mine.id);
+  assert.deepEqual([own.mine, own.isOwner, ext.mine, ext.isOwner], [true, true, false, false]);
+  assert.equal(ext.count, 1, 'solo la de noviembre');
+  assert.equal(ext.paid, rows[1].commission);
+  assert.equal(own.pending, rows[0].commission);
+  assert.equal(book.total, Math.round((rows[0].commission + rows[1].commission) * 100) / 100);
+  assert.equal(book.total, Math.round((book.pending + book.paid) * 100) / 100);
+});
+
+test('la utilidad que se reparte descuenta TODAS las comisiones, y mi parte total cuadra con el dinero real', () => {
+  const income = require('../services/owner-income.service');
+  const events = [{ id: 'e1', tenantId: 't1', amount: 3000, at: '2026-11-05T12:00:00Z', plan: 'basic' }];
+  const summary = income.summarizePayments({
+    events,
+    partners: 3,
+    costs: { ai: 100, expenses: 200 },
+    commissions: { total: 510.5, pending: 110.5, paid: 400, count: 3, bySeller: [] },
+  });
+  assert.equal(summary.collected, 3000);
+  assert.equal(summary.profitBeforeCommissions, 2700);
+  assert.equal(summary.commissions.total, 510.5);
+  assert.equal(summary.profit, 2189.5);
+  assert.equal(summary.profitPerPartner, 729.83);
+  assert.equal(summary.perPartner, 1000, 'el ingreso por socio no cambia');
+  // Mi código generó $310.50: mi parte total = mi tercio de la utilidad ya neta + mi comisión
+  const me = income.myShare(summary.profitPerPartner, { code: 'MT-X', earned: 310.5, pending: 110.5, paid: 200, count: 2 });
+  assert.equal(me.total, 1040.33);
+  // Sin comisiones (como antes) nada cambia
+  const old = income.summarizePayments({ events, partners: 3, costs: { ai: 100, expenses: 200 } });
+  assert.deepEqual([old.profit, old.profitBeforeCommissions, old.commissions.total], [2700, 2700, 0]);
 });
