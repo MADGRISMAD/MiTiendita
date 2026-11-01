@@ -412,8 +412,8 @@ export const apiService = {
   getCashSession() {
     return axios.get('/cash/session').then((r) => r.data);
   },
-  openCashSession(openingFloat: number) {
-    return axios.post('/cash/session/open', { openingFloat }).then((r) => r.data);
+  openCashSession(openingFloat: number, usdRate?: number) {
+    return axios.post('/cash/session/open', { openingFloat, ...(usdRate && usdRate > 0 ? { usdRate } : {}) }).then((r) => r.data);
   },
   closeCashSession(countedCash: number, notes = '') {
     return axios.post('/cash/session/close', { countedCash, notes }).then((r) => r.data);

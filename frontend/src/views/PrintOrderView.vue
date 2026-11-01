@@ -93,6 +93,7 @@
                   <template v-if="order.downPayment">Anticipo {{ money(order.downPayment) }}<br /></template>A deber {{ money(order.creditAmount) }}
                 </em>
                 <em v-else-if="order.cashReceived">{{ money(order.cashReceived) }}</em>
+                <em v-if="Number(order.usdReceived) > 0">US$ {{ Number(order.usdReceived).toFixed(2) }} · T.C. {{ money(order.usdRate) }}</em>
                 <em v-if="order.paymentReference">Ref. {{ order.paymentReference }}</em>
               </div>
               <div v-if="hasChangeBox" class="tk-change">

@@ -279,6 +279,7 @@ export function buildCashClose(t, { cols = 48 } = {}) {
   p.rule();
   p.bold().lr("= Debe haber", money(t.expectedCash)).bold(false);
   if (t.closed) p.bold().lr("  Se contó", money(t.countedCash)).bold(false);
+  if (Number(t.usdReceived) > 0) p.lr("  Dólares (aparte)", `US$ ${Number(t.usdReceived).toFixed(2)}`);
 
   // Veredicto
   p.feed(1).align("center").bold().size(2).wrapped(`[ ${String(t.verdictWord || "").toUpperCase()} ]`, { cols: half });

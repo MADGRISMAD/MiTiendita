@@ -49,7 +49,7 @@ export function buildCashCloseData(session, orders, printedAt = new Date(), hint
   const voided = orders.filter(isVoid);
 
   // Reparto local (corte parcial): en pago mixto la parte de tarjeta va a tarjeta y el resto a efectivo
-  const local = { cash: 0, card: 0, transfer: 0, other: 0, credit: 0, total: 0 };
+  const local = { cash: 0, card: 0, transfer: 0, other: 0, credit: 0, total: 0, usd: 0 };
   for (const o of paid) {
     const amount = Number(o.total || 0);
     const method = o.paymentMethod || "other";
@@ -64,6 +64,11 @@ export function buildCashCloseData(session, orders, printedAt = new Date(), hint
       local.credit += amount - down;
     } else if (local[method] != null && method !== "total") {
       local[method] += amount;
+      // Lo pagado en dólares no son pesos en el cajón: se cuenta aparte
+      if (method === "cash" && Number(o.usdPesos) > 0) {
+        local.cash -= Number(o.usdPesos);
+        local.usd += Number(o.usdReceived || 0);
+      }
     } else {
       local.other += amount;
     }
@@ -158,6 +163,7 @@ export function buildCashCloseData(session, orders, printedAt = new Date(), hint
     abonos: ab,
     cashRefunds,
     expectedCash,
+    usdReceived: closed && s.expectedUsd != null ? Number(s.expectedUsd) : local.usd,
     countedCash: Number(s.countedCash || 0),
     verdictWord,
     verdictSub,

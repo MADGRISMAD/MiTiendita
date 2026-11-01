@@ -114,6 +114,10 @@
               placeholder="0"
             />
           </label>
+          <label v-if="usdOn" class="field">
+            <span>¿A cuánto está el dólar hoy? <small>(pesos por US$1)</small></span>
+            <input v-model.number="openingUsd" v-select-on-focus class="inp num" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00" />
+          </label>
           <div class="presets">
             <button
               v-for="v in [0, 200, 500, 1000]"
@@ -163,6 +167,11 @@
           <span><PosIcon name="cash" :size="16" /> Abonos recibidos</span>
           <strong>{{ money(abonos.total) }}</strong>
           <small>{{ abonos.count }} {{ abonos.count === 1 ? 'abono' : 'abonos' }} de clientes</small>
+        </div>
+        <div v-if="Number(totals.usd) > 0" class="kpi">
+          <span><PosIcon name="cash" :size="16" /> Dólares recibidos</span>
+          <strong>US$ {{ Number(totals.usd).toFixed(2) }}</strong>
+          <small>equivalen a {{ money(totals.usdPesos) }} · se cuentan aparte, no están en el efectivo en pesos</small>
         </div>
         <div class="kpi drawer">
           <span>Debe haber en el cajón</span>
@@ -315,6 +324,7 @@
               <div v-if="abonos.cash"><dt>Abonos en efectivo</dt><dd>+ {{ money(abonos.cash) }}</dd></div>
               <div v-if="Number(session?.cashRefunds)"><dt>Devoluciones en efectivo</dt><dd>− {{ money(session.cashRefunds) }}</dd></div>
               <div class="sum-total"><dt>Debe haber</dt><dd>{{ money(expectedCash) }}</dd></div>
+              <div v-if="Number(totals.usd) > 0" class="sum-info"><dt>Dólares (se cuentan aparte)</dt><dd>US$ {{ Number(totals.usd).toFixed(2) }} · equivalen a {{ money(totals.usdPesos) }}</dd></div>
               <div class="sum-info"><dt>Tarjeta · transferencia · otro</dt><dd>{{ money(totals.card) }} · {{ money(totals.transfer) }} · {{ money(totals.other) }}</dd></div>
             </dl>
 
@@ -539,6 +549,8 @@ const sessionOrders = ref([]);
 const totals = ref({ cash: 0, card: 0, transfer: 0, other: 0, credit: 0, total: 0, abonos: { cash: 0, card: 0, transfer: 0, total: 0, count: 0 } });
 const abonos = computed(() => ({ cash: 0, card: 0, transfer: 0, total: 0, count: 0, ...(totals.value.abonos || {}) }));
 const openingFloat = ref("");
+const usdOn = computed(() => Boolean(venueStore.usdEnabled));
+const openingUsd = ref(venueStore.usdRate || ""); // el dólar de hoy: se confirma al abrir la caja
 const cashBusy = ref(false);
 const cashMsg = ref("");
 const cashErr = ref("");
@@ -881,9 +893,10 @@ async function openCash() {
   cashErr.value = "";
   cashMsg.value = "";
   try {
-    await apiService.openCashSession(Number(openingFloat.value || 0));
+    await apiService.openCashSession(Number(openingFloat.value || 0), usdOn.value ? Number(openingUsd.value) || undefined : undefined);
     cashMsg.value = "Caja abierta. ¡Buen turno!";
     openingFloat.value = "";
+    openingUsd.value = venueStore.usdRate || "";
     await loadCash();
     tab.value = "shift";
   } catch (e) {

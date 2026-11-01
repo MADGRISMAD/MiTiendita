@@ -1286,6 +1286,10 @@
                     placeholder="0"
                   />
                 </label>
+                <label v-if="usdOn" class="field">
+                  <span>¿A cuánto está el dólar hoy? <small>(pesos por US$1)</small></span>
+                  <input v-model.number="openingUsd" v-select-on-focus class="inp num" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00" />
+                </label>
               </div>
               <p v-if="payError" class="dlg-err">{{ payError }}</p>
               <div class="dlg-acts">
@@ -1388,8 +1392,40 @@
               </div>
 
               <template v-if="payMethod === 'cash' || payMethod === 'split'">
+                <div v-if="payMethod === 'cash' && usdOn" class="usd-box">
+                  <label class="fee-row">
+                    <input v-model="payInUsd" type="checkbox" :disabled="sending" />
+                    <span>Se pagará en dólares</span>
+                  </label>
+                  <template v-if="payInUsd">
+                    <div class="usd-grid">
+                      <label class="field">
+                        <span>Precio del dólar (pesos)</span>
+                        <input v-model.number="payUsdRate" v-select-on-focus class="inp num" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00" />
+                      </label>
+                      <div class="usd-total">
+                        <span>Total en dólares</span>
+                        <strong>US$ {{ totalUsd.toFixed(2) }}</strong>
+                      </div>
+                    </div>
+                    <p v-if="!usdRateValue" class="usd-note warn">Escribe a cuántos pesos está el dólar para convertir.</p>
+                    <template v-else>
+                      <label class="field">
+                        <span>Dólares recibidos (US$)</span>
+                        <input v-model.number="payUsd" v-select-on-focus class="inp big num" type="number" min="0" step="0.01" inputmode="decimal" :placeholder="totalUsd.toFixed(2)" />
+                      </label>
+                      <div class="bills">
+                        <button type="button" class="bill" :class="{ on: Number(payUsd) === totalUsd }" @click="payUsd = totalUsd">Exacto US$ {{ totalUsd.toFixed(2) }}</button>
+                      </div>
+                      <p v-if="usdPesos" class="usd-note">
+                        Los dólares equivalen a {{ money(usdPesos) }}.
+                        <template v-if="usdPesos < total">Resta cobrar <b>{{ money(round2(total - usdPesos)) }}</b> en pesos.</template>
+                      </p>
+                    </template>
+                  </template>
+                </div>
                 <label class="field">
-                  <span>Efectivo recibido</span>
+                  <span>{{ usingUsd ? 'Pesos recibidos (si completa en pesos)' : 'Efectivo recibido' }}</span>
                   <input
                     ref="cashReceivedInput"
                     v-model.number="payCashReceived"
@@ -1399,10 +1435,10 @@
                     min="0"
                     step="0.01"
                     inputmode="decimal"
-                    :placeholder="money(payCashPortion)"
+                    :placeholder="money(usingUsd ? Math.max(0, round2(payCashPortion - usdPesos)) : payCashPortion)"
                   />
                 </label>
-                <div v-if="quickCash.length" class="bills">
+                <div v-if="quickCash.length && !usingUsd" class="bills">
                   <button
                     v-for="(v, k) in quickCash"
                     :key="v"
@@ -2380,14 +2416,30 @@ export default {
       if (payMethod.value === "split") return Math.max(0, round2(total.value - Number(payCardAmount.value || 0)));
       return 0;
     });
+    // ── Dólares: se paga en efectivo con dólares (y, si no alcanza, el resto en pesos); el cambio siempre sale en pesos ──
+    const usdOn = computed(() => Boolean(venueStore.usdEnabled));
+    const payInUsd = ref(false);
+    const payUsd = ref("");
+    const payUsdRate = ref("");
+    const openingUsd = ref(""); // precio del dólar que se confirma al abrir la caja
+    const usdRateNow = computed(() => Number(cashSession.value?.usdRate) || Number(venueStore.usdRate) || 0);
+    const usdRateValue = computed(() => (Number(payUsdRate.value) > 0 ? Number(payUsdRate.value) : 0));
+    const usingUsd = computed(() => payMethod.value === "cash" && payInUsd.value && usdRateValue.value > 0);
+    // Total en dólares, redondeado hacia arriba al centavo para que "exacto" siempre alcance
+    const totalUsd = computed(() => (usdRateValue.value ? Math.ceil((total.value / usdRateValue.value) * 100 - 1e-9) / 100 : 0));
+    const usdPesos = computed(() => (usingUsd.value ? round2(Number(payUsd.value || 0) * usdRateValue.value) : 0));
+    // Lo recibido en pesos equivalentes: los dólares ya convertidos + los pesos que complete
+    const payReceivedPesos = computed(() => (usingUsd.value ? round2(usdPesos.value + Number(payCashReceived.value || 0)) : Number(payCashReceived.value || 0)));
+    watch(payInUsd, (on) => {
+      if (on && !payUsdRate.value) payUsdRate.value = usdRateNow.value || "";
+    });
     const payChange = computed(() => {
       if (!takesCash.value) return 0;
-      const received = Number(payCashReceived.value || 0);
-      return Math.max(0, round2(received - payCashPortion.value));
+      return Math.max(0, round2(payReceivedPesos.value - payCashPortion.value));
     });
     const payShort = computed(() => {
       if (!takesCash.value) return 0;
-      const received = Number(payCashReceived.value || 0);
+      const received = payReceivedPesos.value;
       if (!(received > 0)) return 0;
       return Math.max(0, round2(payCashPortion.value - received));
     });
@@ -2470,7 +2522,7 @@ export default {
       cashBusy.value = true;
       payError.value = "";
       try {
-        await apiService.openCashSession(Number(openingFloat.value || 0));
+        await apiService.openCashSession(Number(openingFloat.value || 0), usdOn.value ? Number(openingUsd.value) || undefined : undefined);
         await loadCashSession();
         focusPayField();
       } catch (e) {
@@ -4198,6 +4250,10 @@ export default {
       if (offlineStore.online && !creditCustomers.value.length) loadCreditCustomers({ quiet: true });
       payError.value = "";
       openingFloat.value = "";
+      openingUsd.value = venueStore.usdRate || "";
+      payInUsd.value = false;
+      payUsd.value = "";
+      payUsdRate.value = "";
       showMobileCart.value = false;
       showPayment.value = true;
       focusPayField();
@@ -4280,7 +4336,9 @@ export default {
         paymentMethod: payMethod.value,
         customerId: payMethod.value === "credit" ? creditCustomerId.value : saleCustomerId.value || undefined,
         downPayment: payMethod.value === "credit" && Number(creditDown.value) > 0 ? Number(creditDown.value) : undefined,
-        cashReceived: takesCash.value ? Number(payCashReceived.value || 0) : undefined,
+        cashReceived: takesCash.value ? payReceivedPesos.value : undefined,
+        usdReceived: usingUsd.value && Number(payUsd.value) > 0 ? Number(payUsd.value) : undefined,
+        usdRate: usingUsd.value && Number(payUsd.value) > 0 ? usdRateValue.value : undefined,
         cardAmount: payMethod.value === "split" ? Number(payCardAmount.value || 0) : undefined,
         paymentReference:
           payMethod.value === "transfer" || payMethod.value === "other"
@@ -5212,6 +5270,16 @@ export default {
       showPayment,
       payMethods,
       payMethod,
+      usdOn,
+      payInUsd,
+      payUsd,
+      payUsdRate,
+      openingUsd,
+      usdRateValue,
+      usingUsd,
+      totalUsd,
+      usdPesos,
+      round2,
       payReference,
       creditQuery,
       saleCustomerId,
@@ -7943,6 +8011,15 @@ html[data-theme="dark"] .avatar {
 .point-acts .btn { min-height: 2.6rem; font-size: 0.88rem; }
 
 .photo-row { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+
+/* Cobro en dólares */
+.usd-box { display: grid; gap: 0.6rem; padding: 0.7rem 0.8rem; border: 1px solid var(--timber-line); border-radius: 0.8rem; background: var(--timber-panel-elevated); }
+.usd-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0.6rem; align-items: end; }
+.usd-total { display: grid; gap: 0.1rem; }
+.usd-total span { font-size: 0.78rem; color: var(--timber-muted); }
+.usd-total strong { font-size: 1.15rem; font-variant-numeric: tabular-nums; }
+.usd-note { margin: 0; font-size: 0.88rem; color: var(--timber-ink); }
+.usd-note.warn { color: var(--timber-danger, #b3261e); }
 
 /* Cámara de la venta: lo último agregado, con su cantidad */
 .cam-last { display: grid; gap: 0.6rem; padding: 0 14px 0.4rem; }

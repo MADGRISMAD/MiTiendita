@@ -273,6 +273,13 @@ async function settlePayment(req, existing, body, { requireCash = true, paidAt }
   const paymentReference =
     method === 'transfer' || method === 'other' ? String(body?.paymentReference || '').trim().slice(0, 60) : '';
   const cardAmount = Number(body?.cardAmount ?? 0);
+  // Cobro en efectivo con dólares: se guardan los dólares recibidos y el tipo de cambio. El efectivo recibido (cashReceived) ya trae
+  // su equivalente en pesos, así que el cambio sale en pesos; el corte cuenta los dólares aparte.
+  const usdRate = Number(body?.usdRate);
+  const usdGiven = Number(body?.usdReceived);
+  const usdValid = method === 'cash' && usdGiven > 0 && usdRate > 0 && usdRate <= 500 && Number((usdGiven * usdRate).toFixed(2)) <= cashReceived + 0.01;
+  const usdReceived = usdValid ? Number(usdGiven.toFixed(2)) : null;
+  const usdPesos = usdValid ? Number((usdGiven * usdRate).toFixed(2)) : null;
   const change =
     cashReceived > 0
       ? Number((cashReceived - (method === 'split' ? total - cardAmount : total)).toFixed(2))
@@ -292,6 +299,9 @@ async function settlePayment(req, existing, body, { requireCash = true, paidAt }
       cardExtraTax: totals.cardExtraTax,
       total,
       cashReceived: cashReceived || null,
+      usdReceived,
+      usdRate: usdValid ? Number(usdRate.toFixed(4)) : null,
+      usdPesos,
       cardAmount: method === 'split' ? cardAmount : null,
       change: change > 0 ? change : 0,
       paymentReference: paymentReference || null,

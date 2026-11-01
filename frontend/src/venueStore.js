@@ -22,6 +22,8 @@ const defaultSettings = {
   cardFeePercent: 4,
   scaleBarcodeMode: "weight",
   disabledPayMethods: [],
+  usdEnabled: false,
+  usdRate: 0,
   dailySummaryEnabled: false,
   dailySummaryEmail: "",
   setupCompleted: false,
@@ -71,6 +73,8 @@ watch(
       cardFeePercent: value.cardFeePercent ?? 4,
       scaleBarcodeMode: value.scaleBarcodeMode === "price" ? "price" : "weight",
       disabledPayMethods: Array.isArray(value.disabledPayMethods) ? [...value.disabledPayMethods] : [],
+      usdEnabled: Boolean(value.usdEnabled),
+      usdRate: Number(value.usdRate) || 0,
       setupCompleted: value.setupCompleted,
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));

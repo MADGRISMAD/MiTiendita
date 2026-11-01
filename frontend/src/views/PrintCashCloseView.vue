@@ -119,6 +119,7 @@
               <div v-if="cashRefunds" class="cc-row"><i>−</i><span>Devoluciones en efectivo</span><b>{{ money(cashRefunds) }}</b></div>
               <div class="cc-row eq"><i>=</i><span>Debe haber</span><b>{{ money(expectedCash) }}</b></div>
               <div v-if="closed" class="cc-row counted"><i></i><span>Se contó</span><b>{{ money(session.countedCash) }}</b></div>
+              <div v-if="usdReceived > 0" class="cc-row"><i></i><span>Dólares recibidos (aparte)</span><b>US$ {{ usdReceived.toFixed(2) }}</b></div>
             </div>
 
             <div class="tk-stamp-row">
@@ -208,7 +209,7 @@ const voidedTotal = computed(() => voided.value.reduce((s, o) => s + Number(o.to
 
 // Mismo reparto que el servidor: en pago mixto la parte de tarjeta va a tarjeta y el resto a efectivo
 const local = computed(() => {
-  const t = { cash: 0, card: 0, transfer: 0, other: 0, credit: 0, total: 0 };
+  const t = { cash: 0, card: 0, transfer: 0, other: 0, credit: 0, total: 0, usd: 0 };
   for (const o of paidOrders.value) {
     const amount = Number(o.total || 0);
     const method = o.paymentMethod || "other";
@@ -223,6 +224,11 @@ const local = computed(() => {
       t.credit += amount - down;
     } else if (t[method] != null && method !== "total") {
       t[method] += amount;
+      // Lo pagado en dólares no son pesos en el cajón
+      if (method === "cash" && Number(o.usdPesos) > 0) {
+        t.cash -= Number(o.usdPesos);
+        t.usd += Number(o.usdReceived || 0);
+      }
     } else {
       t.other += amount;
     }
@@ -230,6 +236,7 @@ const local = computed(() => {
   }
   return t;
 });
+const usdReceived = computed(() => (closed.value && session.value?.expectedUsd != null ? Number(session.value.expectedUsd) : local.value.usd));
 
 const cashRefunds = computed(() => Number(session.value?.cashRefunds || 0));
 const opening = computed(() => Number(session.value?.openingFloat || 0));

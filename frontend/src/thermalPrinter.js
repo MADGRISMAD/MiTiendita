@@ -387,6 +387,9 @@ export function receiptData(order) {
   } else if (Number(o.cashReceived)) {
     methodDetail.push(["Recibido", money(o.cashReceived)]);
   }
+  if (Number(o.usdReceived) > 0) {
+    methodDetail.push(["Dólares", `US$ ${Number(o.usdReceived).toFixed(2)} (T.C. ${money(o.usdRate)})`]);
+  }
   if (o.paymentReference) methodDetail.push(["Ref.", String(o.paymentReference)]);
   const takesCash = method === "cash" || method === "split";
   const tax = Number(o.tax || 0);

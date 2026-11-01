@@ -213,6 +213,40 @@
             <section class="adm-card cfg-card">
               <div class="switch-head">
                 <div>
+                  <h3>Cobrar en dólares</h3>
+                  <p class="adm-hint">
+                    Si la activas, al cobrar en efectivo sale la casilla «Se pagará en dólares»: el sistema convierte el total, y lo que falte y el cambio los da en
+                    pesos. Cada que abres la caja te pregunta a cuánto está el dólar ese día; aquí dejas el precio con el que empieza.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  class="adm-switch"
+                  :aria-checked="form.usdEnabled"
+                  aria-label="Cobrar en dólares"
+                  @click="form.usdEnabled = !form.usdEnabled"
+                ></button>
+              </div>
+              <template v-if="form.usdEnabled">
+                <label class="adm-field tax-other">
+                  <span>Precio del dólar (pesos por US$1)</span>
+                  <input v-model.number="form.usdRate" class="adm-inp num" type="number" min="0" max="500" step="0.01" inputmode="decimal" placeholder="Ej. 18.50" />
+                </label>
+                <p v-if="usdError" class="adm-err">{{ usdError }}</p>
+                <div v-else class="example">
+                  <span>Ejemplo</span>
+                  <p>
+                    Una venta de <b>{{ money(200) }}</b> son <b>US$ {{ (200 / Number(form.usdRate || 1)).toFixed(2) }}</b>. Si el cliente da US$ 5 y el resto en pesos,
+                    se le cobran <b>{{ money(Math.max(0, 200 - 5 * Number(form.usdRate || 0))) }}</b> en pesos.
+                  </p>
+                </div>
+              </template>
+              <p v-else class="state-line off"><i></i>Apagada: solo se cobra en pesos.</p>
+            </section>
+            <section class="adm-card cfg-card">
+              <div class="switch-head">
+                <div>
                   <h3>Comisión por pago con tarjeta</h3>
                   <p class="adm-hint">
                     Para compensar lo que cobra la terminal (Mercado Pago u otra). Si la activas, al cobrar con tarjeta
@@ -791,7 +825,7 @@
         <span><i class="cfg-dot"></i> Tienes cambios sin guardar</span>
         <div>
           <button type="button" class="adm-btn" :disabled="saving" @click="discard">Descartar</button>
-          <button type="button" class="adm-btn primary" :disabled="saving || Boolean(nameError || taxError || feeError)" @click="save">
+          <button type="button" class="adm-btn primary" :disabled="saving || Boolean(nameError || taxError || feeError || usdError)" @click="save">
             {{ saving ? 'Guardando…' : 'Guardar cambios' }}
           </button>
         </div>
@@ -991,6 +1025,8 @@ function fromStore() {
     cardFeePercent: Number(s.cardFeePercent ?? 4),
     scaleBarcodeMode: s.scaleBarcodeMode === "price" ? "price" : "weight",
     disabledPayMethods: cleanDisabled(s.disabledPayMethods),
+    usdEnabled: Boolean(s.usdEnabled),
+    usdRate: Number(s.usdRate) || 0,
     dailySummaryEnabled: Boolean(s.dailySummaryEnabled),
     dailySummaryEmail: s.dailySummaryEmail || authStore.email || "",
   };
@@ -999,7 +1035,7 @@ const form = reactive(fromStore());
 const snapshot = ref(JSON.stringify(fromStore()));
 const FIELDS_BY_SECTION = {
   negocio: ["businessName", "businessType", "address", "phone", "logoUrl", "primaryColor", "accentColor", "timezone"],
-  ventas: ["taxPercent", "cardFeeEnabled", "cardFeePercent", "scaleBarcodeMode", "disabledPayMethods", "dailySummaryEnabled", "dailySummaryEmail"],
+  ventas: ["taxPercent", "cardFeeEnabled", "cardFeePercent", "scaleBarcodeMode", "disabledPayMethods", "usdEnabled", "usdRate", "dailySummaryEnabled", "dailySummaryEmail"],
   inventario: ["inventoryEnabled", "allowNegativeStock", "costMethod"],
 };
 // Formas de pago que salen al cobrar
@@ -1079,6 +1115,11 @@ const feeError = computed(() => {
   const v = Number(form.cardFeePercent);
   return !Number.isFinite(v) || v <= 0 || v > 30 ? "La comisión va de 0.1 a 30%." : "";
 });
+const usdError = computed(() => {
+  if (!form.usdEnabled) return "";
+  const v = Number(form.usdRate);
+  return !Number.isFinite(v) || v <= 0 || v > 500 ? "Escribe a cuántos pesos está el dólar (mayor a 0)." : "";
+});
 const thanksPreview = computed(() => closingLine(form.businessType));
 
 const saving = ref(false);
@@ -1088,8 +1129,8 @@ const { flash, say } = useFlash();
 const errText = (e, fallback) =>
   sharedErrText(e, e?.response ? fallback : "Sin conexión con el servidor. Revisa tu internet y vuelve a intentar.");
 async function save() {
-  if (nameError.value || taxError.value || feeError.value) {
-    saveErr.value = nameError.value || taxError.value || feeError.value;
+  if (nameError.value || taxError.value || feeError.value || usdError.value) {
+    saveErr.value = nameError.value || taxError.value || feeError.value || usdError.value;
     return;
   }
   if (form.dailySummaryEnabled && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(form.dailySummaryEmail || "").trim())) {
@@ -1119,6 +1160,8 @@ async function save() {
         cardFeePercent: Math.min(30, Math.max(0, Number(form.cardFeePercent) || 0)),
         scaleBarcodeMode: form.scaleBarcodeMode === "price" ? "price" : "weight",
         disabledPayMethods: cleanDisabled(form.disabledPayMethods),
+        usdEnabled: Boolean(form.usdEnabled),
+        usdRate: form.usdEnabled ? Math.min(500, Math.max(0, Number(form.usdRate) || 0)) : Number(form.usdRate) || 0,
         dailySummaryEnabled: Boolean(form.dailySummaryEnabled),
         dailySummaryEmail: String(form.dailySummaryEmail || "").trim(),
       },
