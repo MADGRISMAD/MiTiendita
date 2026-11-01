@@ -450,6 +450,7 @@
 </template>
 
 <script setup>
+import { confirmDialog } from "../dialog";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { apiService } from "../apiService";
 import { authStore } from "../authStore";
@@ -1092,8 +1093,8 @@ function toggleNews(on) {
   });
 }
 
-function resetReview() {
-  if (result.value && saveCount.value && !window.confirm("¿Descartar esta lectura? Ya se usó 1 intento.")) return;
+async function resetReview() {
+  if (result.value && saveCount.value && !(await confirmDialog("¿Descartar esta lectura?\n\nYa se usó 1 intento.", { confirmLabel: "Descartar", cancelLabel: "Volver" }))) return;
   clearDraft();
   restored.value = false;
   result.value = null;

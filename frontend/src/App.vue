@@ -1,14 +1,16 @@
 <template>
   <router-view></router-view>
   <BrandLoader />
+  <AppDialogHost />
 </template>
 
 <script>
 import BrandLoader from './components/BrandLoader.vue'
+import AppDialogHost from './components/AppDialogHost.vue'
 
 export default {
   name: 'App',
-  components: { BrandLoader }
+  components: { BrandLoader, AppDialogHost }
 }
 </script>
 

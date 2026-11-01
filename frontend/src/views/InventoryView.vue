@@ -680,6 +680,7 @@
 </template>
 
 <script setup>
+import { promptDialog } from "../dialog";
 import { computed, nextTick, onMounted, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import "../admin.css";
@@ -986,7 +987,7 @@ async function copyOrder(g) {
     await navigator.clipboard.writeText(text);
     say("Lista copiada. Pégala en WhatsApp o en un mensaje.");
   } catch {
-    window.prompt("Copia la lista:", text);
+    await promptDialog("Copia la lista", { value: text, multiline: true, confirmLabel: "Listo", hideCancel: true, tone: "info" });
   }
 }
 function purchaseFromSuggestion(g) {

@@ -413,16 +413,20 @@ html.tk-printing-view body { background: var(--timber-surface); }
 
 /* Despedida manuscrita */
 .tk-hand {
-  margin-top: 4mm !important;
+  margin-top: 3.5mm !important;
+  padding: 0.6mm 0 1.2mm;
   font-family: "Caveat", "Segoe Print", "Bradley Hand", cursive;
-  font-size: 2.05em;
+  font-size: 1.8em;
   font-weight: 700;
-  line-height: 1;
+  /* Con 1 las líneas de esta letra (muy alta) se pegan; así cabe en dos renglones sin tapar lo de abajo */
+  line-height: 1.22;
   text-align: center;
-  transform: rotate(-2deg);
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+  transform: rotate(-1.2deg);
 }
 .tk-note {
-  margin-top: 1.2mm !important;
+  margin-top: 3mm !important;
   text-align: center;
   font-size: 0.86em;
 }

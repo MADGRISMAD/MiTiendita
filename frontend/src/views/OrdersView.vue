@@ -14,10 +14,24 @@
         </button>
       </header>
 
-      <p v-if="longOpen" class="banner warn">
+      <p v-if="shiftInfo.state === 'blocked' || shiftInfo.state === 'ask'" class="banner warn">
         <PosIcon name="alert" :size="18" />
-        La caja lleva abierta más de 12 horas y la venta está bloqueada. Haz el corte para seguir cobrando.
+        La caja lleva abierta {{ shiftInfo.hours >= 15 ? 'más de 15 horas' : shiftInfo.postponed ? 'más de lo acordado' : 'más de 12 horas' }} y la venta está bloqueada. Haz el corte para seguir cobrando.
       </p>
+      <p v-else-if="shiftInfo.state === 'postponed'" class="banner warn" role="status">
+        <PosIcon name="alert" :size="18" />
+        Corte pospuesto: hazlo a más tardar a las {{ time(new Date(shiftInfo.until)) }}. Después se bloquea la venta.
+      </p>
+      <CashLimitDialog
+        v-if="cashOpen && session && (shiftInfo.state === 'ask' || (shiftInfo.state === 'blocked' && !limitDismissed))"
+        :session="session"
+        :status="shiftInfo"
+        :now="now"
+        :can-close="shiftInfo.state === 'blocked'"
+        @now="startCut"
+        @postpone="postponeShift"
+        @close="limitDismissed = true"
+      />
       <!-- Ventas hechas sin internet que aún no llegan al servidor -->
       <section v-if="deviceSales.length" class="device" aria-labelledby="device-title">
         <div class="device-head">
@@ -236,9 +250,9 @@
               </dl>
               <div class="sale-acts">
                 <button v-if="canCharge(o)" type="button" class="btn primary" @click="openPay(o)">Cobrar</button>
-                <a class="btn" :href="`/print/order/${o.id}?mode=receipt`" target="_blank" rel="noopener">
-                  <PosIcon name="printer" :size="18" /> Reimprimir
-                </a>
+                <button type="button" class="btn" :disabled="reprintId === o.id" @click="reprintOrder(o)">
+                  <PosIcon name="printer" :size="18" /> {{ reprintId === o.id ? 'Imprimiendo…' : 'Reimprimir' }}
+                </button>
                 <button v-if="o.invoice?.status === 'requested'" type="button" class="btn" @click="markIssued(o)">
                   <PosIcon name="receipt" :size="18" /> Ya la facturé
                 </button>
@@ -272,7 +286,7 @@
         </div>
       </section>
 
-      <PrintAskDialog
+      <NoticeDialog
         :open="Boolean(printCorteAsk)"
         title="¿Quieres imprimir el corte de caja?"
         label="El turno ya quedó cerrado"
@@ -490,8 +504,13 @@ import { offlineStore } from "../offlineFlags";
 import { flushOfflineSales, listDeviceSales, retrySales } from "../offlineSync";
 import { isNetworkError } from "../net";
 import { cardFeeRateOf, lineBreakdown, rateOf } from "../tax";
-import { directPrinting, printerStore } from "../thermalPrinter";
-import PrintAskDialog from "../components/PrintAskDialog.vue";
+import { directPrinting, printReceiptDirect, printerStore } from "../thermalPrinter";
+import { printRoute } from "../printRoute";
+import CashLimitDialog from "../components/CashLimitDialog.vue";
+import { isBlocking, postponeCut, shiftStatus } from "../cashShift";
+import { useRoute } from "vue-router";
+import { confirmDialog } from "../dialog";
+import NoticeDialog from "../components/NoticeDialog.vue";
 import { printCashCloseById } from "../cashCloseData";
 import { errText, fold } from "../textUtils";
 
@@ -643,7 +662,20 @@ const openedAt = computed(() => {
 });
 // Si el reloj del equipo va un poco atrás del servidor, no muestra tiempo negativo
 const hoursOpen = computed(() => (openedAt.value ? Math.max(0, now.value - openedAt.value.getTime()) / 3600000 : 0));
-const longOpen = computed(() => cashOpen.value && hoursOpen.value >= 12);
+// Más de 12 h abierta: alerta para hacer el corte ahora o posponerlo una sola vez (máximo 15 h en total)
+const shiftInfo = computed(() => (cashOpen.value ? shiftStatus(session.value, now.value) : { state: "ok", hours: 0, postponed: false }));
+const longOpen = computed(() => isBlocking(shiftInfo.value));
+const limitDismissed = ref(false);
+function startCut() {
+  limitDismissed.value = true;
+  prepClose();
+}
+function postponeShift(until) {
+  if (postponeCut(session.value, until)) {
+    now.value = Date.now();
+    cashMsg.value = `Corte pospuesto hasta las ${time(new Date(until))}.`;
+  }
+}
 const headline = computed(() => {
   if (!loaded.value) return "Cargando…";
   if (!cashOpen.value) return "Cerrada";
@@ -902,12 +934,12 @@ watch(
   }
 );
 
-function prepClose() {
+async function prepClose() {
   if (offlineStore.pending > 0) {
     cashErr.value = `Hay ${offlineStore.pending} ${offlineStore.pending === 1 ? "venta" : "ventas"} de este dispositivo por subir. Espera a que vuelva internet antes del corte.`;
     return;
   }
-  if (offlineStore.failed > 0 && !window.confirm(`Hay ${offlineStore.failed} ${offlineStore.failed === 1 ? "venta" : "ventas"} de este dispositivo con error que no entran en el corte. ¿Hacer el corte de todos modos?`)) {
+  if (offlineStore.failed > 0 && !(await confirmDialog(`¿Hacer el corte de todos modos?\n\nHay ${offlineStore.failed} ${offlineStore.failed === 1 ? "venta" : "ventas"} de este dispositivo con error que no entran en el corte.`, { confirmLabel: "Hacer el corte", cancelLabel: "Volver" }))) {
     return;
   }
   cashErr.value = "";
@@ -923,6 +955,38 @@ function prepClose() {
  * Con térmica configurada (USB, COM o Bluetooth) sale directo, sin abrir otra ventana.
  * En modo «Navegador» abre la vista de impresión en una pestaña nueva.
  */
+// Reimprime el ticket de una venta ya cobrada: directo a la térmica (o a la computadora de la caja), sin abrir el cajón
+const reprintId = ref("");
+async function reprintOrder(o) {
+  if (!o?.id || reprintId.value) return;
+  cashErr.value = "";
+  cashMsg.value = "";
+  const browserCopy = () => window.open(`/print/order/${o.id}?mode=receipt&autoprint=1`, "_blank", "noopener");
+  if (printRoute.mode === "remote" && offlineStore.online) {
+    reprintId.value = o.id;
+    try {
+      await apiService.sendPrintJob(o.id, false);
+      cashMsg.value = "Ticket enviado a la computadora de la caja.";
+    } catch (e) {
+      cashErr.value = errText(e, "No se pudo mandar el ticket a la computadora de la caja.");
+    } finally {
+      reprintId.value = "";
+    }
+  } else if (directPrinting()) {
+    reprintId.value = o.id;
+    try {
+      await printReceiptDirect(o, { openDrawer: false });
+      cashMsg.value = "Ticket reimpreso.";
+    } catch (e) {
+      cashErr.value = e?.message || "La impresora no respondió.";
+    } finally {
+      reprintId.value = "";
+    }
+  } else {
+    browserCopy();
+  }
+}
+
 async function printCorte(id) {
   if (!id || printBusy.value) return;
   printIssue.value = "";
@@ -948,10 +1012,10 @@ async function closeCash() {
     return;
   }
   if (countMode.value === "bills" && counted.value === 0 && expectedCash.value > 0) {
-    if (!window.confirm("No contaste nada en el cajón. ¿Cerrar con $0?")) return;
+    if (!(await confirmDialog("No contaste nada en el cajón.\n\n¿Cerrar el corte con $0?", { confirmLabel: "Cerrar con $0", cancelLabel: "Volver" }))) return;
   } else if (difference.value !== 0) {
     const what = difference.value > 0 ? "sobran" : "faltan";
-    if (!window.confirm(`El corte no cuadra: ${what} ${money(Math.abs(difference.value))}. ¿Cerrar así?`)) return;
+    if (!(await confirmDialog(`El corte no cuadra: ${what} ${money(Math.abs(difference.value))}.\n\n¿Cerrar así?`, { confirmLabel: "Cerrar así", cancelLabel: "Volver" }))) return;
   }
   cashBusy.value = true;
   cashErr.value = "";
@@ -1054,8 +1118,14 @@ function onKey(e) {
   else if (voidOrder.value && !voidBusy.value) voidOrder.value = null;
 }
 
+const route = useRoute();
 onMounted(() => {
-  load().finally(loadDeviceSales);
+  // Llegó desde la alerta de «más de 12 horas» de la caja: abre directo el corte
+  load()
+    .then(() => {
+      if (route.query.corte && cashOpen.value && !showClose.value) prepClose();
+    })
+    .finally(loadDeviceSales);
   clock = setInterval(() => {
     now.value = Date.now();
   }, 60000);

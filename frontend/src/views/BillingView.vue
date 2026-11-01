@@ -254,6 +254,7 @@
 </template>
 
 <script setup>
+import { alertDialog, confirmDialog } from "../dialog";
 import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import AppShell from "../components/AppShell.vue";
@@ -420,7 +421,7 @@ async function startCheckout(plan) {
           "Se abrirá Mercado Pago. Al terminar, vuelve a esta pestaña y pulsa «Sincronizar pago».";
       }
       window.location.href = url;
-    } else alert("No se recibió link de Mercado Pago");
+    } else await alertDialog("No se recibió el link de Mercado Pago.\n\nInténtalo de nuevo en unos minutos.", { tone: "warn" });
   } catch (e) {
     const msg = e.response?.data || "Error al iniciar pago";
     flashOk.value = false;
@@ -468,9 +469,7 @@ async function handleReturnFromMp() {
 
 async function cancelPlan() {
   if (
-    !confirm(
-      "¿Cancelar la renovación? Sigues usando Mi Tiendita hasta el fin del periodo ya pagado."
-    )
+    !(await confirmDialog("¿Cancelar la renovación?\n\nSigues usando Mi Tiendita hasta el fin del periodo ya pagado.", { confirmLabel: "Cancelar renovación", cancelLabel: "Volver", tone: "danger" }))
   ) {
     return;
   }

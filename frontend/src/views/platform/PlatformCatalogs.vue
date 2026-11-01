@@ -377,6 +377,7 @@
 </template>
 
 <script setup>
+import { confirmDialog, promptDialog } from "../../dialog";
 import { computed, onMounted, reactive, ref } from "vue";
 import PlatformFrame from "../../components/platform/PlatformFrame.vue";
 import { apiService } from "../../apiService";
@@ -484,7 +485,7 @@ async function saveItem() {
   }
 }
 async function removeItem(item) {
-  if (!window.confirm(`¿Quitar «${item.name}» del catálogo? Las tiendas que ya lo tienen no se ven afectadas.`)) return;
+  if (!(await confirmDialog(`¿Quitar «${item.name}» del catálogo?\n\nLas tiendas que ya lo tienen no se ven afectadas.`, { confirmLabel: "Quitar", tone: "danger" }))) return;
   busy.value = true;
   try {
     await apiService.platformCatalogDelete(catalog.value, item.key);
@@ -663,7 +664,7 @@ async function useCode(key, cand) {
   const named = (cand.name ? `\nSegún ${cand.source}: ${[cand.name, cand.quantity].filter(Boolean).join(" · ")}` : "") + (reasonOf(key) ? `\n\nMotivo: ${reasonOf(key)}` : "");
   const sure = ["confirmed", "ai_confirmed", "ai_page"].includes(cand.confidence);
   const warn = sure ? "" : "\n\nATENCIÓN: este código NO está confirmado; ninguna fuente lo muestra con este producto. Un código equivocado cobra el producto que no es. Úsalo solo si lo verificaste con el producto en mano.";
-  if (!window.confirm(`¿Cambiar el código de «${nameOf(key)}»?\n\nAntes: ${codeOf(key) || "sin código"}\nAhora: ${cand.code}${named}${warn}`)) return;
+  if (!(await confirmDialog(`¿Cambiar el código de «${nameOf(key)}»?\n\nAntes: ${codeOf(key) || "sin código"}\nAhora: ${cand.code}${named}${warn}`, { confirmLabel: "Cambiar código", cancelLabel: "Volver", tone: sure ? "warn" : "danger" }))) return;
   busy.value = true;
   try {
     await apiService.platformCatalogSave(catalog.value, { code: cand.code }, key);
@@ -678,7 +679,7 @@ async function useCode(key, cand) {
 }
 async function applyConfirmed() {
   const keys = [...confirmedKeys.value];
-  if (!window.confirm(`Se cambiará el código de ${keys.length} productos. Todos están confirmados: el código existe en las bases públicas y el nombre coincide con el tuyo.\n\n¿Continuar?`)) return;
+  if (!(await confirmDialog(`Se cambiará el código de ${keys.length} productos.\n\nTodos están confirmados: el código existe en las bases públicas y el nombre coincide con el tuyo.`, { confirmLabel: "Cambiar códigos", cancelLabel: "Volver" }))) return;
   busy.value = true;
   let done = 0;
   try {
@@ -716,8 +717,9 @@ const verifyMatching = () => markVerified(onlineList.value.filter((r) => r.statu
 // ---------- Eliminar todo el catálogo ----------
 async function clearCatalog() {
   const name = catalogLabel(catalog.value);
-  const word = window.prompt(
-    `Vas a ELIMINAR todo el catálogo «${name}» (${items.value.length} productos).\n\nAntes de borrar se descarga una copia en CSV. Las tiendas que ya lo cargaron no se ven afectadas y el servidor no lo vuelve a llenar solo.\n\nPara confirmar escribe ELIMINAR:`
+  const word = await promptDialog(
+    `Vas a ELIMINAR todo el catálogo «${name}» (${items.value.length} productos).\n\nAntes de borrar se descarga una copia en CSV. Las tiendas que ya lo cargaron no se ven afectadas y el servidor no lo vuelve a llenar solo.\n\nPara confirmar escribe ELIMINAR.`,
+    { placeholder: "ELIMINAR", confirmLabel: "Eliminar catálogo", tone: "danger" }
   );
   if (word === null) return;
   if (String(word).trim().toUpperCase() !== "ELIMINAR") {
@@ -743,8 +745,9 @@ const unverifiedCount = computed(() => items.value.filter((i) => !i.verified).le
 async function clearUnverified() {
   const name = catalogLabel(catalog.value);
   const total = unverifiedCount.value;
-  const word = window.prompt(
-    `Vas a ELIMINAR ${total} productos NO verificados del catálogo «${name}». Los ${items.value.length - total} verificados se quedan.\n\nAntes de borrar se descarga una copia en CSV de todo el catálogo. Las tiendas que ya lo cargaron no se ven afectadas.\n\nPara confirmar escribe ELIMINAR:`
+  const word = await promptDialog(
+    `Vas a ELIMINAR ${total} productos NO verificados del catálogo «${name}». Los ${items.value.length - total} verificados se quedan.\n\nAntes de borrar se descarga una copia en CSV de todo el catálogo. Las tiendas que ya lo cargaron no se ven afectadas.\n\nPara confirmar escribe ELIMINAR.`,
+    { placeholder: "ELIMINAR", confirmLabel: "Eliminar no verificados", tone: "danger" }
   );
   if (word === null) return;
   if (String(word).trim().toUpperCase() !== "ELIMINAR") {
@@ -843,7 +846,7 @@ async function previewRecode() {
 async function applyRecode() {
   const c = recodePrev.value.counts;
   const text = `Se cambiará el catálogo «${catalogLabel(catalog.value)}»:\n\n• ${c.recode} productos recibirán el código de ${store.value.businessName}\n• ${c.clear} productos quedarán SIN código de barras\n\nLas tiendas que ya cargaron el catálogo no se ven afectadas. ¿Continuar?`;
-  if (!window.confirm(text)) return;
+  if (!(await confirmDialog(text, { confirmLabel: "Cambiar catálogo", cancelLabel: "Volver", tone: "danger" }))) return;
   recodeBusy.value = true;
   recodeError.value = "";
   try {

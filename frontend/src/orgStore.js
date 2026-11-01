@@ -3,6 +3,7 @@ import { apiService } from "./apiService";
 import { authStore, setSession } from "./authStore";
 import { clearBillingStatus } from "./billingStore";
 import { offlineStore } from "./offlineFlags";
+import { confirmDialog } from "./dialog";
 
 /**
  * Sucursales de la organización del dueño, para el submenú del menú «Más».
@@ -59,7 +60,7 @@ export function loadOrg({ force = false } = {}) {
 export async function enterBranch(branch) {
   if (
     offlineStore.pending > 0 &&
-    !window.confirm(`Hay ${offlineStore.pending} ventas de esta tienda sin subir en este equipo. Se subirán cuando vuelvas a ella. ¿Cambiar de sucursal de todos modos?`)
+    !(await confirmDialog(`¿Cambiar de sucursal de todos modos?\n\nHay ${offlineStore.pending} ventas de esta tienda sin subir en este equipo. Se subirán cuando vuelvas a ella.`, { confirmLabel: "Cambiar de sucursal", cancelLabel: "Quedarme" }))
   ) {
     return false;
   }

@@ -462,6 +462,14 @@
                   <strong>Papel 58 mm</strong><small>32 letras por renglón</small>
                 </button>
               </div>
+              <div v-if="printerStore.paper === '80' && printerStore.style === 'image'" class="adm-choices">
+                <button type="button" class="adm-choice" :aria-pressed="!printerStore.dots" @click="savePrinterSettings({ dots: 0 })">
+                  <strong>Nitidez normal</strong><small>Funciona en casi todas las impresoras</small>
+                </button>
+                <button type="button" class="adm-choice" :aria-pressed="printerStore.dots === 576" @click="savePrinterSettings({ dots: 576 })">
+                  <strong>Más nítida</strong><small>Usa todo el ancho de impresoras de 80 mm (576 puntos). Si el ticket sale cortado de los lados, vuelve a «normal».</small>
+                </button>
+              </div>
               <label v-if="printerStore.mode === 'serial'" class="adm-field">
                 <span>Velocidad del puerto</span>
                 <select class="adm-inp" :value="printerStore.baudRate" @change="savePrinterSettings({ baudRate: Number($event.target.value) })">
@@ -774,6 +782,7 @@
 </template>
 
 <script setup>
+import { confirmDialog } from "../dialog";
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { onBeforeRouteLeave, useRoute, useRouter } from "vue-router";
 import "../admin.css";
@@ -1115,7 +1124,7 @@ async function loadCatalogNow() {
 }
 async function removeCatalogUnpriced() {
   const n = catalog.value?.unpriced || 0;
-  if (!window.confirm(`¿Quitar los ${n} productos del catálogo que todavía no tienen precio? Los que ya tienen precio se quedan.`)) return;
+  if (!(await confirmDialog(`¿Quitar los ${n} productos del catálogo que todavía no tienen precio?\n\nLos que ya tienen precio se quedan.`, { confirmLabel: "Quitar", tone: "danger" }))) return;
   catalogBusy.value = true;
   catalogMsg.value = "";
   try {
@@ -1139,8 +1148,8 @@ watch(
 const wipeBusy = ref(false);
 const wipeResult = ref("");
 async function confirmWipeProducts() {
-  if (!window.confirm("¿Seguro que quieres eliminar TODOS los productos y categorías? Esta acción no se puede deshacer.")) return;
-  if (!window.confirm("Última oportunidad: se borrarán todos los productos, sus existencias, lotes y categorías. ¿Continuar?")) return;
+  if (!(await confirmDialog("¿Seguro que quieres eliminar TODOS los productos y categorías?\n\nEsta acción no se puede deshacer.", { confirmLabel: "Sí, eliminar todo", cancelLabel: "No", tone: "danger" }))) return;
+  if (!(await confirmDialog("Última oportunidad\n\nSe borrarán todos los productos, sus existencias, lotes y categorías.", { confirmLabel: "Eliminar todo", cancelLabel: "Volver", tone: "danger" }))) return;
   wipeBusy.value = true;
   wipeResult.value = "";
   try {
@@ -1372,8 +1381,8 @@ watch(
 );
 
 let leaving = false;
-function logout() {
-  if (dirty.value && !window.confirm("Tienes cambios sin guardar en Configuración. ¿Cerrar sesión de todos modos?")) return;
+async function logout() {
+  if (dirty.value && !(await confirmDialog("Tienes cambios sin guardar en Configuración.\n\n¿Cerrar sesión de todos modos?", { confirmLabel: "Cerrar sesión", cancelLabel: "Volver" }))) return;
   leaving = true;
   logoutSession().finally(() => router.push("/"));
 }
@@ -1427,9 +1436,9 @@ function onBeforeUnload(e) {
   e.preventDefault();
   e.returnValue = "";
 }
-onBeforeRouteLeave(() => {
+onBeforeRouteLeave(async () => {
   if (leaving || !dirty.value) return true;
-  return window.confirm("Tienes cambios sin guardar en Configuración. ¿Salir sin guardarlos?");
+  return confirmDialog("Tienes cambios sin guardar en Configuración.\n\n¿Salir sin guardarlos?", { confirmLabel: "Salir sin guardar", cancelLabel: "Volver" });
 });
 
 onMounted(async () => {

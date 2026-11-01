@@ -5,6 +5,8 @@
 import { toCanvas } from "html-to-image";
 
 const PAPER_SELECTOR = ".tk-paper";
+const SUPERSAMPLE = 3;
+const MAX_PIXELS = 28_000_000;
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
@@ -66,10 +68,15 @@ export async function renderTicketCanvas(path, { paper = "80", dots = 512 } = {}
     const width = el.offsetWidth;
     if (!width) throw new Error("El ticket no tiene tamaño.");
 
+    // Se dibuja al doble o triple de tamaño y luego se reduce con suavizado: las letras salen más definidas que dibujándolas
+    // directo al tamaño de la impresora. (Con tickets muy largos baja la escala para no pasar el tamaño máximo del lienzo.)
+    let ss = SUPERSAMPLE;
+    while (ss > 1 && dots * ss * ((el.offsetHeight * dots * ss) / width) > MAX_PIXELS) ss -= 1;
     const raw = await toCanvas(el, {
-      pixelRatio: dots / width,
+      pixelRatio: (dots / width) * ss,
       backgroundColor: "#ffffff",
-      style: { margin: "0", boxShadow: "none", transform: "none" },
+      // Sin el margen superior ni el borde rasgado de la vista en pantalla: en papel no sirven y solo dejan blanco arriba
+      style: { margin: "0", boxShadow: "none", transform: "none", paddingTop: "0px", mask: "none", WebkitMask: "none" },
     });
 
     // Ancho exacto de la impresora
@@ -79,6 +86,8 @@ export async function renderTicketCanvas(path, { paper = "80", dots = 512 } = {}
     const ctx = out.getContext("2d");
     ctx.fillStyle = "#fff";
     ctx.fillRect(0, 0, out.width, out.height);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
     ctx.drawImage(raw, 0, 0, out.width, out.height);
     return out;
   } finally {
@@ -86,12 +95,16 @@ export async function renderTicketCanvas(path, { paper = "80", dots = 512 } = {}
   }
 }
 
-/** Canvas → bitmap de 1 bit (negro / blanco) listo para ESC/POS. Quita el blanco sobrante al final. */
-export function canvasToBitmap(canvas, { threshold = 180 } = {}) {
+/**
+ * Canvas → bitmap de 1 bit (negro / blanco) listo para ESC/POS.
+ * Quita el blanco sobrante de arriba (deja unas filas) y de abajo.
+ */
+export function canvasToBitmap(canvas, { threshold = 185, padTop = 3, padBottom = 12 } = {}) {
   const { width, height } = canvas;
   const px = canvas.getContext("2d", { willReadFrequently: true }).getImageData(0, 0, width, height).data;
   const bytesPerRow = Math.ceil(width / 8);
-  const data = new Uint8Array(bytesPerRow * height);
+  const ink = new Uint8Array(width * height);
+  let firstInk = -1;
   let lastInk = 0;
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
@@ -99,12 +112,22 @@ export function canvasToBitmap(canvas, { threshold = 180 } = {}) {
       const a = px[i + 3] / 255;
       const lum = (0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2]) * a + 255 * (1 - a);
       if (lum < threshold) {
-        data[y * bytesPerRow + (x >> 3)] |= 0x80 >> (x & 7);
+        ink[y * width + x] = 1;
+        if (firstInk < 0) firstInk = y;
         lastInk = y;
       }
     }
   }
-  return { width, height: Math.min(height, lastInk + 12), bytesPerRow, data };
+  const top = Math.max(0, firstInk - padTop);
+  const rows = Math.max(1, Math.min(height, lastInk + padBottom) - top);
+  const data = new Uint8Array(bytesPerRow * rows);
+  for (let r = 0; r < rows; r++) {
+    const y = top + r;
+    for (let x = 0; x < width; x++) {
+      if (ink[y * width + x]) data[r * bytesPerRow + (x >> 3)] |= 0x80 >> (x & 7);
+    }
+  }
+  return { width, height: rows, bytesPerRow, data };
 }
 
 export async function renderTicketBitmap(path, opts = {}) {

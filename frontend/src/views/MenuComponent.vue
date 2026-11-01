@@ -2,11 +2,26 @@
   <AppShell>
     <div class="pos" :class="{ manage: mode === 'manage' }">
       <!-- Aviso de caja abierta mucho tiempo -->
-      <div v-if="cashOpenWarning" class="cash-warning-banner" role="alert">
+      <div v-if="shiftInfo.state === 'blocked'" class="cash-warning-banner" role="alert">
         <PosIcon name="alert" :size="18" />
-        <span>La caja lleva abierta más de 12 horas. Las ventas y el escaneo están bloqueados hasta que hagas el corte.</span>
-        <router-link to="/orders">Ir al corte de caja</router-link>
+        <span>La caja lleva abierta {{ shiftInfo.postponed && shiftInfo.hours < 15 ? 'más de lo acordado' : 'más de 15 horas' }}. Las ventas y el escaneo están bloqueados hasta que hagas el corte.</span>
+        <router-link to="/orders?corte=1">Ir al corte de caja</router-link>
       </div>
+      <div v-else-if="shiftInfo.state === 'postponed'" class="cash-warning-banner" role="status">
+        <PosIcon name="alert" :size="18" />
+        <span>Corte pospuesto: haz el corte a más tardar a las {{ shiftClockText(shiftInfo.until) }}. Después se bloquean las ventas.</span>
+        <router-link to="/orders?corte=1">Hacer el corte ahora</router-link>
+      </div>
+      <CashLimitDialog
+        v-if="cashSession && (shiftInfo.state === 'ask' || (shiftInfo.state === 'blocked' && !limitDismissed))"
+        :session="cashSession"
+        :status="shiftInfo"
+        :now="shiftNow"
+        :can-close="shiftInfo.state === 'blocked'"
+        @now="goCut"
+        @postpone="postponeShift"
+        @close="limitDismissed = true"
+      />
 
       <!-- ═══════════ MODO VENTA ═══════════ -->
       <template v-if="mode === 'pos'">
@@ -911,7 +926,7 @@
       </Teleport>
 
       <!-- ¿Imprimir el ticket de esta compra? -->
-      <PrintAskDialog
+      <NoticeDialog
         :open="Boolean(printAsk)"
         :label="printAsk ? `Ticket ${String(printAsk.order.id || '').slice(-6).toUpperCase()}` : ''"
         :amount="printAsk && Number(printAsk.order.total) > 0 ? money(printAsk.order.total) : ''"
@@ -1716,7 +1731,10 @@ import AppShell from "../components/AppShell.vue";
 import MagicPricesSheet from "../components/MagicPricesSheet.vue";
 import BulkPricesDialog from "../components/BulkPricesDialog.vue";
 import PhotoCropDialog from "../components/PhotoCropDialog.vue";
-import PrintAskDialog from "../components/PrintAskDialog.vue";
+import NoticeDialog from "../components/NoticeDialog.vue";
+import CashLimitDialog from "../components/CashLimitDialog.vue";
+import { alertDialog, confirmDialog, promptDialog } from "../dialog";
+import { isBlocking, postponeCut, shiftStatus } from "../cashShift";
 import CameraScanner from "../components/CameraScanner.vue";
 import PosIcon from "../components/PosIcon.js";
 import { ref, reactive, computed, onMounted, onUnmounted, watch, nextTick } from "vue";
@@ -1799,7 +1817,7 @@ function round2(n) {
 const CATEGORY_HUES = [212, 28, 152, 274, 342, 46, 190, 118, 8, 236];
 
 export default {
-  components: { AppShell, MagicPricesSheet, BulkPricesDialog, PhotoCropDialog, PrintAskDialog, CameraScanner, PosIcon },
+  components: { AppShell, MagicPricesSheet, BulkPricesDialog, PhotoCropDialog, NoticeDialog, CashLimitDialog, CameraScanner, PosIcon },
   directives: { selectOnFocus: vSelectOnFocus },
   props: {
     initialMode: { type: String, default: "pos" },
@@ -2117,7 +2135,7 @@ export default {
     async function bulkDeleteSelected() {
       const count = selectedIds.value.size;
       if (!count) return;
-      if (!window.confirm(`¿Eliminar ${count} ${count === 1 ? 'producto' : 'productos'}? Esta acción no se puede deshacer.`)) return;
+      if (!(await confirmDialog(`¿Eliminar ${count} ${count === 1 ? 'producto' : 'productos'}?\n\nEsta acción no se puede deshacer.`, { confirmLabel: "Eliminar", tone: "danger" }))) return;
       bulkDeleting.value = true;
       try {
         await apiService.deleteFoodsBulk([...selectedIds.value]);
@@ -2128,7 +2146,7 @@ export default {
         selectedIds.value = new Set();
         selectMode.value = false;
       } catch (e) {
-        window.alert("No se pudieron eliminar los productos. Inténtalo de nuevo.");
+        alertDialog("No se pudieron eliminar los productos.\n\nInténtalo de nuevo.", { tone: "warn" });
       } finally {
         bulkDeleting.value = false;
       }
@@ -2382,7 +2400,21 @@ export default {
 
     // Aviso de caja abierta mucho tiempo
     const cashSession = ref(null);
-    const cashOpenWarning = ref(false);
+    // Más de 12 h con la caja abierta: alerta para hacer el corte ahora o posponerlo una sola vez (máximo 15 h en total)
+    const shiftNow = ref(Date.now());
+    const limitDismissed = ref(false);
+    const shiftInfo = computed(() => shiftStatus(cashSession.value, shiftNow.value));
+    const cashOpenWarning = computed(() => isBlocking(shiftInfo.value));
+    const shiftClockText = (ms) => storeClock(new Date(ms), venueStore.timezone);
+    function goCut() {
+      router.push({ path: "/orders", query: { corte: "1" } });
+    }
+    function postponeShift(until) {
+      if (postponeCut(cashSession.value, until)) {
+        shiftNow.value = Date.now();
+        msg.value = `Corte pospuesto hasta las ${shiftClockText(until)}.`;
+      }
+    }
     const cashOpen = computed(() => Boolean(cashSession.value));
     const openingFloat = ref("");
     const cashBusy = ref(false);
@@ -2414,29 +2446,17 @@ export default {
         if (data.open && data.session) {
           cashSession.value = data.session;
           await saveCachedCash(authStore.tenantId, data.session);
-          const opened = new Date(data.session.createdAt || data.session.openedAt);
-          const hoursOpen = (Date.now() - opened.getTime()) / 3600000;
-          cashOpenWarning.value = hoursOpen >= 12;
         } else {
           cashSession.value = null;
-          cashOpenWarning.value = false;
           await saveCachedCash(authStore.tenantId, null);
         }
       } catch (error) {
         if (isNetworkError(error)) {
           const cached = await loadCachedCash(authStore.tenantId);
           cashSession.value = cached;
-          if (cached) {
-            const opened = new Date(cached.createdAt || cached.openedAt);
-            const hoursOpen = (Date.now() - opened.getTime()) / 3600000;
-            cashOpenWarning.value = hoursOpen >= 12;
-          } else {
-            cashOpenWarning.value = false;
-          }
           return;
         }
         cashSession.value = null;
-        cashOpenWarning.value = false;
       }
     }
 
@@ -2723,7 +2743,7 @@ export default {
       if (foodForm.menuId === "__ai") return;
       catTouched = true;
       if (foodForm.menuId !== "__new") return;
-      const name = String(window.prompt("Nombre de la nueva categoría") || "").trim();
+      const name = String((await promptDialog("Nombre de la nueva categoría", { placeholder: "Ej. Botanas", confirmLabel: "Crear categoría" })) || "").trim();
       if (!name) {
         foodForm.menuId = selectedMenuId.value || menus.value[0]?.id || "";
         return;
@@ -3051,8 +3071,8 @@ export default {
     );
     const reprintHref = computed(() =>
       lastTicketOffline.value
-        ? `/print/offline/${lastTicketId.value}`
-        : `/print/order/${lastTicketId.value}?mode=receipt`
+        ? `/print/offline/${lastTicketId.value}?autoprint=1`
+        : `/print/order/${lastTicketId.value}?mode=receipt&autoprint=1`
     );
 
     const scanPlaceholder = computed(() => {
@@ -3842,8 +3862,8 @@ export default {
       showMobileCart.value = false;
     }
 
-    function clearCart() {
-      if (lines.value.length && !window.confirm("¿Vaciar el ticket? Se quitarán todos los productos agregados.")) return;
+    async function clearCart() {
+      if (lines.value.length && !(await confirmDialog("¿Vaciar el ticket?\n\nSe quitarán todos los productos agregados.", { confirmLabel: "Vaciar ticket", tone: "danger" }))) return;
       lines.value.forEach((l) => reportRemoved(l, "cleared"));
       resetTicket();
       focusScan();
@@ -4082,8 +4102,8 @@ export default {
       showHeld.value = false;
       focusScan();
     }
-    function dropHeld(id) {
-      if (!window.confirm("¿Descartar este ticket en espera?")) return;
+    async function dropHeld(id) {
+      if (!(await confirmDialog("¿Descartar este ticket en espera?", { confirmLabel: "Descartar", tone: "danger" }))) return;
       heldTickets.value = heldTickets.value.filter((t) => t.id !== id);
       saveHeld();
     }
@@ -4836,7 +4856,7 @@ export default {
         return;
       }
       const name = editingFood.value.name || "este producto";
-      if (!window.confirm(`¿Seguro que quieres quitar “${name}” del catálogo?`)) return;
+      if (!(await confirmDialog(`¿Seguro que quieres quitar “${name}” del catálogo?`, { confirmLabel: "Quitar", tone: "danger" }))) return;
       await apiService.deleteFood(editingFood.value.id);
       productos.value = productos.value.filter((p) => p.id !== editingFood.value.id);
       pickFoods.value = pickFoods.value.filter((p) => p.id !== editingFood.value.id);
@@ -4881,7 +4901,9 @@ export default {
       focusScan();
     }
 
+    let shiftTimer = null;
     onMounted(async () => {
+      shiftTimer = setInterval(() => (shiftNow.value = Date.now()), 30000);
       window.addEventListener("online", flushPendingCodes);
       flushPendingCodes();
       await fetchMenus();
@@ -4899,6 +4921,7 @@ export default {
     });
 
     onUnmounted(() => {
+      clearInterval(shiftTimer);
       window.removeEventListener("online", flushPendingCodes);
       stopScaleWatch();
       window.removeEventListener("keydown", onHotkey);
@@ -5222,6 +5245,12 @@ export default {
       confirmPayment,
       cashOpen,
       cashOpenWarning,
+      shiftInfo,
+      shiftNow,
+      limitDismissed,
+      shiftClockText,
+      goCut,
+      postponeShift,
       cashBlocked,
       openingFloat,
       cashBusy,

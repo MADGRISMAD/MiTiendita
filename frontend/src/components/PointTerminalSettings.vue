@@ -88,6 +88,7 @@
 </template>
 
 <script setup>
+import { confirmDialog } from "../dialog";
 import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import PosIcon from "./PosIcon.js";
@@ -164,7 +165,7 @@ async function pick(id) {
 }
 
 async function unlink() {
-  if (!window.confirm("¿Desvincular tu cuenta y terminal? Con tarjeta se cobrará manualmente hasta que la vuelvas a vincular.")) return;
+  if (!(await confirmDialog("¿Desvincular tu cuenta y terminal?\n\nCon tarjeta se cobrará manualmente hasta que la vuelvas a vincular.", { confirmLabel: "Desvincular", tone: "danger" }))) return;
   busy.value = true;
   try {
     await apiService.pointDisconnect();

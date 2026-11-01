@@ -271,6 +271,7 @@
 </template>
 
 <script setup>
+import { confirmDialog } from "../dialog";
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from "vue";
 import PosIcon from "./PosIcon.js";
 import CameraScanner from "./CameraScanner.vue";
@@ -451,7 +452,7 @@ async function applyCount() {
 }
 
 async function cancelCount() {
-  if (!window.confirm("¿Cancelar este conteo? Lo contado se descarta y no cambia el inventario.")) return;
+  if (!(await confirmDialog("¿Cancelar este conteo?\n\nLo contado se descarta y no cambia el inventario.", { confirmLabel: "Cancelar conteo", cancelLabel: "Volver", tone: "danger" }))) return;
   busy.value = true;
   try {
     await apiService.cancelStocktake(current.value.id);
