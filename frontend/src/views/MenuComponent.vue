@@ -1742,6 +1742,7 @@ import { useRoute, useRouter } from "vue-router";
 import { apiService } from "../apiService";
 import { store } from "../store";
 import { venueStore, fetchVenueSettings } from "../venueStore";
+import { defaultPayMethod, onlyEnabled } from "../payMethods";
 import { billingStore } from "../billingStore";
 import { cardFeeRateOf, cartTotals, lineBreakdown, rateOf } from "../tax";
 import { storeClock } from "../storeTime";
@@ -2175,10 +2176,14 @@ export default {
       { id: "other", label: "Otro", icon: "receipt" },
     ];
     // El fiado revisa el saldo y el límite del cliente en el servidor: necesita internet
+    // Solo se ofrecen las que la tienda no apagó en Ajustes → Ventas → Formas de pago
     const payMethods = computed(() =>
-      offlineStore.online
-        ? [...BASE_PAY_METHODS.slice(0, 4), { id: "credit", label: "Fiado", icon: "users" }, BASE_PAY_METHODS[4]]
-        : BASE_PAY_METHODS
+      onlyEnabled(
+        offlineStore.online
+          ? [...BASE_PAY_METHODS.slice(0, 4), { id: "credit", label: "Fiado", icon: "users" }, BASE_PAY_METHODS[4]]
+          : BASE_PAY_METHODS,
+        venueStore.disabledPayMethods
+      )
     );
 
     // ── Fiado ──
@@ -2257,7 +2262,7 @@ export default {
     watch(
       () => offlineStore.online,
       (on) => {
-        if (!on && payMethod.value === "credit") payMethod.value = "cash";
+        if (!on && payMethod.value === "credit") payMethod.value = defaultPayMethod(payMethods.value, venueStore.disabledPayMethods);
       }
     );
     const payReference = ref("");
@@ -4180,7 +4185,7 @@ export default {
         return;
       }
       if (!lines.value.length || sending.value) return;
-      payMethod.value = "cash";
+      payMethod.value = defaultPayMethod(payMethods.value, venueStore.disabledPayMethods);
       cardFee.value = cardFeeOn.value;
       payCashReceived.value = "";
       payCardAmount.value = "";

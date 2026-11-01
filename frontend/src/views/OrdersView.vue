@@ -498,6 +498,7 @@ import AppShell from "../components/AppShell.vue";
 import PosIcon from "../components/PosIcon.js";
 import { apiService } from "../apiService";
 import { venueStore } from "../venueStore";
+import { defaultPayMethod, onlyEnabled } from "../payMethods";
 import { formatStoreDate, storeClock, storeDayKey } from "../storeTime";
 import { formatQtyUnit, unitOf } from "../bulk";
 import { offlineStore } from "../offlineFlags";
@@ -557,12 +558,14 @@ const payOrder = ref(null);
 const payMethod = ref("cash");
 const payBusy = ref(false);
 const cardExtraIva = ref(false);
-const payMethods = [
+const BASE_PAY_METHODS = [
   { id: "cash", label: "Efectivo", icon: "cash" },
   { id: "card", label: "Tarjeta", icon: "card" },
   { id: "transfer", label: "Transferencia", icon: "transfer" },
   { id: "other", label: "Otro", icon: "receipt" },
 ];
+// Solo las formas de pago que la tienda no apagó en Ajustes
+const payMethods = computed(() => onlyEnabled(BASE_PAY_METHODS, venueStore.disabledPayMethods));
 
 const returnOrder = ref(null);
 const returnRows = ref([]);
@@ -1052,7 +1055,7 @@ function openPay(o) {
     return;
   }
   payOrder.value = o;
-  payMethod.value = "cash";
+  payMethod.value = defaultPayMethod(payMethods.value, venueStore.disabledPayMethods);
   // Si la tienda cobra comisión, ya viene marcada al elegir tarjeta; el cajero puede quitarla
   cardExtraIva.value = cardFeeOn.value;
 }

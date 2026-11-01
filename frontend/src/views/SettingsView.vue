@@ -154,6 +154,33 @@
           <!-- ======= Ventas e impuestos ======= -->
           <template v-else-if="section === 'ventas'">
             <section class="adm-card cfg-card">
+              <h3>Formas de pago</h3>
+              <p class="adm-hint">
+                Apaga las que no uses: ya no salen en la ventana de cobro (ni al cobrar un pedido ni al abonar un fiado). Los reportes y el historial
+                siguen mostrando las ventas que ya se hicieron con ellas. Siempre tiene que quedar al menos una encendida.
+              </p>
+              <ul class="pm-list">
+                <li v-for="m in PAY_METHOD_OPTIONS" :key="m.id" class="pm-row">
+                  <div class="pm-info">
+                    <strong>{{ m.label }}</strong>
+                    <small>{{ m.hint }}</small>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    class="adm-switch"
+                    :aria-checked="payOn(m.id)"
+                    :aria-label="`${payOn(m.id) ? 'Apagar' : 'Encender'} ${m.label}`"
+                    :disabled="m.id === 'split' && !splitAvailable"
+                    @click="togglePay(m.id)"
+                  ></button>
+                </li>
+              </ul>
+              <p v-if="payError" class="adm-err" role="alert">{{ payError }}</p>
+              <p v-else-if="!splitAvailable" class="state-line off"><i></i>Mixto no se ofrece mientras Efectivo o Tarjeta estén apagados.</p>
+            </section>
+
+            <section class="adm-card cfg-card">
               <h3>Tasa de IVA</h3>
               <p class="adm-hint">Con ella se desglosa el IVA en tickets, corte y reportes. Si un precio lleva IVA incluido o no se decide en cada producto.</p>
               <div class="adm-choices taxes">
@@ -799,6 +826,7 @@ import { stationState, syncPrintStation } from "../printStation";
 import { SCALE_COMMANDS, connectScale, disconnectScale, saveScaleSettings, scaleLive, scaleStore, scaleSupported } from "../scale";
 import { errText as sharedErrText, money } from "../textUtils";
 import { useFlash } from "../useFlash";
+import { PAY_METHOD_IDS, PAY_METHOD_OPTIONS, cleanDisabled, payMethodOn } from "../payMethods";
 import { appBuiltAt, appVersion, applyUpdate, checkForUpdate, updateState } from "../appUpdate";
 
 const PRINTER_MODES = [
@@ -962,6 +990,7 @@ function fromStore() {
     cardFeeEnabled: Boolean(s.cardFeeEnabled),
     cardFeePercent: Number(s.cardFeePercent ?? 4),
     scaleBarcodeMode: s.scaleBarcodeMode === "price" ? "price" : "weight",
+    disabledPayMethods: cleanDisabled(s.disabledPayMethods),
     dailySummaryEnabled: Boolean(s.dailySummaryEnabled),
     dailySummaryEmail: s.dailySummaryEmail || authStore.email || "",
   };
@@ -970,9 +999,28 @@ const form = reactive(fromStore());
 const snapshot = ref(JSON.stringify(fromStore()));
 const FIELDS_BY_SECTION = {
   negocio: ["businessName", "businessType", "address", "phone", "logoUrl", "primaryColor", "accentColor", "timezone"],
-  ventas: ["taxPercent", "cardFeeEnabled", "cardFeePercent", "scaleBarcodeMode", "dailySummaryEnabled", "dailySummaryEmail"],
+  ventas: ["taxPercent", "cardFeeEnabled", "cardFeePercent", "scaleBarcodeMode", "disabledPayMethods", "dailySummaryEnabled", "dailySummaryEmail"],
   inventario: ["inventoryEnabled", "allowNegativeStock", "costMethod"],
 };
+// Formas de pago que salen al cobrar
+const payError = ref("");
+const payOn = (id) => payMethodOn(id, form.disabledPayMethods);
+const splitAvailable = computed(() => !form.disabledPayMethods.includes("cash") && !form.disabledPayMethods.includes("card"));
+function togglePay(id) {
+  payError.value = "";
+  const off = new Set(form.disabledPayMethods);
+  if (off.has(id)) off.delete(id);
+  else {
+    off.add(id);
+    // Tiene que quedar al menos una forma de pago a la vista (Mixto cuenta solo si hay Efectivo y Tarjeta)
+    const left = PAY_METHOD_IDS.filter((m) => payMethodOn(m, [...off]));
+    if (!left.length) {
+      payError.value = "Deja al menos una forma de pago encendida.";
+      return;
+    }
+  }
+  form.disabledPayMethods = PAY_METHOD_IDS.filter((m) => off.has(m));
+}
 const dirty = computed(() => JSON.stringify({ ...form }) !== snapshot.value);
 function dirtyIn(id) {
   const keys = FIELDS_BY_SECTION[id];
@@ -1070,6 +1118,7 @@ async function save() {
         cardFeeEnabled: Boolean(form.cardFeeEnabled),
         cardFeePercent: Math.min(30, Math.max(0, Number(form.cardFeePercent) || 0)),
         scaleBarcodeMode: form.scaleBarcodeMode === "price" ? "price" : "weight",
+        disabledPayMethods: cleanDisabled(form.disabledPayMethods),
         dailySummaryEnabled: Boolean(form.dailySummaryEnabled),
         dailySummaryEmail: String(form.dailySummaryEmail || "").trim(),
       },
@@ -1615,6 +1664,11 @@ onBeforeUnmount(() => {
 .example p { margin: 0; font-size: 0.92rem; line-height: 1.45; }
 
 /* Inventario */
+.pm-list { list-style: none; margin: 0.4rem 0 0; padding: 0; display: grid; }
+.pm-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.7rem 0; border-top: 1px solid var(--timber-line); }
+.pm-row:first-child { border-top: 0; }
+.pm-info { display: grid; gap: 0.1rem; min-width: 0; }
+.pm-info small { color: var(--timber-muted); }
 .switch-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; }
 .switch-head h3 { margin: 0 0 0.25rem; }
 .state-line { display: flex; align-items: center; gap: 0.5rem; margin: 0; font-size: 0.88rem; font-weight: 700; }

@@ -101,6 +101,8 @@ import { computed, onMounted, ref } from "vue";
 import PosIcon from "./PosIcon.js";
 import { apiService } from "../apiService";
 import { money } from "../textUtils";
+import { venueStore } from "../venueStore";
+import { defaultPayMethod, onlyEnabled } from "../payMethods";
 
 const props = defineProps({
   customer: { type: Object, required: true },
@@ -109,11 +111,13 @@ const props = defineProps({
 });
 const emit = defineEmits(["close", "changed"]);
 
-const METHODS = [
+const ALL_METHODS = [
   { id: "cash", label: "Efectivo", icon: "cash" },
   { id: "card", label: "Tarjeta", icon: "card" },
   { id: "transfer", label: "Transferencia", icon: "transfer" },
 ];
+// Solo las formas de pago que la tienda no apagó en Ajustes
+const METHODS = computed(() => onlyEnabled(ALL_METHODS, venueStore.disabledPayMethods));
 
 const loading = ref(true);
 const busy = ref(false);
@@ -122,7 +126,7 @@ const flash = ref("");
 const acct = ref(null);
 const limit = ref(0);
 const amount = ref(null);
-const method = ref("cash");
+const method = ref(defaultPayMethod(ALL_METHODS, venueStore.disabledPayMethods));
 const note = ref("");
 
 const when = (v) => (v ? new Date(v).toLocaleString("es-MX", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "");

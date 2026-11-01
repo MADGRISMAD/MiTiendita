@@ -12,6 +12,7 @@ const { storeDayRange } = require('../utils/store-time');
 const INHERITED_SETTINGS = [
   'businessType', 'phone', 'logoUrl', 'primaryColor', 'accentColor', 'timezone', 'inventoryEnabled',
   'allowNegativeStock', 'costMethod', 'taxRate', 'cardFeeEnabled', 'cardFeePercent', 'scaleBarcodeMode',
+  'disabledPayMethods',
 ];
 
 /** Acceso a datos de producción para services/org.service.js. */
