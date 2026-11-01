@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const db = require('../database/mongodb');
 const platform = require('../controllers/platform.controller');
+const promoSvc = require('../services/promo.service');
 
 function run(tenant, body) {
   const calls = { events: [], updates: [] };
@@ -45,4 +46,39 @@ test('la licencia perpetua no lleva periodo: solo se registra el pago y se activ
   assert.equal(calls.updates[0].billingStatus, 'active');
   assert.equal(calls.updates[0].currentPeriodEnd, undefined);
   assert.equal(calls.events[0].months, null);
+});
+
+test('un pago a mano da por usada la promoción de lanzamiento: la pantalla de pago ya no se la ofrece', async () => {
+  const t = { id: 't1', plan: 'growth', billingInterval: 'month', billingStatus: 'trialing', promoEligible: true };
+  assert.equal(promoSvc.describe(t).eligible, true); // antes del pago la pantalla de pago la ofrecía
+  const { res, calls } = await run(t, { amount: 1497, months: 3, note: 'Pagó 3 meses en efectivo' });
+  assert.equal(res.code, 201);
+  const patch = calls.updates.find((u) => 'promoEligible' in u);
+  assert.equal(patch.promoEligible, false);
+  assert.equal(patch.promo.state, 'ended');
+  assert.equal(patch.promo.reason, 'manual_payment');
+  assert.equal(promoSvc.describe({ ...t, ...patch }).eligible, false); // lo que lee la pantalla de pago
+  assert.ok(calls.events.some((e) => e.type === 'promo_ended'));
+  assert.equal(calls.updates[0].billingStatus, 'active'); // el pago en sí se registra igual
+});
+
+test('la promoción ya activa en Mercado Pago no se toca con un pago a mano', async () => {
+  const promo = { state: 'active', amount: 166, fullAmount: 499, paymentsDone: 1 };
+  const { calls } = await run({ id: 't1', plan: 'growth', billingStatus: 'active', promoEligible: true, promo, mpPreapprovalId: 'pre_1' }, { amount: 499, months: 1 });
+  assert.equal(calls.updates.some((u) => 'promo' in u || 'promoEligible' in u), false);
+  assert.equal(calls.events.some((e) => e.type === 'promo_ended'), false);
+});
+
+test('promoción pendiente: sin suscripción de Mercado Pago se da por usada; con suscripción se respeta', async () => {
+  const pending = { state: 'pending', amount: 166, fullAmount: 499, paymentsDone: 0 };
+  const sinMp = await run({ id: 't1', plan: 'growth', billingStatus: 'trialing', promoEligible: true, promo: pending }, { amount: 499, months: 1 });
+  assert.equal(sinMp.calls.updates.some((u) => u.promoEligible === false), true);
+  const conMp = await run({ id: 't1', plan: 'growth', billingStatus: 'trialing', promoEligible: true, promo: pending, mpPreapprovalId: 'pre_1' }, { amount: 499, months: 1 });
+  assert.equal(conMp.calls.updates.some((u) => 'promo' in u || 'promoEligible' in u), false);
+});
+
+test('quien no era elegible a la promoción no recibe cambios de promoción', async () => {
+  const { calls } = await run({ id: 't1', plan: 'basic', billingStatus: 'trialing', promoEligible: false }, { amount: 499, months: 1 });
+  assert.equal(calls.updates.length, 1);
+  assert.equal(calls.events.length, 1);
 });

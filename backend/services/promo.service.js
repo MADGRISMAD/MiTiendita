@@ -133,6 +133,31 @@ async function onPayment(tenant, { key, source }) {
   return next;
 }
 
+/**
+ * Un cobro registrado a mano (efectivo, transferencia): la tienda ya empezó a pagar, así que la promoción de lanzamiento
+ * (solo para clientes que aún no pagan) se da por usada y deja de ofrecerse en su pantalla de pago.
+ * No toca una promoción que ya corre en Mercado Pago (la lleva el aviso de cada cobro, con el precio ya fijado allá).
+ * @returns el estado nuevo de la promoción, o null si no había nada que cambiar
+ */
+async function onManualPayment(tenant) {
+  if (!tenant || tenant.promoEligible !== true) return null;
+  const promo = tenant.promo;
+  if (promo?.state === 'active') return null;
+  if (promo?.state === 'pending' && tenant.mpPreapprovalId) return null;
+  const next = { state: 'ended', plan: tenant.plan, endedAt: new Date(), reason: 'manual_payment' };
+  await db.UpdateTenant(tenant.id, { promo: next, promoEligible: false });
+  await db
+    .CreateBillingEvent({
+      tenantId: tenant.id,
+      type: 'promo_ended',
+      plan: tenant.plan,
+      interval: 'month',
+      note: 'La promoción de lanzamiento se dio por usada: el cliente ya pagó (efectivo o transferencia)',
+    })
+    .catch(() => {});
+  return next;
+}
+
 /** Revisión por tiempo: si ya pasó la fecha del 3er cobro, sube al precio normal. */
 async function sweepTenant(tenant) {
   const promo = tenant?.promo;
@@ -153,4 +178,4 @@ async function sweepAll() {
   return ended;
 }
 
-module.exports = { isEligible, currentMonthly, describe, onCheckout, onPayment, sweepTenant, sweepAll, endPromo };
+module.exports = { isEligible, currentMonthly, describe, onCheckout, onPayment, onManualPayment, sweepTenant, sweepAll, endPromo };

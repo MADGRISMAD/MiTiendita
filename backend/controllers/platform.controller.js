@@ -1206,6 +1206,8 @@ async function manualPayment(req, res) {
       cancelAtPeriodEnd: false,
       ...(periodEnd ? { currentPeriodEnd: periodEnd } : {}),
     });
+    // Ya empezó a pagar: la promoción de lanzamiento se da por usada (si no, su pantalla de pago la sigue ofreciendo)
+    await promoSvc.onManualPayment(tenant).catch((e) => console.warn('[promo]', e.message));
 
     let commission = null;
     if (tenant.referrerId) {
