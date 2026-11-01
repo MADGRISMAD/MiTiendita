@@ -1398,15 +1398,25 @@
                     <span>Se pagará en dólares</span>
                   </label>
                   <template v-if="payInUsd">
-                    <div class="usd-grid">
-                      <label class="field">
-                        <span>Precio del dólar (pesos)</span>
-                        <input v-model.number="payUsdRate" v-select-on-focus class="inp num" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0.00" />
-                      </label>
-                      <div class="usd-total">
-                        <span>Total en dólares</span>
-                        <strong>US$ {{ totalUsd.toFixed(2) }}</strong>
-                      </div>
+                    <small class="usd-rate">
+                      Precio del dólar: <b>{{ usdRateValue ? money(usdRateValue) : "sin definir" }}</b>
+                      <button v-if="usdRateValue" type="button" class="usd-edit" @click="editUsdRate = !editUsdRate">{{ editUsdRate ? "listo" : "cambiar" }}</button>
+                    </small>
+                    <input
+                      v-if="editUsdRate || !usdRateValue"
+                      v-model.number="payUsdRate"
+                      v-select-on-focus
+                      class="inp sm num usd-rate-input"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      inputmode="decimal"
+                      placeholder="Pesos por US$1"
+                      aria-label="Precio del dólar en pesos"
+                    />
+                    <div class="usd-total">
+                      <span>Total en dólares</span>
+                      <strong>US$ {{ totalUsd.toFixed(2) }}</strong>
                     </div>
                     <p v-if="!usdRateValue" class="usd-note warn">Escribe a cuántos pesos está el dólar para convertir.</p>
                     <template v-else>
@@ -2421,6 +2431,7 @@ export default {
     const payInUsd = ref(false);
     const payUsd = ref("");
     const payUsdRate = ref("");
+    const editUsdRate = ref(false); // el precio del dólar sale como texto pequeño; «cambiar» deja corregirlo solo en esta venta
     const openingUsd = ref(""); // precio del dólar que se confirma al abrir la caja
     const usdRateNow = computed(() => Number(cashSession.value?.usdRate) || Number(venueStore.usdRate) || 0);
     const usdRateValue = computed(() => (Number(payUsdRate.value) > 0 ? Number(payUsdRate.value) : 0));
@@ -4254,6 +4265,7 @@ export default {
       payInUsd.value = false;
       payUsd.value = "";
       payUsdRate.value = "";
+      editUsdRate.value = false;
       showMobileCart.value = false;
       showPayment.value = true;
       focusPayField();
@@ -5274,6 +5286,7 @@ export default {
       payInUsd,
       payUsd,
       payUsdRate,
+      editUsdRate,
       openingUsd,
       usdRateValue,
       usingUsd,
@@ -8014,7 +8027,10 @@ html[data-theme="dark"] .avatar {
 
 /* Cobro en dólares */
 .usd-box { display: grid; gap: 0.6rem; padding: 0.7rem 0.8rem; border: 1px solid var(--timber-line); border-radius: 0.8rem; background: var(--timber-panel-elevated); }
-.usd-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0.6rem; align-items: end; }
+.usd-rate { color: var(--timber-muted); font-size: 0.8rem; }
+.usd-rate b { color: var(--timber-ink); font-variant-numeric: tabular-nums; }
+.usd-edit { margin-left: 0.4rem; padding: 0; border: 0; background: none; color: var(--timber-primary); font: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; }
+.usd-rate-input { max-width: 9rem; }
 .usd-total { display: grid; gap: 0.1rem; }
 .usd-total span { font-size: 0.78rem; color: var(--timber-muted); }
 .usd-total strong { font-size: 1.15rem; font-variant-numeric: tabular-nums; }

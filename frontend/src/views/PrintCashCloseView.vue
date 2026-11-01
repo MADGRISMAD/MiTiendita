@@ -115,11 +115,11 @@
             <div class="cc-sum">
               <div class="cc-row"><i></i><span>Fondo inicial</span><b>{{ money(opening) }}</b></div>
               <div class="cc-row"><i>+</i><span>Ventas en efectivo</span><b>{{ money(cashSales) }}</b></div>
+              <div v-if="usdReceived > 0" class="cc-sub">Dólares que debe haber: US$ {{ usdReceived.toFixed(2) }}</div>
               <div v-if="abonos.cash" class="cc-row"><i>+</i><span>Abonos en efectivo</span><b>{{ money(abonos.cash) }}</b></div>
               <div v-if="cashRefunds" class="cc-row"><i>−</i><span>Devoluciones en efectivo</span><b>{{ money(cashRefunds) }}</b></div>
               <div class="cc-row eq"><i>=</i><span>Debe haber</span><b>{{ money(expectedCash) }}</b></div>
               <div v-if="closed" class="cc-row counted"><i></i><span>Se contó</span><b>{{ money(session.countedCash) }}</b></div>
-              <div v-if="usdReceived > 0" class="cc-row"><i></i><span>Dólares recibidos (aparte)</span><b>US$ {{ usdReceived.toFixed(2) }}</b></div>
             </div>
 
             <div class="tk-stamp-row">
@@ -533,6 +533,7 @@ onMounted(async () => {
   text-align: center;
 }
 .cc-row b { font-weight: 800; white-space: nowrap; }
+.cc-sub { padding: 0 0 0.25rem 1.6rem; font-size: 0.78rem; color: var(--timber-muted, #667); }
 .cc-row.eq {
   margin-top: 0.6mm;
   padding-top: 1mm;

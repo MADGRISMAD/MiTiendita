@@ -274,12 +274,13 @@ export function buildCashClose(t, { cols = 48 } = {}) {
   section("Cuadre del cajón");
   p.lr("  Fondo inicial", money(t.opening));
   p.lr("+ Ventas en efectivo", money(t.cashSales));
+  if (Number(t.usdReceived) > 0) p.lr("  Dólares que debe haber", `US$ ${Number(t.usdReceived).toFixed(2)}`);
   if (Number(t.abonosCash)) p.lr("+ Abonos en efectivo", money(t.abonosCash));
   if (Number(t.cashRefunds)) p.lr("- Devoluciones en efectivo", `-${money(t.cashRefunds)}`);
   p.rule();
   p.bold().lr("= Debe haber", money(t.expectedCash)).bold(false);
   if (t.closed) p.bold().lr("  Se contó", money(t.countedCash)).bold(false);
-  if (Number(t.usdReceived) > 0) p.lr("  Dólares (aparte)", `US$ ${Number(t.usdReceived).toFixed(2)}`);
+
 
   // Veredicto
   p.feed(1).align("center").bold().size(2).wrapped(`[ ${String(t.verdictWord || "").toUpperCase()} ]`, { cols: half });

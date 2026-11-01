@@ -168,11 +168,6 @@
           <strong>{{ money(abonos.total) }}</strong>
           <small>{{ abonos.count }} {{ abonos.count === 1 ? 'abono' : 'abonos' }} de clientes</small>
         </div>
-        <div v-if="Number(totals.usd) > 0" class="kpi">
-          <span><PosIcon name="cash" :size="16" /> Dólares recibidos</span>
-          <strong>US$ {{ Number(totals.usd).toFixed(2) }}</strong>
-          <small>equivalen a {{ money(totals.usdPesos) }} · se cuentan aparte, no están en el efectivo en pesos</small>
-        </div>
         <div class="kpi drawer">
           <span>Debe haber en el cajón</span>
           <strong>{{ money(expectedCash) }}</strong>
@@ -180,6 +175,7 @@
             Fondo {{ money(session?.openingFloat) }} + efectivo
             <template v-if="abonos.cash"> + abonos {{ money(abonos.cash) }}</template>
             <template v-if="Number(session?.cashRefunds)"> − devoluciones {{ money(session.cashRefunds) }}</template>
+            <template v-if="Number(totals.usd) > 0"> · y debe haber US$ {{ Number(totals.usd).toFixed(2) }} en dólares</template>
           </small>
         </div>
       </section>
@@ -320,11 +316,11 @@
 
             <dl class="sum">
               <div><dt>Fondo inicial</dt><dd>{{ money(session?.openingFloat) }}</dd></div>
-              <div><dt>Ventas en efectivo</dt><dd>+ {{ money(totals.cash) }}</dd></div>
+              <div><dt>Ventas en efectivo</dt><dd>{{ Number(totals.cash) < 0 ? '−' : '+' }} {{ money(Math.abs(Number(totals.cash))) }}</dd></div>
+              <div v-if="Number(totals.usd) > 0" class="sum-info"><dt>Dólares que debe haber</dt><dd>US$ {{ Number(totals.usd).toFixed(2) }}</dd></div>
               <div v-if="abonos.cash"><dt>Abonos en efectivo</dt><dd>+ {{ money(abonos.cash) }}</dd></div>
               <div v-if="Number(session?.cashRefunds)"><dt>Devoluciones en efectivo</dt><dd>− {{ money(session.cashRefunds) }}</dd></div>
               <div class="sum-total"><dt>Debe haber</dt><dd>{{ money(expectedCash) }}</dd></div>
-              <div v-if="Number(totals.usd) > 0" class="sum-info"><dt>Dólares (se cuentan aparte)</dt><dd>US$ {{ Number(totals.usd).toFixed(2) }} · equivalen a {{ money(totals.usdPesos) }}</dd></div>
               <div class="sum-info"><dt>Tarjeta · transferencia · otro</dt><dd>{{ money(totals.card) }} · {{ money(totals.transfer) }} · {{ money(totals.other) }}</dd></div>
             </dl>
 
