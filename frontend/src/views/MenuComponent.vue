@@ -5533,6 +5533,8 @@ kbd {
 .tile:disabled { opacity: 0.45; cursor: not-allowed; }
 .tile-name {
   flex: 1 0 auto;
+  min-width: 0;
+  overflow-wrap: anywhere; /* un nombre sin espacios también se parte y termina en «…» */
   font-size: 0.9rem;
   font-weight: 700;
   line-height: 1.25;
@@ -5898,12 +5900,20 @@ html[data-theme="dark"] .avatar {
   grid-area: main;
   min-width: 0;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 0.12rem;
 }
 .line-name {
   font-size: 0.93rem;
   font-weight: 700;
   line-height: 1.25;
+  /* Si no cabe, termina en «…» (hasta 2 renglones) en vez de salirse de la tarjeta */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
 }
 .line-meta {
   font-size: 0.78rem;
@@ -6919,8 +6929,10 @@ html[data-theme="dark"] .avatar {
   }
   .tile:hover:not(:disabled) { transform: none; box-shadow: none; }
   .tile .avatar { width: 2.65rem; height: 2.65rem; aspect-ratio: auto; font-size: 1.05rem; }
-  .tile-name { font-size: 0.93rem; }
+  /* En fila el nombre se encoge para que el precio y la existencia siempre se vean; lo que no cabe termina en «…» */
+  .tile-name { flex: 1 1 0; font-size: 0.93rem; }
   .tile-foot {
+    flex-shrink: 0;
     flex-direction: column;
     align-items: flex-end;
     flex-wrap: nowrap;
@@ -7393,6 +7405,7 @@ html[data-theme="dark"] .avatar {
   line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  overflow-wrap: anywhere;
 }
 .m-row-main small {
   font-size: 0.76rem;
