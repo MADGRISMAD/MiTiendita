@@ -675,6 +675,13 @@ export const apiService = {
   platformSetReferrerUserActive(id: string, userId: string, active: boolean) {
     return axios.put(`/platform/referrers/${id}/users/${userId}/active`, { active }).then((r) => r.data);
   },
+  /** Mi código de vendedor (solo socios): el vendedor ligado a mi cuenta. */
+  platformMySeller() {
+    return axios.get('/platform/my-seller').then((r) => r.data);
+  },
+  platformActivateMySeller() {
+    return axios.post('/platform/my-seller').then((r) => r.data);
+  },
   platformReferrers() {
     return cachedGet('/platform/referrers');
   },

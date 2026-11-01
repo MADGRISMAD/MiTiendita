@@ -24,6 +24,14 @@ const fakeDb = {
   async GetReferrerByEmail(email) {
     return copy(mem.referrers.find((r) => r.email === email));
   },
+  async GetReferrerByOwnerEmail(email) {
+    return copy(mem.referrers.find((r) => r.ownerEmail === email));
+  },
+  async SumCommissionsBetween(referrerId, from, to) {
+    const rows = mem.commissions.filter((c) => c.referrerId === referrerId && c.status !== 'void' && c.createdAt >= from && c.createdAt <= to);
+    const sum = (status) => rows.filter((c) => c.status === status).reduce((a, c) => a + c.commission, 0);
+    return { pending: sum('pending'), paid: sum('paid'), count: rows.length };
+  },
   async ListReferrers() {
     return mem.referrers.map(copy);
   },
@@ -237,4 +245,61 @@ test('datos de pago: CLABE de 18 dígitos o correo de Mercado Pago válidos', as
   await assert.rejects(svc.updateReferrer(s.id, { payoutMpEmail: 'no' }), (e) => e.status === 400);
   const d = await svc.detail(s.id);
   assert.equal(d.payoutClabe, '012345678901234567');
+});
+
+test('un dueño activa su propio código de vendedor: se crea una vez y queda ligado a su correo', async () => {
+  const mine = await svc.linkOwner({ email: 'Socio@Mitiendita.software', name: 'Luis Pantoja', phone: '6641234567' });
+  assert.match(mine.code, /^MT-[A-Z0-9]{6}$/);
+  assert.equal(mine.ownerEmail, 'socio@mitiendita.software');
+  assert.equal(mine.source, 'owner');
+  const again = await svc.linkOwner({ email: 'socio@mitiendita.software', name: 'Otro nombre' });
+  assert.equal(again.id, mine.id, 'no se crea otro');
+  assert.equal((await svc.ownerSeller('SOCIO@mitiendita.software')).id, mine.id);
+  assert.equal(await svc.ownerSeller('nadie@mitiendita.software'), null);
+});
+
+test('si el dueño ya era vendedor con ese correo, se liga ese mismo y conserva su código', async () => {
+  const before = await svc.createReferrer({ name: 'Ana Dueña', email: 'ana@mitiendita.software' });
+  const linked = await svc.linkOwner({ email: 'ana@mitiendita.software', name: 'Ana Dueña' });
+  assert.equal(linked.id, before.id);
+  assert.equal(linked.code, before.code);
+  assert.equal(linked.ownerEmail, 'ana@mitiendita.software');
+});
+
+test('un dueño no puede usar su propio código al registrar una tienda', async () => {
+  const mine = await svc.linkOwner({ email: 'propio@mitiendita.software', name: 'Dueño Propio' });
+  await assert.rejects(svc.resolveForSignup(mine.code, { email: 'propio@mitiendita.software' }), (e) => e.status === 400);
+});
+
+test('lo que gana como vendedor en un mes: solo las comisiones de ese mes y sin las anuladas', async () => {
+  const mine = await svc.linkOwner({ email: 'ventas@mitiendita.software', name: 'Dueño Vendedor' });
+  const t1 = newTenant(mine, 'Tienda 1');
+  const t2 = newTenant(mine, 'Tienda 2');
+  await svc.recordPayment({ tenant: t1, amount: 349, source: 'payment', key: 'own-1' });
+  await svc.recordPayment({ tenant: t2, amount: 750, source: 'payment', key: 'own-2' });
+  const mem2 = mem.commissions.filter((c) => c.referrerId === mine.id);
+  mem2[0].createdAt = new Date('2026-09-15T12:00:00Z'); // el de septiembre no cuenta en octubre
+  const range = { from: new Date('2026-10-01T00:00:00Z'), to: new Date('2026-10-31T23:59:59Z') };
+  mem2[1].createdAt = new Date('2026-10-10T12:00:00Z');
+  const october = await svc.ownerEarnings('ventas@mitiendita.software', range);
+  assert.equal(october.count, 1);
+  assert.equal(october.earned, mem2[1].commission);
+  assert.equal(october.pending, mem2[1].commission);
+  // anulada: ya no cuenta
+  await svc.voidCommission(mem2[1].id, { reason: 'prueba' });
+  assert.equal((await svc.ownerEarnings('ventas@mitiendita.software', range)).earned, 0);
+  assert.equal(await svc.ownerEarnings('sin-codigo@mitiendita.software', range), null);
+});
+
+test('mi parte total = lo que me toca como dueño + lo que gané como vendedor', () => {
+  const income = require('../services/owner-income.service');
+  assert.deepEqual(income.myShare(1000, { code: 'MT-AAAAAA', earned: 350.5, pending: 100.5, paid: 250, count: 3 }), {
+    linked: true,
+    ownerShare: 1000,
+    commissions: { code: 'MT-AAAAAA', earned: 350.5, pending: 100.5, paid: 250, count: 3 },
+    total: 1350.5,
+  });
+  // sin código activado: solo su parte de dueño
+  assert.deepEqual(income.myShare(1000, null), { linked: false, ownerShare: 1000, commissions: null, total: 1000 });
+  assert.equal(income.myShare(-200, { code: 'X', earned: 50, pending: 50, paid: 0, count: 1 }).total, -150, 'una utilidad negativa también suma');
 });

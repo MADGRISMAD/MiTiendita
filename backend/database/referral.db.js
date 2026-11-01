@@ -37,6 +37,10 @@ async function GetReferrerByCode(code) {
 async function GetReferrerByEmail(email) {
   return out(await (await col('referrers')).findOne({ email: String(email).toLowerCase() }));
 }
+/** El vendedor ligado a la cuenta de un dueño de la plataforma (por el correo de la cuenta). */
+async function GetReferrerByOwnerEmail(email) {
+  return out(await (await col('referrers')).findOne({ ownerEmail: String(email).toLowerCase() }));
+}
 async function DeleteReferrer(id) {
   const o = oid(id);
   if (o) await (await col('referrers')).deleteOne({ _id: o });
@@ -125,6 +129,18 @@ async function SumCommissions() {
   return rows.map((r) => ({ referrerId: r._id.referrerId, status: r._id.status, total: r.total, count: r.count }));
 }
 
+/** Comisiones generadas en un rango de fechas (sin las anuladas): pendientes, pagadas y cuántas. */
+async function SumCommissionsBetween(referrerId, from, to) {
+  const rows = await (await col('referral_commissions'))
+    .aggregate([
+      { $match: { referrerId: String(referrerId), status: { $ne: 'void' }, createdAt: { $gte: from, $lte: to } } },
+      { $group: { _id: '$status', total: { $sum: '$commission' }, count: { $sum: 1 } } },
+    ])
+    .toArray();
+  const get = (status) => rows.find((r) => r._id === status) || { total: 0, count: 0 };
+  return { pending: get('pending').total, paid: get('paid').total, count: rows.reduce((n, r) => n + r.count, 0) };
+}
+
 // ───────── Liquidaciones ─────────
 async function CreatePayout(doc) {
   const r = await (await col('referral_payouts')).insertOne(doc);
@@ -155,9 +171,9 @@ async function MarkPendingPaid(referrerId, payoutId, paidAt) {
 }
 
 module.exports = {
-  CreateReferrer, DeleteReferrer, GetReferrerById, GetReferrerByCode, GetReferrerByEmail, ListReferrers, UpdateReferrer,
+  CreateReferrer, DeleteReferrer, GetReferrerById, GetReferrerByCode, GetReferrerByEmail, GetReferrerByOwnerEmail, ListReferrers, UpdateReferrer,
   ListTenantsByReferrer, ListReferredTenants,
   InsertCommission, GetCommission, FindCommissionByKey, ListCommissions, UpdateCommission,
-  CountClosedTenants, ListPayingTenantIds, SumCommissions,
+  CountClosedTenants, ListPayingTenantIds, SumCommissions, SumCommissionsBetween,
   CreatePayout, ListPayouts, MarkPendingPaid,
 };

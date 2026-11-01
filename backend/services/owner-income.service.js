@@ -59,6 +59,16 @@ function summarizePayments({ events, names = new Map(), partners = 3, costs = {}
   };
 }
 
+/**
+ * La parte total de un socio: lo que le toca como dueño (su parte de la utilidad) más lo que ganó como vendedor.
+ * `seller` es lo que devuelve referral.ownerEarnings (o null si aún no activa su código).
+ */
+function myShare(ownerShare, seller) {
+  const owner = round2(ownerShare);
+  const commissions = seller ? { code: seller.code, earned: seller.earned, pending: seller.pending, paid: seller.paid, count: seller.count } : null;
+  return { linked: Boolean(seller), ownerShare: owner, commissions, total: round2(owner + (seller ? seller.earned : 0)) };
+}
+
 function csvOf(summary) {
   const cell = (v) => {
     const t = String(v ?? '');
@@ -72,4 +82,4 @@ function csvOf(summary) {
   return '﻿' + ['Fecha,Tienda,Plan,Cobro,Monto,Origen,Nota', ...rows].join('\n');
 }
 
-module.exports = { monthRange, summarizePayments, csvOf };
+module.exports = { monthRange, summarizePayments, myShare, csvOf };

@@ -110,6 +110,33 @@ async function updateReferrer(id, input) {
   return refDb.UpdateReferrer(id, patch);
 }
 
+/**
+ * Liga la cuenta de un dueño de la plataforma con su propio registro de vendedor (su código y sus comisiones).
+ * Si ya hay un vendedor con su correo, se liga ese mismo; si no, se crea uno con los datos de la cuenta.
+ */
+async function linkOwner({ email, name, phone }) {
+  const mail = cleanText(email, 120).toLowerCase();
+  const linked = await refDb.GetReferrerByOwnerEmail(mail);
+  if (linked) return linked;
+  const existing = await refDb.GetReferrerByEmail(mail);
+  if (existing) return refDb.UpdateReferrer(existing.id, { ownerEmail: mail });
+  const created = await createReferrer({ name, email: mail, phone }, { status: 'active', source: 'owner' });
+  return refDb.UpdateReferrer(created.id, { ownerEmail: mail });
+}
+
+/** El vendedor ligado a la cuenta de un dueño (o null). */
+const ownerSeller = (email) => refDb.GetReferrerByOwnerEmail(String(email || '').toLowerCase());
+
+/** El vendedor ligado a un dueño, con lo que ganó en un rango de fechas (para sumarlo a su parte de socio). */
+async function ownerEarnings(email, range) {
+  const referrer = await refDb.GetReferrerByOwnerEmail(String(email || '').toLowerCase());
+  if (!referrer) return null;
+  const sums = await refDb.SumCommissionsBetween(referrer.id, range.from, range.to);
+  const pending = tiers.round2(sums.pending);
+  const paid = tiers.round2(sums.paid);
+  return { id: referrer.id, code: referrer.code, name: referrer.name, pending, paid, earned: tiers.round2(pending + paid), count: sums.count };
+}
+
 /** Vendedor activo de ese código, o null. */
 async function findActiveByCode(raw) {
   const code = normalizeCode(raw);
@@ -309,6 +336,9 @@ module.exports = {
   CODE_RE,
   createReferrer,
   updateReferrer,
+  linkOwner,
+  ownerSeller,
+  ownerEarnings,
   findActiveByCode,
   resolveForSignup,
   referralFields,

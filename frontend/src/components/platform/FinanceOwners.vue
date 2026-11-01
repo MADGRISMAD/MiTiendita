@@ -16,6 +16,11 @@
 
     <template v-if="data">
       <div class="adm-kpis" :class="{ 'adm-loading': loading }">
+        <div v-if="data.me" class="adm-kpi good">
+          <span>Mi parte total</span>
+          <strong class="pf-num">{{ money(data.me.total) }}</strong>
+          <small>{{ data.me.linked ? "dueño + comisiones como vendedor" : "solo como dueño: activa tu código de vendedor" }}</small>
+        </div>
         <div class="adm-kpi good">
           <span>Tu parte del ingreso</span>
           <strong class="pf-num">{{ money(data.perPartner) }}</strong>
@@ -37,6 +42,33 @@
           <small>{{ differenceText }}</small>
         </div>
       </div>
+
+      <section v-if="data.me" class="adm-card pf-card-stack">
+        <div class="adm-card-head">
+          <div>
+            <h2>Mi parte total del mes</h2>
+            <p>Lo que te toca como socio (de la utilidad) más lo que ganaste como vendedor con tu propio código.</p>
+          </div>
+        </div>
+        <dl class="pf-split">
+          <div><dt>Mi parte como dueño</dt><dd>{{ money(data.me.ownerShare) }}</dd></div>
+          <div>
+            <dt>
+              Comisiones como vendedor
+              <small v-if="data.me.commissions" class="pf-muted"> · {{ data.me.commissions.code }} · {{ data.me.commissions.count }} {{ data.me.commissions.count === 1 ? "cobro" : "cobros" }}</small>
+            </dt>
+            <dd>+ {{ money(data.me.commissions ? data.me.commissions.earned : 0) }}</dd>
+          </div>
+          <div class="sum"><dt>Mi parte total</dt><dd>{{ money(data.me.total) }}</dd></div>
+        </dl>
+        <p v-if="data.me.commissions" class="pf-muted">
+          De tus comisiones del mes: {{ money(data.me.commissions.pending) }} por pagar · {{ money(data.me.commissions.paid) }} ya pagadas.
+        </p>
+        <p v-else class="pf-muted">
+          Aún no activas tu código de vendedor.
+          <router-link :to="{ name: 'platformReferrers' }">Actívalo en Vendedores</router-link> para sumar tus comisiones aquí.
+        </p>
+      </section>
 
       <section class="adm-card pf-card-stack">
         <div class="adm-card-head">

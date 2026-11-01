@@ -973,6 +973,34 @@ async function listReferrers(req, res) {
   }
 }
 
+/** Mi código de vendedor (solo socios): el vendedor ligado a mi cuenta, o que aún no lo he activado. */
+async function mySeller(req, res) {
+  try {
+    const email = await currentStaffEmail(req);
+    if (!isPermanentAdmin({ email })) return res.status(403).send('Esto es solo para los socios.');
+    const linked = await referrals.ownerSeller(email);
+    return res.status(200).json({ linked: Boolean(linked), seller: linked ? await referrals.detail(linked.id) : null });
+  } catch (err) {
+    if (err.status && !err.message) return res.status(err.status).end();
+    return refFail(res, err);
+  }
+}
+
+/** Activa mi código de vendedor: crea mi registro (o liga el que ya tenga con mi correo). */
+async function activateMySeller(req, res) {
+  try {
+    const email = await currentStaffEmail(req);
+    if (!isPermanentAdmin({ email })) return res.status(403).send('Esto es solo para los socios.');
+    const user = await db.FindUserByUsername(req.user.username);
+    const name = `${user?.name || ''} ${user?.lastName || ''}`.trim() || req.user.username;
+    const seller = await referrals.linkOwner({ email, name, phone: user?.cellphone || '' });
+    await audit.record(req, { type: 'owner_seller_linked', message: `Activó su código de vendedor (${seller.code})`, meta: { referrerId: seller.id } }).catch(() => {});
+    return res.status(200).json({ linked: true, seller: await referrals.detail(seller.id) });
+  } catch (err) {
+    return refFail(res, err);
+  }
+}
+
 async function getReferrer(req, res) {
   try {
     return res.status(200).json(await referrals.detail(req.params.id));
@@ -1153,6 +1181,8 @@ async function ownerPayments(req, res) {
         costs: { ai: usage.reduce((a, u) => a + u.count, 0) * costPerUse, expenses: expenses.reduce((a, e) => a + e.amount, 0) },
       }),
     };
+    // Mi parte total: lo que me toca como socio (de la utilidad) + lo que gané como vendedor con mi propio código
+    summary.me = ownerIncome.myShare(summary.profitPerPartner, await referrals.ownerEarnings(email, range));
     if (req.query.format === 'csv') {
       res.set('Content-Type', 'text/csv; charset=utf-8');
       res.set('Content-Disposition', `attachment; filename="cobros_${month}.csv"`);
@@ -1232,6 +1262,8 @@ async function manualPayment(req, res) {
 }
 
 module.exports = {
+  mySeller,
+  activateMySeller,
   referrerUsers,
   createReferrerUser,
   setReferrerUserActive,

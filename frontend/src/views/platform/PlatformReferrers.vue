@@ -7,6 +7,35 @@
     <p v-if="flash" class="adm-banner ok" role="status">{{ flash }}</p>
     <p v-if="error" class="adm-banner err" role="alert">{{ error }}</p>
 
+    <section v-if="mine && !id" class="adm-card pf-card-stack my-seller" aria-label="Mi código de vendedor">
+      <div class="adm-card-head">
+        <div>
+          <h2>Mi código de vendedor</h2>
+          <p>
+            Como socio también puedes vender Mi Tiendita y ganar la comisión de vendedor, aparte de tu parte como dueño. Es tu propio código, ligado a tu cuenta: no necesitas otra
+            contraseña.
+          </p>
+        </div>
+        <button v-if="!mine.linked" type="button" class="adm-btn primary" :disabled="mineBusy" @click="activateMine">{{ mineBusy ? "Activando…" : "Activar mi código" }}</button>
+        <button v-else type="button" class="adm-btn" @click="open(mine.seller.id)">Ver mi detalle</button>
+      </div>
+      <template v-if="mine.linked">
+        <div class="my-code">
+          <span class="pf-chip">{{ mine.seller.code }}</span>
+          <button type="button" class="adm-btn sm" @click="copy(mine.seller.code, 'Código copiado.')">Copiar código</button>
+          <button type="button" class="adm-btn sm" @click="copy(myLink, 'Enlace copiado.')">Copiar enlace de registro</button>
+        </div>
+        <p class="adm-hint my-link">{{ myLink }}</p>
+        <dl class="my-stats">
+          <div><dt>Clientes</dt><dd>{{ mine.seller.clients }}</dd></div>
+          <div><dt>Comisión actual</dt><dd>{{ Math.round(mine.seller.rate * 100) }}%</dd></div>
+          <div><dt>Ganado</dt><dd>{{ money(mine.seller.earned) }}</dd></div>
+          <div><dt>Por pagar</dt><dd>{{ money(mine.seller.pending) }}</dd></div>
+          <div><dt>Pagado</dt><dd>{{ money(mine.seller.paid) }}</dd></div>
+        </dl>
+      </template>
+    </section>
+
     <div v-if="!id" class="adm-kpis" aria-label="Resumen de vendedores">
       <div class="adm-kpi"><span>Vendedores</span><strong class="pf-num">{{ totals.sellers }}</strong><small>con código de referencia</small></div>
       <div class="adm-kpi"><span>Clientes referidos</span><strong class="pf-num">{{ totals.clients }}</strong><small>entre todos</small></div>
@@ -100,6 +129,39 @@ const flash = ref("");
 const query = ref("");
 const showNew = ref(false);
 
+// Mi código de vendedor (solo para los socios; para los demás la ruta responde 403 y la tarjeta no sale)
+const mine = ref(null);
+const mineBusy = ref(false);
+const myLink = computed(() => (mine.value?.seller ? `${window.location.origin}/register?ref=${mine.value.seller.code}` : ""));
+async function loadMine() {
+  try {
+    mine.value = await apiService.platformMySeller();
+  } catch {
+    mine.value = null;
+  }
+}
+async function activateMine() {
+  mineBusy.value = true;
+  error.value = "";
+  try {
+    mine.value = await apiService.platformActivateMySeller();
+    say(`Listo: tu código es ${mine.value.seller.code}.`);
+    await load();
+  } catch (e) {
+    error.value = typeof e.response?.data === "string" && e.response.data ? e.response.data : "No pude activar tu código.";
+  } finally {
+    mineBusy.value = false;
+  }
+}
+async function copy(text, done) {
+  try {
+    await navigator.clipboard.writeText(text);
+    say(done);
+  } catch {
+    error.value = "No pude copiar. Selecciónalo y cópialo a mano.";
+  }
+}
+
 const subtitle = computed(() => {
   if (loading.value && !items.value.length) return "Cargando…";
   const n = items.value.length;
@@ -157,5 +219,17 @@ async function created(next) {
   open(next.id);
 }
 
-onMounted(load);
+onMounted(() => {
+  load();
+  loadMine();
+});
 </script>
+
+<style scoped>
+.my-code { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+.my-link { margin: 0.3rem 0 0.4rem; word-break: break-all; }
+.my-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr)); gap: 0.6rem; margin: 0; }
+.my-stats div { display: grid; gap: 0.1rem; padding: 0.55rem 0.7rem; border: 1px solid var(--timber-line); border-radius: 0.7rem; }
+.my-stats dt { font-size: 0.78rem; color: var(--timber-muted); }
+.my-stats dd { margin: 0; font-weight: 800; font-variant-numeric: tabular-nums; }
+</style>
