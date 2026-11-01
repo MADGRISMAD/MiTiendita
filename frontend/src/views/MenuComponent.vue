@@ -1400,10 +1400,10 @@
                   <template v-if="payInUsd">
                     <small class="usd-rate">
                       Precio del dólar: <b>{{ usdRateValue ? money(usdRateValue) : "sin definir" }}</b>
-                      <button v-if="usdRateValue" type="button" class="usd-edit" @click="editUsdRate = !editUsdRate">{{ editUsdRate ? "listo" : "cambiar" }}</button>
                     </small>
+                    <!-- Solo si no hay precio del día (ni en la caja ni en Ajustes): sin él no se puede convertir -->
                     <input
-                      v-if="editUsdRate || !usdRateValue"
+                      v-if="!usdRateValue"
                       v-model.number="payUsdRate"
                       v-select-on-focus
                       class="inp sm num usd-rate-input"
@@ -2431,7 +2431,6 @@ export default {
     const payInUsd = ref(false);
     const payUsd = ref("");
     const payUsdRate = ref("");
-    const editUsdRate = ref(false); // el precio del dólar sale como texto pequeño; «cambiar» deja corregirlo solo en esta venta
     const openingUsd = ref(""); // precio del dólar que se confirma al abrir la caja
     const usdRateNow = computed(() => Number(cashSession.value?.usdRate) || Number(venueStore.usdRate) || 0);
     const usdRateValue = computed(() => (Number(payUsdRate.value) > 0 ? Number(payUsdRate.value) : 0));
@@ -4265,7 +4264,6 @@ export default {
       payInUsd.value = false;
       payUsd.value = "";
       payUsdRate.value = "";
-      editUsdRate.value = false;
       showMobileCart.value = false;
       showPayment.value = true;
       focusPayField();
@@ -5286,7 +5284,6 @@ export default {
       payInUsd,
       payUsd,
       payUsdRate,
-      editUsdRate,
       openingUsd,
       usdRateValue,
       usingUsd,
@@ -8029,7 +8026,6 @@ html[data-theme="dark"] .avatar {
 .usd-box { display: grid; gap: 0.6rem; padding: 0.7rem 0.8rem; border: 1px solid var(--timber-line); border-radius: 0.8rem; background: var(--timber-panel-elevated); }
 .usd-rate { color: var(--timber-muted); font-size: 0.8rem; }
 .usd-rate b { color: var(--timber-ink); font-variant-numeric: tabular-nums; }
-.usd-edit { margin-left: 0.4rem; padding: 0; border: 0; background: none; color: var(--timber-primary); font: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; }
 .usd-rate-input { max-width: 9rem; }
 .usd-total { display: grid; gap: 0.1rem; }
 .usd-total span { font-size: 0.78rem; color: var(--timber-muted); }
