@@ -462,14 +462,6 @@
                   <strong>Papel 58 mm</strong><small>32 letras por renglón</small>
                 </button>
               </div>
-              <div v-if="printerStore.paper === '80' && printerStore.style === 'image'" class="adm-choices">
-                <button type="button" class="adm-choice" :aria-pressed="!printerStore.dots" @click="savePrinterSettings({ dots: 0 })">
-                  <strong>Nitidez normal</strong><small>Funciona en casi todas las impresoras</small>
-                </button>
-                <button type="button" class="adm-choice" :aria-pressed="printerStore.dots === 576" @click="savePrinterSettings({ dots: 576 })">
-                  <strong>Más nítida</strong><small>Usa todo el ancho de impresoras de 80 mm (576 puntos). Si el ticket sale cortado de los lados, vuelve a «normal».</small>
-                </button>
-              </div>
               <label v-if="printerStore.mode === 'serial'" class="adm-field">
                 <span>Velocidad del puerto</span>
                 <select class="adm-inp" :value="printerStore.baudRate" @change="savePrinterSettings({ baudRate: Number($event.target.value) })">

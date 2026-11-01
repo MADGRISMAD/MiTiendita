@@ -147,6 +147,9 @@ html.tk-printing-view body { background: var(--timber-surface); }
   --tk-pad: 3.5mm;
   font-size: 10.5px;
 }
+/* Si las tipografías de internet no llegaron a la imagen del ticket: letras del sistema, que se miden igual dentro y fuera de la imagen */
+.tk-paper.tk-sysfont { font-family: system-ui, "Segoe UI", Arial, sans-serif; }
+.tk-paper.tk-sysfont .tk-hand { font-family: "Segoe Print", "Bradley Hand", "Comic Sans MS", cursive; font-size: 1.45em; line-height: 1.3; }
 .tk-paper p { margin: 0; }
 .tk-paper * { box-sizing: border-box; }
 .tk-state {

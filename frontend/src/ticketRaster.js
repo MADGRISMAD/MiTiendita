@@ -2,10 +2,11 @@
 // Carga la vista del ticket en un iframe oculto, la convierte en imagen y la manda como bitmap ESC/POS.
 // Colócalo en: src/ticketRaster.js
 // Requiere:  npm i html-to-image
-import { toCanvas } from "html-to-image";
+import { getFontEmbedCSS, toCanvas } from "html-to-image";
 
 const PAPER_SELECTOR = ".tk-paper";
 const SUPERSAMPLE = 3;
+const WEB_FONTS = ["Figtree", "Caveat"]; // las tipografías de internet que usa el ticket
 const MAX_PIXELS = 28_000_000;
 
 function sleep(ms) {
@@ -65,6 +66,19 @@ export async function renderTicketCanvas(path, { paper = "80", dots = 512 } = {}
     await sleep(150);
 
     el.classList.toggle("w58", paper === "58");
+
+    // La imagen se arma como un SVG que no puede cargar tipografías de internet: hay que meterlas dentro. Si no entraron (red lenta,
+    // bloqueador…), las letras caerían en otra tipografía más ancha que se sale de su caja y se encima («Vuelva pronto» sobre «Conserve su
+    // ticket»). En ese caso se usan tipografías del sistema, que se miden igual dentro y fuera de la imagen.
+    let fontEmbedCSS = "";
+    try {
+      fontEmbedCSS = await getFontEmbedCSS(el);
+    } catch {
+      /* se usa la tipografía del sistema */
+    }
+    const embedded = WEB_FONTS.every((f) => new RegExp("font-family:\\s*[\"']?" + f, "i").test(fontEmbedCSS));
+    el.classList.toggle("tk-sysfont", !embedded);
+
     const width = el.offsetWidth;
     if (!width) throw new Error("El ticket no tiene tamaño.");
 
@@ -73,6 +87,7 @@ export async function renderTicketCanvas(path, { paper = "80", dots = 512 } = {}
     let ss = SUPERSAMPLE;
     while (ss > 1 && dots * ss * ((el.offsetHeight * dots * ss) / width) > MAX_PIXELS) ss -= 1;
     const raw = await toCanvas(el, {
+      ...(embedded ? { fontEmbedCSS } : { skipFonts: true }),
       pixelRatio: (dots / width) * ss,
       backgroundColor: "#ffffff",
       // Sin el margen superior ni el borde rasgado de la vista en pantalla: en papel no sirven y solo dejan blanco arriba

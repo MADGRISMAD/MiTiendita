@@ -42,7 +42,7 @@ function readSettings() {
       deviceName: String(raw.deviceName || ""),
       portInfo: raw.portInfo && typeof raw.portInfo === "object" ? raw.portInfo : null,
       style: raw.style === "text" ? "text" : "image",
-      dots: Number(raw.dots) || 0, // 0 = automático (80 mm → 512, 58 mm → 384)
+      dots: Number(raw.dots) === 576 ? 0 : Number(raw.dots) || 0, // 0 = automático (80 mm → 512, 58 mm → 384); 576 (opción retirada) volvía el ticket más ancho y salía cortado
     };
   } catch {
     return { mode: "browser", paper: "80", drawer: false, askPrint: false, baudRate: 9600, deviceName: "", portInfo: null, style: "image", dots: 0 };
