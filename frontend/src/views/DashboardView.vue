@@ -239,6 +239,36 @@
           </div>
         </section>
 
+        <!-- Dónde no se gana: margen bajo o sin costo capturado -->
+        <section v-if="isAdmin && (weakProducts.length || noCostProducts.length)" class="card" :class="{ busy: loading }">
+          <div class="card-head">
+            <div>
+              <h2>Dónde no estás ganando</h2>
+              <p>Productos que dejan poco (menos de {{ LOW_MARGIN }}% de margen) o no tienen costo</p>
+            </div>
+          </div>
+          <template v-if="weakProducts.length">
+            <h3 class="weak-title">Dejan poco o pierden</h3>
+            <ul class="weak">
+              <li v-for="p in weakProducts" :key="p.key">
+                <strong>{{ p.name }}</strong>
+                <span :class="{ neg: p.profit < 0 }">{{ p.margin }}% · {{ money(p.profit) }}</span>
+                <small>{{ qty(p.qty) }} vendidos · {{ money(p.revenue) }}</small>
+              </li>
+            </ul>
+          </template>
+          <template v-if="noCostProducts.length">
+            <h3 class="weak-title">Sin costo: no entran en la utilidad</h3>
+            <ul class="weak">
+              <li v-for="p in noCostProducts" :key="p.key">
+                <strong>{{ p.name }}</strong>
+                <span>{{ money(p.revenue) }}</span>
+                <small>{{ qty(p.qty) }} vendidos · captura su costo en Productos</small>
+              </li>
+            </ul>
+          </template>
+        </section>
+
         <!-- Por categoría -->
         <section class="card" :class="{ busy: loading }">
           <div class="card-head">
@@ -794,6 +824,21 @@ const products = computed(() => {
     margin: p.costNet > 0 ? Math.round(((p.costNet - p.cost) / p.costNet) * 100) : 0,
   }));
 });
+
+// Dónde no se gana: margen bajo (o negativo) y productos vendidos sin costo capturado
+const LOW_MARGIN = 10;
+const weakProducts = computed(() =>
+  products.value
+    .filter((p) => p.costKnown && p.margin < LOW_MARGIN)
+    .sort((a, b) => a.profit - b.profit)
+    .slice(0, 8)
+);
+const noCostProducts = computed(() =>
+  products.value
+    .filter((p) => !p.costKnown && p.revenue > 0)
+    .sort((a, b) => b.revenue - a.revenue)
+    .slice(0, 8)
+);
 
 const topBy = ref("money");
 const topLimit = ref(10);
@@ -1699,6 +1744,13 @@ onMounted(async () => {
   cursor: pointer;
 }
 .seg button[aria-pressed="true"] { background: var(--timber-panel); color: var(--timber-ink); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12); }
+.weak-title { margin: 0.6rem 0 0.3rem; font-size: 0.82rem; font-weight: 800; color: var(--timber-muted); }
+.weak { display: grid; gap: 0.5rem; margin: 0; padding: 0; list-style: none; }
+.weak li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 0.6rem; }
+.weak strong { overflow: hidden; font-size: 0.9rem; text-overflow: ellipsis; white-space: nowrap; }
+.weak span { font-weight: 800; font-variant-numeric: tabular-nums; }
+.weak span.neg { color: var(--timber-danger); }
+.weak small { grid-column: 1 / -1; font-size: 0.76rem; color: var(--timber-muted); }
 .top { display: grid; gap: 0.7rem; }
 .top li { display: grid; grid-template-columns: 1.9rem minmax(0, 1fr); gap: 0.6rem; align-items: start; }
 .rank {
