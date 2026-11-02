@@ -240,25 +240,15 @@
         </section>
 
         <!-- Dónde no se gana: margen bajo o sin costo capturado -->
-        <section v-if="isAdmin && (weakProducts.length || noCostProducts.length)" class="card" :class="{ busy: loading }">
+        <section v-if="isAdmin && noCostProducts.length" class="card" :class="{ busy: loading }">
           <div class="card-head">
             <div>
-              <h2>Dónde no estás ganando</h2>
-              <p>Productos que dejan poco (menos de {{ LOW_MARGIN }}% de margen) o no tienen costo</p>
+              <h2>Productos sin costo</h2>
+              <p>Se venden, pero sin costo no se sabe si ganas</p>
             </div>
           </div>
-          <template v-if="weakProducts.length">
-            <h3 class="weak-title">Dejan poco o pierden</h3>
-            <ul class="weak">
-              <li v-for="p in weakProducts" :key="p.key">
-                <strong>{{ p.name }}</strong>
-                <span :class="{ neg: p.profit < 0 }">{{ p.margin }}% · {{ money(p.profit) }}</span>
-                <small>{{ qty(p.qty) }} vendidos · {{ money(p.revenue) }}</small>
-              </li>
-            </ul>
-          </template>
           <template v-if="noCostProducts.length">
-            <h3 class="weak-title">Sin costo: no entran en la utilidad</h3>
+            <h3 class="weak-title">No entran en la utilidad</h3>
             <ul class="weak">
               <li v-for="p in noCostProducts" :key="p.key">
                 <strong>{{ p.name }}</strong>
@@ -825,14 +815,7 @@ const products = computed(() => {
   }));
 });
 
-// Dónde no se gana: margen bajo (o negativo) y productos vendidos sin costo capturado
-const LOW_MARGIN = 10;
-const weakProducts = computed(() =>
-  products.value
-    .filter((p) => p.costKnown && p.margin < LOW_MARGIN)
-    .sort((a, b) => a.profit - b.profit)
-    .slice(0, 8)
-);
+// Productos vendidos sin costo capturado (no entran en la utilidad)
 const noCostProducts = computed(() =>
   products.value
     .filter((p) => !p.costKnown && p.revenue > 0)
@@ -1749,7 +1732,6 @@ onMounted(async () => {
 .weak li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 0.6rem; }
 .weak strong { overflow: hidden; font-size: 0.9rem; text-overflow: ellipsis; white-space: nowrap; }
 .weak span { font-weight: 800; font-variant-numeric: tabular-nums; }
-.weak span.neg { color: var(--timber-danger); }
 .weak small { grid-column: 1 / -1; font-size: 0.76rem; color: var(--timber-muted); }
 .top { display: grid; gap: 0.7rem; }
 .top li { display: grid; grid-template-columns: 1.9rem minmax(0, 1fr); gap: 0.6rem; align-items: start; }
