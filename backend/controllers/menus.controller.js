@@ -6,6 +6,7 @@ const { ObjectId } = require('mongodb');
 const barcodeLookup = require('../services/barcode-lookup.service');
 const productSuggest = require('../services/product-suggest.service');
 const magic = require('../services/magic-inventory.service');
+const duplicates = require('../services/duplicate-foods.service');
 const saleAudit = require('../services/sale-audit.service');
 const { sanitizePriceRows, MAX_ROWS } = require('../services/bulk-prices.service');
 
@@ -320,6 +321,33 @@ async function lookupFood(req, res) {
   }
 }
 
+/** Revisa todo el inventario y devuelve los pares que parecen el mismo producto (nada se borra aquí). */
+async function duplicateFoods(req, res) {
+  try {
+    const all = await db.GetFoods(req.tenantId);
+    return res.status(200).json({ scanned: (all || []).length, pairs: duplicates.findPairs(all) });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).send(err.message || 'Error al buscar duplicados');
+  }
+}
+
+/** Confirma un par: borrar el equivocado, juntar los códigos en uno o marcar que no es duplicado. */
+async function resolveDuplicate(req, res) {
+  try {
+    const { action, keepId, removeId, moveStock } = req.body || {};
+    const result = await duplicates.resolvePair(db, { tenantId: req.tenantId, action, keepId: String(keepId || ''), removeId: String(removeId || ''), moveStock: Boolean(moveStock) });
+    if (result.removed) {
+      await logCatalog(saleAudit.foodDeletedEntry({ tenantId: req.tenantId, user: req.user?.username, food: result.removed }));
+    }
+    return res.status(200).json({ ok: true, ...result, removed: result.removed ? String(result.removed.id) : null });
+  } catch (err) {
+    if (err instanceof duplicates.DuplicateError) return res.status(err.status).send(err.message);
+    console.error(err);
+    return res.status(500).send(err.message || 'No pude resolver el duplicado');
+  }
+}
+
 /** «Posibles coincidencias» al escribir el nombre de un producto nuevo: parecidos en nombre y presentación, para no registrarlo dos veces. */
 async function similarFoods(req, res) {
   try {
@@ -426,6 +454,8 @@ module.exports = {
   lookupOnline,
   suggestProduct,
   similarFoods,
+  duplicateFoods,
+  resolveDuplicate,
   listMenus,
   getMenu,
   createMenu,

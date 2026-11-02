@@ -468,6 +468,9 @@
               <button type="button" class="btn" :disabled="!pickFoods.length" @click="exportCatalog">
                 Exportar CSV
               </button>
+              <button type="button" class="btn" :disabled="pickFoods.length < 2" @click="showDuplicates = true">
+                Buscar duplicados
+              </button>
               <button
                 v-if="aiEnabled"
                 type="button"
@@ -1232,6 +1235,7 @@
         </div>
       </Teleport>
 
+      <DuplicatesDialog v-if="showDuplicates" @close="showDuplicates = false" @changed="onDuplicatesChanged" />
       <MagicPricesSheet
         v-if="aiEnabled && showMagic"
         :menus="menus"
@@ -1786,6 +1790,7 @@
 <script>
 import AppShell from "../components/AppShell.vue";
 import MagicPricesSheet from "../components/MagicPricesSheet.vue";
+import DuplicatesDialog from "../components/DuplicatesDialog.vue";
 import BulkPricesDialog from "../components/BulkPricesDialog.vue";
 import PhotoCropDialog from "../components/PhotoCropDialog.vue";
 import NoticeDialog from "../components/NoticeDialog.vue";
@@ -1876,7 +1881,7 @@ function round2(n) {
 const CATEGORY_HUES = [212, 28, 152, 274, 342, 46, 190, 118, 8, 236];
 
 export default {
-  components: { AppShell, MagicPricesSheet, BulkPricesDialog, PhotoCropDialog, NoticeDialog, CashLimitDialog, CameraScanner, PosIcon },
+  components: { AppShell, MagicPricesSheet, DuplicatesDialog, BulkPricesDialog, PhotoCropDialog, NoticeDialog, CashLimitDialog, CameraScanner, PosIcon },
   directives: { selectOnFocus: vSelectOnFocus },
   props: {
     initialMode: { type: String, default: "pos" },
@@ -2092,6 +2097,7 @@ export default {
     const showMenuForm = ref(false);
     const showFoodForm = ref(false);
     const showMagic = ref(false);
+    const showDuplicates = ref(false);
     const aiEnabled = computed(
       () => billingStore.loaded && billingStore.aiEnabled === true && !billingStore.isPerpetual
     );
@@ -4819,6 +4825,10 @@ export default {
       openNewFood();
     }
 
+    // Tras borrar o unir duplicados: recarga el catálogo
+    async function onDuplicatesChanged() {
+      await fetchMenus();
+    }
     async function onMagicApplied() {
       await fetchVenueSettings().catch(() => {});
       suppliers.value = [];
@@ -5065,6 +5075,8 @@ export default {
       showMenuForm,
       showFoodForm,
       showMagic,
+      showDuplicates,
+      onDuplicatesChanged,
       openMagic,
       aiEnabled,
       onMagicApplied,

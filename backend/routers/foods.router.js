@@ -13,6 +13,8 @@ router.use(hideCostsFromCashiers);
 router.get('/', requireAuth, requireActiveSubscription, readRoles, menus.listFoods);
 router.get('/lookup', requireAuth, requireActiveSubscription, readRoles, menus.lookupFood);
 router.get('/online', requireAuth, requireActiveSubscription, readRoles, limits.publicRead(), menus.lookupOnline);
+router.get('/duplicates', requireAuth, requireActiveSubscription, writeRoles, menus.duplicateFoods);
+router.post('/duplicates/resolve', requireAuth, requireActiveSubscription, writeRoles, menus.resolveDuplicate);
 router.get('/similar', requireAuth, requireActiveSubscription, writeRoles, menus.similarFoods);
 router.post('/suggest', requireAuth, requireActiveSubscription, writeRoles, limits.publicRead(), menus.suggestProduct);
 router.get('/low-stock', requireAuth, requireActiveSubscription, readRoles, menus.lowStockFoods);
