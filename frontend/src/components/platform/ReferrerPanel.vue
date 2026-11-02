@@ -57,22 +57,14 @@
       v-if="showRemove && detail"
       :title="`Eliminar a ${detail.name}`"
       :expected="detail.name"
-      :removes="transferTo ? REFERRER_REMOVES_MOVED : REFERRER_REMOVES"
-      :keeps="transferTo ? KEPT_MOVED : REFERRER_KEEPS"
+      :removes="REFERRER_REMOVES"
+      :keeps="REFERRER_KEEPS"
       confirm-label="Eliminar vendedor"
       :busy="removing"
       :error="removeError"
       @confirm="removeReferrer"
       @close="showRemove = false"
-    >
-      <label class="adm-field">
-        <span>Pasar su historial a otro vendedor (comisiones, pagos y tiendas)</span>
-        <select v-model="transferTo" class="adm-inp" :disabled="removing">
-          <option value="">Ninguno: su historial queda sin vendedor</option>
-          <option v-for="o in others" :key="o.id" :value="o.id">{{ o.name }} · {{ o.code }}</option>
-        </select>
-      </label>
-    </DeleteConfirmDialog>
+    />
   </div>
 </template>
 
@@ -100,22 +92,16 @@ const REFERRER_REMOVES = [
   "Sus accesos al portal de socios",
   "Sus tiendas se quedan sin vendedor asignado (las tiendas no se tocan)",
 ];
-const transferTo = ref("");
-const others = ref([]);
-const REFERRER_REMOVES_MOVED = [REFERRER_REMOVES[0], REFERRER_REMOVES[1]];
-const KEPT_MOVED = ["Sus comisiones, pagos y tiendas: pasan al vendedor que elegiste, tal como estaban"];
 const REFERRER_KEEPS = ["Sus comisiones y pagos ya hechos, para que Finanzas no cambie (saldrá como «vendedor eliminado»)"];
 function openRemove() {
   removeError.value = "";
-  transferTo.value = "";
   showRemove.value = true;
-  apiService.platformReferrers().then((r) => (others.value = (r.items || []).filter((x) => x.id !== props.id))).catch(() => {});
 }
 async function removeReferrer(typed) {
   removing.value = true;
   removeError.value = "";
   try {
-    await apiService.platformRemoveReferrer(props.id, typed, transferTo.value);
+    await apiService.platformRemoveReferrer(props.id, typed);
     showRemove.value = false;
     emit("removed", props.id);
   } catch (e) {

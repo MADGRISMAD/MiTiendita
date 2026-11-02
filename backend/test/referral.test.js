@@ -103,38 +103,6 @@ const fakeDb = {
   async ListPayouts(id) {
     return mem.payouts.filter((p) => p.referrerId === id).map(copy);
   },
-  async ListOrphanCommissionGroups() {
-    const ids = new Set(mem.referrers.map((r) => r.id));
-    const map = new Map();
-    for (const c of mem.commissions) {
-      if (c.status === 'void' || ids.has(c.referrerId)) continue;
-      const k = `${c.tenantId}|${c.referrerId}`;
-      const cur = map.get(k) || { tenantId: c.tenantId, referrerId: c.referrerId, code: c.referrerCode, businessName: c.businessName, pending: 0, paid: 0, count: 0, firstAt: c.createdAt };
-      cur[c.status === 'paid' ? 'paid' : 'pending'] += c.commission;
-      cur.count += 1;
-      map.set(k, cur);
-    }
-    return [...map.values()];
-  },
-  async ReassignCommissions(filter, to, fromId) {
-    let n = 0;
-    for (const c of mem.commissions) {
-      if (c.referrerId !== filter.referrerId || (filter.tenantId && c.tenantId !== filter.tenantId) || (filter.status && c.status === 'void')) continue;
-      Object.assign(c, { referrerId: to.id, referrerCode: to.code, reassignedFrom: String(fromId) });
-      n += 1;
-    }
-    return n;
-  },
-  async ReassignPayouts(fromId, toId) {
-    const rows = mem.payouts.filter((p) => p.referrerId === fromId);
-    rows.forEach((p) => (p.referrerId = toId));
-    return rows.length;
-  },
-  async ReassignTenants(fromId, to) {
-    const rows = mem.tenants.filter((t) => t.referrerId === fromId);
-    rows.forEach((t) => Object.assign(t, { referrerId: to.id, referralCode: to.code }));
-    return rows.length;
-  },
   async MarkPendingPaid(referrerId, payoutId, paidAt) {
     const done = [];
     for (const c of mem.commissions) {
@@ -394,51 +362,4 @@ test('la utilidad que se reparte descuenta TODAS las comisiones, y mi parte tota
   // Sin comisiones (como antes) nada cambia
   const old = income.summarizePayments({ events, partners: 3, costs: { ai: 100, expenses: 200 } });
   assert.deepEqual([old.profit, old.profitBeforeCommissions, old.commissions.total], [2700, 2700, 0]);
-});
-
-test('comisiones sin vendedor: se listan por tienda y se pasan a otro vendedor conservando monto y estado', async () => {
-  const gone = { id: 'r-gone', code: 'MT-GONE01' };
-  const keep = await svc.createReferrer({ name: 'Socia Dueña', email: 'socia-huerf@example.com' });
-  const other = await svc.createReferrer({ name: 'Otra Vendedora', email: 'otra-huerf@example.com' });
-  const mk = (tenantId, commission, status, referrerId) =>
-    mem.commissions.push({ id: nid('c'), key: nid('k'), referrerId, referrerCode: referrerId === gone.id ? gone.code : 'x', tenantId, businessName: 'Tienda ' + tenantId, commission, status, createdAt: new Date(2032, 0, 1) });
-  mk('tH1', 52.35, 'paid', gone.id);
-  mk('tH1', 40, 'pending', gone.id);
-  mk('tH1', 99, 'void', gone.id);
-  mk('tH2', 10, 'pending', other.id);
-  const list = await svc.orphanCommissions();
-  const h1 = list.find((x) => x.tenantId === 'tH1');
-  assert.deepEqual([h1.count, h1.paid, h1.pending, h1.earned, h1.fromCode], [2, 52.35, 40, 92.35, 'MT-GONE01']);
-  assert.equal(list.some((x) => x.tenantId === 'tH2'), false, 'las de un vendedor que existe no aparecen');
-  await assert.rejects(svc.reassignOrphans({ tenantId: 'tH2', toReferrerId: keep.id }), (e) => e.status === 404);
-  await assert.rejects(svc.reassignOrphans({ tenantId: 'tH1', toReferrerId: 'nadie' }), (e) => e.status === 404);
-  const r = await svc.reassignOrphans({ tenantId: 'tH1', toReferrerId: keep.id });
-  assert.equal(r.moved, 2);
-  const mine = mem.commissions.filter((c) => c.referrerId === keep.id);
-  assert.deepEqual(mine.map((c) => [c.commission, c.status]).sort(), [[40, 'pending'], [52.35, 'paid']]);
-  assert.equal((await svc.orphanCommissions()).some((x) => x.tenantId === 'tH1'), false);
-  assert.equal(mem.commissions.find((c) => c.tenantId === 'tH2').referrerId, other.id);
-});
-
-test('pasar todo un vendedor a otro mueve comisiones, pagos y tiendas; no se puede a sí mismo', async () => {
-  const a = await svc.createReferrer({ name: 'Origen', email: 'origen-tr@example.com' });
-  const b = await svc.createReferrer({ name: 'Destino', email: 'destino-tr@example.com' });
-  const t = newTenant(a, 'Tienda traspaso');
-  mem.commissions.push({ id: nid('c'), key: nid('k'), referrerId: a.id, tenantId: t.id, commission: 30, status: 'pending', createdAt: new Date(2032, 1, 1) });
-  mem.payouts.push({ id: nid('p'), referrerId: a.id });
-  await assert.rejects(svc.transferReferrer({ fromId: a.id, toId: a.id }), (e) => e.status === 400);
-  const res = await svc.transferReferrer({ fromId: a.id, toId: b.id });
-  assert.deepEqual([res.commissions, res.payouts, res.tenants], [1, 1, 1]);
-  assert.equal(t.referrerId, b.id);
-  assert.deepEqual(await svc.tenantCommissionSummary(t.id), { count: 1, earned: 30 });
-});
-
-test('al cambiar el vendedor de una tienda, sus comisiones pueden pasar al nuevo', async () => {
-  const a = await svc.createReferrer({ name: 'Viejo', email: 'viejo-mv@example.com' });
-  const b = await svc.createReferrer({ name: 'Nuevo', email: 'nuevo-mv@example.com' });
-  mem.commissions.push({ id: nid('c'), key: nid('k'), referrerId: a.id, tenantId: 'tMV', commission: 25, status: 'paid', createdAt: new Date(2032, 2, 1) });
-  const r = await svc.moveTenantCommissions({ tenantId: 'tMV', toReferrerId: b.id });
-  assert.equal(r.moved, 1);
-  assert.equal(mem.commissions.find((c) => c.tenantId === 'tMV').referrerId, b.id);
-  assert.equal((await svc.moveTenantCommissions({ tenantId: 'tMV', toReferrerId: b.id })).moved, 0);
 });

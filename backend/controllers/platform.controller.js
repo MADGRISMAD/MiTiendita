@@ -211,9 +211,7 @@ async function getTenant(req, res) {
       referrals.brief(tenant.referrerId).catch(() => null),
       branchInfo(tenant),
     ]);
-    const owner = await isOwnerRequest(req);
-    const commissions = owner ? await referrals.tenantCommissionSummary(tenant.id).catch(() => null) : null;
-    return res.status(200).json({ ...card, usage, referrer, ...relatives, canMoveCommissions: owner, commissions });
+    return res.status(200).json({ ...card, usage, referrer, ...relatives });
   } catch (err) {
     console.error(err);
     return res.status(500).send(err.message || 'No pude abrir ese cliente.');
@@ -989,7 +987,6 @@ async function isOwnerRequest(req) {
 function removalDeps() {
   return {
     refDb: refDbRaw,
-    referrals,
     col: (name) => db.getCollection(name),
     revokeSessions: (userId) => db.RevokeUserSessions(userId, 'account_removed'),
   };
@@ -1001,43 +998,17 @@ async function removeReferrer(req, res) {
     const email = await currentStaffEmail(req);
     if (!isPermanentAdmin({ email })) return res.status(403).send('Eliminar solo lo pueden hacer los socios.');
     const confirm = req.body?.confirm;
-    const result = await removal.removeReferrer(removalDeps(), req.params.id, confirm, { transferTo: String(req.body?.transferTo || '') });
+    const result = await removal.removeReferrer(removalDeps(), req.params.id, confirm);
     await audit.record(req, {
       type: 'referrer_removed',
-      message: `Eliminó al vendedor «${result.name}» (${result.code})${result.transferred ? ` y pasó su historial a ${result.transferred.to.name} (${result.transferred.to.code})` : ''}`,
-      meta: { id: result.id, removed: result.removed, transferred: result.transferred || null },
+      message: `Eliminó al vendedor «${result.name}» (${result.code})`,
+      meta: { id: result.id, removed: result.removed },
     }).catch(() => {});
     return res.status(200).json({ ok: true, ...result });
   } catch (err) {
     if (err instanceof removal.RemovalError) return res.status(err.status).send(err.message);
     console.error(err);
     return res.status(500).send('No pude eliminarlo. No se borró nada a medias que pueda revisar; intenta de nuevo.');
-  }
-}
-
-/** Comisiones que quedaron sin vendedor (se eliminó), para pasarlas a otro. Solo socios. */
-async function orphanCommissions(req, res) {
-  try {
-    if (!(await isOwnerRequest(req))) return res.status(403).send('Esto es solo para los socios.');
-    return res.status(200).json({ items: await referrals.orphanCommissions() });
-  } catch (err) {
-    return refFail(res, err);
-  }
-}
-
-async function reassignOrphanCommissions(req, res) {
-  try {
-    if (!(await isOwnerRequest(req))) return res.status(403).send('Esto es solo para los socios.');
-    const result = await referrals.reassignOrphans({ tenantId: String(req.body?.tenantId || ''), toReferrerId: String(req.body?.toReferrerId || '') });
-    await audit.record(req, {
-      tenantId: String(req.body?.tenantId || ''),
-      type: 'commissions_reassigned',
-      message: `Pasó ${result.moved} comisiones sin vendedor a ${result.to.name} (${result.to.code})`,
-      meta: result,
-    }).catch(() => {});
-    return res.status(200).json(result);
-  } catch (err) {
-    return refFail(res, err);
   }
 }
 
@@ -1202,19 +1173,15 @@ async function setTenantReferrer(req, res) {
     }
     const referrer = await referrals.findActiveByCode(raw);
     if (!referrer) return res.status(400).send('Ese código no existe o el vendedor está pausado.');
-    // Pasar también las comisiones que la tienda ya generó con otro vendedor: solo lo deciden los socios
-    const moveCommissions = Boolean(req.body?.moveCommissions);
-    if (moveCommissions && !(await isOwnerRequest(req))) return res.status(403).send('Pasar comisiones entre vendedores solo lo pueden hacer los socios.');
     const fields = referrals.referralFields(referrer);
     await db.UpdateTenant(tenant.id, fields);
-    const moved = moveCommissions ? await referrals.moveTenantCommissions({ tenantId: tenant.id, toReferrerId: referrer.id }) : { moved: 0 };
     await audit.record(req, {
       tenantId: tenant.id,
       type: 'referrer_assigned',
       message: `Asignó la tienda al vendedor ${referrer.name} (${referrer.code})`,
-      meta: { referrerId: referrer.id, commissionsMoved: moved.moved },
+      meta: { referrerId: referrer.id },
     });
-    return res.status(200).json({ referrerId: referrer.id, referralCode: referrer.code, seller: referrer.name, commissionsMoved: moved.moved });
+    return res.status(200).json({ referrerId: referrer.id, referralCode: referrer.code, seller: referrer.name });
   } catch (err) {
     return refFail(res, err);
   }
@@ -1335,8 +1302,6 @@ async function manualPayment(req, res) {
 }
 
 module.exports = {
-  orphanCommissions,
-  reassignOrphanCommissions,
   removeReferrer,
   mySeller,
   activateMySeller,

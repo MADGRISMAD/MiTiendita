@@ -68,8 +68,6 @@ router.patch('/tenants/:id/plan', ...adminOnly, writeLimit, notBranch, platform.
 router.put('/tenants/:id/referrer', ...adminOnly, writeLimit, notBranch, platform.setTenantReferrer);
 router.post('/tenants/:id/manual-payment', ...adminOnly, writeLimit, notBranch, platform.manualPayment);
 
-router.get('/orphan-commissions', ...adminOnly, platform.orphanCommissions);
-router.post('/orphan-commissions/reassign', ...adminOnly, writeLimit, platform.reassignOrphanCommissions);
 router.get('/my-seller', ...adminOnly, platform.mySeller);
 router.post('/my-seller', ...adminOnly, writeLimit, platform.activateMySeller);
 router.get('/referrers', ...adminOnly, platform.listReferrers);

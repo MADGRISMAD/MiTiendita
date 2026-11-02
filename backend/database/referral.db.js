@@ -160,51 +160,6 @@ async function SumCommissionsByReferrerBetween(from, to) {
   return [...byId.values()];
 }
 
-/** Comisiones (sin las anuladas) de vendedores que ya no existen, agrupadas por tienda y vendedor de origen. */
-async function ListOrphanCommissionGroups() {
-  const ids = (await (await col('referrers')).find({}).project({ _id: 1 }).toArray()).map((r) => String(r._id));
-  const rows = await (await col('referral_commissions'))
-    .aggregate([
-      { $match: { status: { $ne: 'void' }, referrerId: { $nin: ids } } },
-      {
-        $group: {
-          _id: { tenantId: '$tenantId', referrerId: '$referrerId', status: '$status' },
-          code: { $first: '$referrerCode' },
-          businessName: { $first: '$businessName' },
-          total: { $sum: '$commission' },
-          count: { $sum: 1 },
-          firstAt: { $min: '$createdAt' },
-        },
-      },
-    ])
-    .toArray();
-  const byKey = new Map();
-  for (const r of rows) {
-    const key = `${r._id.tenantId}|${r._id.referrerId}`;
-    const cur = byKey.get(key) || { tenantId: r._id.tenantId, referrerId: r._id.referrerId, code: r.code || '', businessName: r.businessName || '', pending: 0, paid: 0, count: 0, firstAt: r.firstAt };
-    if (r._id.status === 'paid') cur.paid += r.total;
-    else cur.pending += r.total;
-    cur.count += r.count;
-    if (r.firstAt < cur.firstAt) cur.firstAt = r.firstAt;
-    byKey.set(key, cur);
-  }
-  return [...byKey.values()];
-}
-
-/** Pasa comisiones de un vendedor a otro (queda anotado de quién venían). Devuelve cuántas se movieron. */
-async function ReassignCommissions(filter, to, fromId) {
-  const res = await (await col('referral_commissions')).updateMany(filter, {
-    $set: { referrerId: String(to.id), referrerCode: to.code, reassignedFrom: String(fromId), reassignedAt: new Date() },
-  });
-  return res.modifiedCount;
-}
-async function ReassignPayouts(fromId, toId) {
-  return (await (await col('referral_payouts')).updateMany({ referrerId: String(fromId) }, { $set: { referrerId: String(toId) } })).modifiedCount;
-}
-async function ReassignTenants(fromId, to) {
-  return (await (await col('tenants')).updateMany({ referrerId: String(fromId) }, { $set: { referrerId: String(to.id), referralCode: to.code } })).modifiedCount;
-}
-
 // ───────── Liquidaciones ─────────
 async function CreatePayout(doc) {
   const r = await (await col('referral_payouts')).insertOne(doc);
@@ -239,6 +194,5 @@ module.exports = {
   ListTenantsByReferrer, ListReferredTenants,
   InsertCommission, GetCommission, FindCommissionByKey, ListCommissions, UpdateCommission,
   CountClosedTenants, ListPayingTenantIds, SumCommissions, SumCommissionsBetween, SumCommissionsByReferrerBetween,
-  ListOrphanCommissionGroups, ReassignCommissions, ReassignPayouts, ReassignTenants,
   CreatePayout, ListPayouts, MarkPendingPaid,
 };

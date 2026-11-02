@@ -20,27 +20,19 @@
       <button v-if="detail.referrer" type="button" class="adm-btn danger-ghost" :disabled="busy" @click="remove">Quitar</button>
     </form>
 
-    <label v-if="canMove" class="pf-check">
-      <input v-model="move" type="checkbox" />
-      <span>También pasar sus {{ detail.commissions.count }} comisiones ya generadas ({{ money(detail.commissions.earned) }}) al vendedor nuevo. Si no, se quedan con quien las ganó.</span>
-    </label>
-
     <p v-if="error" class="pf-err" role="alert">{{ error }}</p>
     <p v-if="ok" class="pf-ok" role="status">{{ ok }}</p>
   </section>
 </template>
 
 <script setup>
-import { computed, ref } from "vue";
+import { ref } from "vue";
 import { apiService } from "../../apiService";
 
 const props = defineProps({ detail: { type: Object, required: true } });
 const emit = defineEmits(["changed"]);
 
 const code = ref("");
-const move = ref(false);
-const canMove = computed(() => props.detail.canMoveCommissions && props.detail.commissions?.count > 0 && props.detail.referrer);
-const money = (n) => `$${Number(n || 0).toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const busy = ref(false);
 const error = ref("");
 const ok = ref("");
@@ -65,15 +57,10 @@ async function run(task, success) {
 const assign = () =>
   run(
     async () => {
-      await apiService.platformSetTenantReferrer(props.detail.id, code.value.trim(), canMove.value && move.value);
+      await apiService.platformSetTenantReferrer(props.detail.id, code.value.trim());
       code.value = "";
-      move.value = false;
     },
     () => "Vendedor asignado."
   );
 const remove = () => run(() => apiService.platformSetTenantReferrer(props.detail.id, null), () => "Se quitó el vendedor.");
 </script>
-
-<style scoped>
-.pf-check { display: flex; gap: 0.5rem; align-items: flex-start; font-size: 0.86rem; }
-</style>
