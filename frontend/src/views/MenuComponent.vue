@@ -371,6 +371,10 @@
             </div>
 
             <footer class="ticket-foot">
+              <p v-if="printerLost" class="printer-lost" role="status">
+                Impresora desconectada. Intentando reconectar…
+                <button type="button" class="soft-btn" @click="reconnectNow">Reconectar</button>
+              </p>
               <dl class="sums">
                 <div>
                   <dt>Subtotal</dt>
@@ -1823,7 +1827,8 @@ import {
   listPending,
   saleToPrintOrder,
 } from "../offlineDb";
-import { directPrinting, openCashDrawer, printReceiptDirect, printerStore } from "../thermalPrinter";
+import { directPrinting, openCashDrawer, printReceiptDirect, printerStore, startPrinterWatch, reconnectPrinter } from "../thermalPrinter";
+import { allowScreenOff, keepScreenOn } from "../keepAwake";
 import { printRoute } from "../printRoute";
 import { flushOfflineSales, offlineStore, queueSale } from "../offlineSync";
 
@@ -2615,6 +2620,8 @@ export default {
       else if (job?.cash && directPrinting() && !(remotePrinting.value && !job.offline)) openCashDrawer().catch(() => {});
       focusScan();
     }
+    const printerLost = computed(() => directPrinting() && printerStore.lost && !printerStore.connected && !(remotePrinting.value));
+    const reconnectNow = () => reconnectPrinter();
     function retryPrint() {
       if (!lastPrint) return;
       if (remotePrinting.value && !lastPrint.offline) printRemote(lastPrint);
@@ -4991,10 +4998,14 @@ export default {
       window.addEventListener("focus", onWindowFocus);
       // Báscula de esta caja: se reconecta sola si ya tiene permiso
       if (scaleStore.enabled) connectScale().catch(() => {});
+      // Impresora térmica: se conecta al abrir y se recupera sola si se pierde; la pantalla no se apaga mientras se vende
+      startPrinterWatch();
+      keepScreenOn();
     });
 
     onUnmounted(() => {
       clearInterval(shiftTimer);
+      allowScreenOff();
       window.removeEventListener("online", flushPendingCodes);
       stopScaleWatch();
       window.removeEventListener("keydown", onHotkey);
@@ -5179,6 +5190,8 @@ export default {
       scaleRead,
       weighHint,
       printIssue,
+      printerLost,
+      reconnectNow,
       printAsk,
       answerPrint,
       printerStore,
@@ -6091,6 +6104,19 @@ html[data-theme="dark"] .avatar {
   background: var(--timber-danger-soft);
   color: var(--timber-danger);
   text-align: center;
+}
+.printer-lost {
+  margin: 0;
+  padding: 0.45rem 0.7rem;
+  border-radius: 0.7rem;
+  background: var(--timber-danger-soft);
+  color: var(--timber-danger);
+  font-size: 0.82rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
 }
 .print-issue p {
   margin: 0;

@@ -49,7 +49,8 @@ function readSettings() {
   }
 }
 
-export const printerStore = reactive({ ...readSettings(), connected: false, busy: false });
+// lost: se perdió la conexión con la impresora y se está intentando recuperar (para avisarlo antes de cobrar)
+export const printerStore = reactive({ ...readSettings(), connected: false, busy: false, lost: false });
 
 export function savePrinterSettings(patch = {}) {
   const modeChanged = patch.mode && patch.mode !== printerStore.mode;
@@ -224,6 +225,7 @@ async function openBluetooth(prompt) {
     if (conn?.bt === device) {
       conn = null;
       printerStore.connected = false;
+      onLinkLost();
     }
   }, { once: true });
   return {
@@ -261,12 +263,78 @@ export async function connectPrinter({ prompt = false } = {}) {
     if (!opened) throw new Error("No hay impresora conectada. Conéctala en Configuración → Impresora.");
     conn = opened;
     printerStore.connected = true;
+    printerStore.lost = false;
     if (prompt) savePrinterSettings({ deviceName: opened.name });
     return conn;
   } catch (error) {
     printerStore.connected = false;
     throw new Error(friendly(error));
   }
+}
+
+// —— Mantener la conexión ——
+// Los navegadores sueltan la impresora (cable, reinicio, ahorro de energía, pantalla apagada): se detecta y se reconecta sola.
+const RETRY_MS = [1500, 4000, 8000, 15000, 30000, 30000, 60000];
+let retryTimer = null;
+let retryCount = 0;
+let watching = false;
+
+/** Intenta conectar con la impresora que ya tiene permiso (sin abrir el selector). true si quedó conectada. */
+export async function reconnectPrinter() {
+  if (!directPrinting()) return false;
+  if (conn) return true;
+  if (printerStore.busy) return false;
+  try {
+    await connectPrinter({ prompt: false });
+    return true;
+  } catch {
+    printerStore.lost = true;
+    return false;
+  }
+}
+
+function scheduleReconnect(fresh = true) {
+  clearTimeout(retryTimer);
+  if (fresh) retryCount = 0;
+  if (!directPrinting() || conn || retryCount >= RETRY_MS.length) return;
+  retryTimer = setTimeout(async () => {
+    if (await reconnectPrinter()) return;
+    retryCount += 1;
+    scheduleReconnect(false);
+  }, RETRY_MS[retryCount]);
+}
+
+function onLinkLost() {
+  if (!directPrinting()) return;
+  printerStore.lost = true;
+  scheduleReconnect();
+}
+
+/** Se llama al abrir la pantalla de ventas: conecta ya, y vigila desconexiones y regresos a la app. Solo se instala una vez. */
+export function startPrinterWatch() {
+  if (directPrinting()) reconnectPrinter().then((ok) => !ok && scheduleReconnect());
+  if (watching || typeof navigator === "undefined") return;
+  watching = true;
+  const dropped = () => {
+    if (!conn) return;
+    const c = conn;
+    conn = null;
+    printerStore.connected = false;
+    c.close().catch(() => {});
+    onLinkLost();
+  };
+  const plugged = () => scheduleReconnect();
+  for (const kind of ["usb", "serial"]) {
+    if (!(kind in navigator)) continue;
+    navigator[kind].addEventListener("disconnect", dropped);
+    navigator[kind].addEventListener("connect", plugged);
+  }
+  const back = () => {
+    if (document.visibilityState === "visible" && directPrinting() && !conn) scheduleReconnect();
+  };
+  document.addEventListener("visibilitychange", back);
+  window.addEventListener("focus", back);
+  window.addEventListener("online", back);
 }
 
 function withTimeout(promise, ms) {
@@ -297,6 +365,7 @@ export async function printBytes(bytes, { prompt = false, timeoutMs = PRINT_TIME
     );
   } catch (error) {
     disconnect();
+    onLinkLost();
     throw new Error(friendly(error));
   } finally {
     printerStore.busy = false;
