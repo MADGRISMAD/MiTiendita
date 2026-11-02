@@ -14,6 +14,8 @@ function fakeUsb() {
   const usb = {
     plugged: true,
     getDevices: vi.fn(async () => (usb.plugged ? [device] : [])),
+    requestDevice: vi.fn(async () => device),
+    device,
     addEventListener: (name, fn) => (listeners[name] = fn),
     emit: (name) => listeners[name]?.(),
   };
@@ -75,6 +77,34 @@ describe("la impresora se recupera sola", () => {
     expect(t.printerStore.lost).toBe(true);
     usb.plugged = true;
     await vi.advanceTimersByTimeAsync(1600);
+    expect(t.printerStore.connected).toBe(true);
+  });
+
+  it("elegir otra impresora estando conectada abre el selector otra vez", async () => {
+    const t = await load();
+    t.startPrinterWatch();
+    await vi.advanceTimersByTimeAsync(10);
+    expect(t.printerStore.connected).toBe(true);
+    await t.connectPrinter({ prompt: true });
+    expect(usb.requestDevice).toHaveBeenCalledTimes(1);
+    expect(t.printerStore.connected).toBe(true);
+  });
+
+  it("dos intentos a la vez abren la impresora una sola vez", async () => {
+    const t = await load();
+    const [a, b] = await Promise.all([t.connectPrinter(), t.connectPrinter()]);
+    expect(a).toBe(b);
+    expect(usb.device.open).toHaveBeenCalledTimes(1);
+  });
+
+  it("si la impresora no responde al abrir, falla a tiempo y se puede volver a intentar", async () => {
+    const t = await load();
+    usb.device.open.mockImplementationOnce(() => new Promise(() => {})); // se queda colgada
+    const first = t.connectPrinter();
+    const failed = expect(first).rejects.toThrow(/a tiempo/);
+    await vi.advanceTimersByTimeAsync(12100);
+    await failed;
+    await expect(t.connectPrinter()).resolves.toBeTruthy();
     expect(t.printerStore.connected).toBe(true);
   });
 });

@@ -183,7 +183,8 @@ async function openSerial(prompt) {
       return next;
     },
     close: async () => {
-      await (serialQueue.get(port) || Promise.resolve());
+      // Si un envío quedó colgado, no se espera para siempre: se intenta cerrar igual
+      await Promise.race([serialQueue.get(port) || Promise.resolve(), new Promise((r) => setTimeout(r, 2000))]);
       return port.close();
     },
   };
@@ -245,12 +246,12 @@ async function openBluetooth(prompt) {
   };
 }
 
-/**
- * Conecta con la impresora del modo elegido.
- * prompt=true abre el selector del navegador (solo desde un clic); false reusa la que ya tiene permiso.
- */
-export async function connectPrinter({ prompt = false } = {}) {
-  if (conn) return conn;
+const CONNECT_TIMEOUT_MS = 12000;
+const PICK_TIMEOUT_MS = 120000; // al elegir impresora, el selector del navegador espera a la persona
+let connecting = null; // intento en curso (varios llamados comparten uno solo: abrir el mismo dispositivo dos veces lo deja colgado)
+let current = null;
+
+async function openPrinter(prompt, ctl) {
   const mode = printerStore.mode;
   const support = printerSupport();
   if (mode === "browser") throw new Error("La impresión directa está apagada.");
@@ -260,6 +261,11 @@ export async function connectPrinter({ prompt = false } = {}) {
   try {
     const opened =
       mode === "usb" ? await openUsb(prompt) : mode === "serial" ? await openSerial(prompt) : await openBluetooth(prompt);
+    if (ctl.dead) {
+      // Llegó tarde (se agotó el tiempo o se eligió otra): se suelta para que no bloquee el siguiente intento
+      opened?.close().catch(() => {});
+      throw new Error("Conexión cancelada.");
+    }
     if (!opened) throw new Error("No hay impresora conectada. Conéctala en Configuración → Impresora.");
     conn = opened;
     printerStore.connected = true;
@@ -267,9 +273,36 @@ export async function connectPrinter({ prompt = false } = {}) {
     if (prompt) savePrinterSettings({ deviceName: opened.name });
     return conn;
   } catch (error) {
-    printerStore.connected = false;
+    if (!ctl.dead) printerStore.connected = false;
     throw new Error(friendly(error));
   }
+}
+
+/**
+ * Conecta con la impresora del modo elegido.
+ * prompt=true abre el selector del navegador (solo desde un clic) y suelta antes la que estaba conectada; false reusa la que ya tiene permiso.
+ * Nunca se queda esperando para siempre: si el dispositivo no responde, falla con un aviso y se puede volver a intentar.
+ */
+export function connectPrinter({ prompt = false } = {}) {
+  if (prompt) {
+    if (current) current.dead = true; // elegir otra cancela cualquier intento pendiente
+    connecting = null;
+    if (conn) disconnect();
+  }
+  if (conn) return Promise.resolve(conn);
+  if (connecting) return connecting;
+  const ctl = { dead: false };
+  current = ctl;
+  const guarded = withTimeout(openPrinter(prompt, ctl), prompt ? PICK_TIMEOUT_MS : CONNECT_TIMEOUT_MS, "No se pudo abrir la impresora a tiempo. Revisa que esté prendida, conectada y que otro programa no la esté usando.")
+    .catch((error) => {
+      ctl.dead = true;
+      throw error;
+    })
+    .finally(() => {
+      if (connecting === guarded) connecting = null;
+    });
+  connecting = guarded;
+  return guarded;
 }
 
 // —— Mantener la conexión ——
@@ -337,12 +370,12 @@ export function startPrinterWatch() {
   window.addEventListener("online", back);
 }
 
-function withTimeout(promise, ms) {
+function withTimeout(promise, ms, message = "La impresora no respondió a tiempo. Revisa que esté prendida y con papel.") {
   let timer;
   return Promise.race([
     promise,
     new Promise((_, reject) => {
-      timer = setTimeout(() => reject(new Error("La impresora no respondió a tiempo. Revisa que esté prendida y con papel.")), ms);
+      timer = setTimeout(() => reject(new Error(message)), ms);
     }),
   ]).finally(() => clearTimeout(timer));
 }
@@ -395,7 +428,7 @@ async function designBytes(path, { openDrawer = false } = {}) {
   if (printerStore.style !== "image") return null;
   printerStore.busy = true;
   try {
-    const bitmap = await renderTicketBitmap(path, { paper: printerStore.paper, dots: dotsWide() });
+    const bitmap = await withTimeout(renderTicketBitmap(path, { paper: printerStore.paper, dots: dotsWide() }), 25000, "El ticket con diseño tardó demasiado.");
     return buildRasterTicket(bitmap, { openDrawer });
   } catch (error) {
     console.warn("No se pudo armar el ticket con diseño, se imprime en texto:", error);
