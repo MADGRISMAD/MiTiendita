@@ -213,7 +213,7 @@ async function getTenant(req, res) {
     ]);
     const owner = await isOwnerRequest(req);
     const commissions = owner ? await referrals.tenantCommissionSummary(tenant.id).catch(() => null) : null;
-    return res.status(200).json({ ...card, usage, referrer, ...relatives, canDelete: !tenant.isBranch && owner, canMoveCommissions: owner, commissions });
+    return res.status(200).json({ ...card, usage, referrer, ...relatives, canMoveCommissions: owner, commissions });
   } catch (err) {
     console.error(err);
     return res.status(500).send(err.message || 'No pude abrir ese cliente.');
@@ -988,8 +988,6 @@ async function isOwnerRequest(req) {
 
 function removalDeps() {
   return {
-    db,
-    mp,
     refDb: refDbRaw,
     referrals,
     col: (name) => db.getCollection(name),
@@ -997,22 +995,16 @@ function removalDeps() {
   };
 }
 
-/** Eliminar una tienda o un vendedor: solo los socios, y hay que escribir el nombre exacto. */
-async function removeEntity(req, res, kind) {
+/** Eliminar un vendedor: solo los socios, y hay que escribir el nombre exacto. */
+async function removeReferrer(req, res) {
   try {
     const email = await currentStaffEmail(req);
     if (!isPermanentAdmin({ email })) return res.status(403).send('Eliminar solo lo pueden hacer los socios.');
     const confirm = req.body?.confirm;
-    const result =
-      kind === 'tenant'
-        ? await removal.removeTenant(removalDeps(), req.params.id, confirm)
-        : await removal.removeReferrer(removalDeps(), req.params.id, confirm, { transferTo: String(req.body?.transferTo || '') });
+    const result = await removal.removeReferrer(removalDeps(), req.params.id, confirm, { transferTo: String(req.body?.transferTo || '') });
     await audit.record(req, {
-      type: kind === 'tenant' ? 'tenant_removed' : 'referrer_removed',
-      message:
-        kind === 'tenant'
-          ? `Eliminó la tienda «${result.name}»`
-          : `Eliminó al vendedor «${result.name}» (${result.code})${result.transferred ? ` y pasó su historial a ${result.transferred.to.name} (${result.transferred.to.code})` : ''}`,
+      type: 'referrer_removed',
+      message: `Eliminó al vendedor «${result.name}» (${result.code})${result.transferred ? ` y pasó su historial a ${result.transferred.to.name} (${result.transferred.to.code})` : ''}`,
       meta: { id: result.id, removed: result.removed, transferred: result.transferred || null },
     }).catch(() => {});
     return res.status(200).json({ ok: true, ...result });
@@ -1022,8 +1014,6 @@ async function removeEntity(req, res, kind) {
     return res.status(500).send('No pude eliminarlo. No se borró nada a medias que pueda revisar; intenta de nuevo.');
   }
 }
-const removeTenant = (req, res) => removeEntity(req, res, 'tenant');
-const removeReferrer = (req, res) => removeEntity(req, res, 'referrer');
 
 /** Comisiones que quedaron sin vendedor (se eliminó), para pasarlas a otro. Solo socios. */
 async function orphanCommissions(req, res) {
@@ -1347,7 +1337,6 @@ async function manualPayment(req, res) {
 module.exports = {
   orphanCommissions,
   reassignOrphanCommissions,
-  removeTenant,
   removeReferrer,
   mySeller,
   activateMySeller,

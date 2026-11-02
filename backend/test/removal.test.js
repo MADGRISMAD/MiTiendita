@@ -58,19 +58,9 @@ function world() {
   });
 }
 
-test('borrar una tienda quita sus datos (con el id como texto o como ObjectId) y no toca a las demás', async () => {
+test('el historial del dinero se conserva al borrar un vendedor: cobros, comisiones y liquidaciones', async () => {
   const w = world();
-  const removed = await purge.purgeTenant(w.col, String(T1));
-  assert.deepEqual(removed, { foods: 2, orders: 2, users: 1, settings: 1, tenants: 1 });
-  assert.equal(w.data.foods.length, 1);
-  assert.equal(w.data.tenants.length, 1);
-  assert.equal(w.data.tenants[0].name, 'Otra tienda');
-  assert.equal(w.data.users.filter((u) => u.tenantId).length, 1);
-});
-
-test('el historial del dinero se conserva: cobros, comisiones y liquidaciones', async () => {
-  const w = world();
-  await purge.purgeTenant(w.col, String(T1));
+  await purge.purgeReferrer(w.col, String(R1));
   assert.equal(w.data.billing_events.length, 1);
   assert.equal(w.data.referral_commissions.length, 1);
 });
@@ -116,41 +106,6 @@ function deps(w, over = {}) {
     revokeSessions: async (id) => revoked.push(String(id)),
   };
 }
-
-test('eliminar una tienda exige escribir su nombre exacto (sin importar mayúsculas ni espacios de más)', async () => {
-  const w = world();
-  const d = deps(w);
-  await assert.rejects(removal.removeTenant(d, String(T1), ''), (e) => e.status === 400 && /Abarrotes Lupe/.test(e.message));
-  await assert.rejects(removal.removeTenant(d, String(T1), 'Abarrotes'), (e) => e.status === 400);
-  assert.equal(w.data.tenants.length, 2, 'sin confirmar no se borra nada');
-  const r = await removal.removeTenant(d, String(T1), '  abarrotes   LUPE ');
-  assert.equal(r.name, 'Abarrotes Lupe');
-  assert.equal(w.data.tenants.length, 1);
-  assert.equal(d.revoked.length, 1, 'se cierran las sesiones de sus usuarios');
-});
-
-test('una matriz con sucursales no se elimina; una sucursal tampoco desde aquí; una tienda que no existe da 404', async () => {
-  const w = world();
-  w.data.tenants.push({ _id: new ObjectId(), name: 'Sucursal', isBranch: true, matrixTenantId: String(T1) });
-  const d = deps(w);
-  await assert.rejects(removal.removeTenant(d, String(T1), 'Abarrotes Lupe'), (e) => e.status === 409 && /sucursal/.test(e.message));
-  const branch = w.data.tenants.find((t) => t.isBranch);
-  await assert.rejects(removal.removeTenant(deps(w), String(branch._id), 'Sucursal'), (e) => e.status === 409);
-  await assert.rejects(removal.removeTenant(d, String(new ObjectId()), 'x'), (e) => e.status === 404);
-});
-
-test('si tiene suscripción de Mercado Pago se cancela antes; si no se puede cancelar, no se borra nada', async () => {
-  const w = world();
-  w.data.tenants[0].mpPreapprovalId = 'pre_123';
-  const bad = deps(w, { mpFails: true });
-  await assert.rejects(removal.removeTenant(bad, String(T1), 'Abarrotes Lupe'), (e) => e.status === 502);
-  assert.equal(w.data.tenants.length, 2, 'la tienda sigue ahí');
-  assert.equal(w.data.foods.length, 3);
-  const ok = deps(w);
-  await removal.removeTenant(ok, String(T1), 'Abarrotes Lupe');
-  assert.deepEqual(ok.cancelled, ['pre_123']);
-  assert.equal(w.data.tenants.length, 1);
-});
 
 test('eliminar un vendedor exige su nombre, y no deja si tiene comisiones por pagar', async () => {
   const w = world();
