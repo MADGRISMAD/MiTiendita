@@ -107,4 +107,15 @@ describe("la impresora se recupera sola", () => {
     await expect(t.connectPrinter()).resolves.toBeTruthy();
     expect(t.printerStore.connected).toBe(true);
   });
+
+  it("si no puede conectar, deja el motivo para mostrarlo", async () => {
+    const t = await load();
+    usb.plugged = false;
+    expect(await t.reconnectPrinter()).toBe(false);
+    expect(t.printerStore.error).toMatch(/No hay impresora conectada/);
+    expect(t.printerStore.trying).toBe(false);
+    usb.plugged = true;
+    expect(await t.reconnectPrinter()).toBe(true);
+    expect(t.printerStore.error).toBe("");
+  });
 });

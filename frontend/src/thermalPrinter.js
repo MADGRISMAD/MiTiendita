@@ -50,7 +50,7 @@ function readSettings() {
 }
 
 // lost: se perdió la conexión con la impresora y se está intentando recuperar (para avisarlo antes de cobrar)
-export const printerStore = reactive({ ...readSettings(), connected: false, busy: false, lost: false });
+export const printerStore = reactive({ ...readSettings(), connected: false, busy: false, lost: false, trying: false, error: "" });
 
 export function savePrinterSettings(patch = {}) {
   const modeChanged = patch.mode && patch.mode !== printerStore.mode;
@@ -270,6 +270,7 @@ async function openPrinter(prompt, ctl) {
     conn = opened;
     printerStore.connected = true;
     printerStore.lost = false;
+    printerStore.error = "";
     if (prompt) savePrinterSettings({ deviceName: opened.name });
     return conn;
   } catch (error) {
@@ -317,12 +318,16 @@ export async function reconnectPrinter() {
   if (!directPrinting()) return false;
   if (conn) return true;
   if (printerStore.busy) return false;
+  printerStore.trying = true;
   try {
     await connectPrinter({ prompt: false });
     return true;
-  } catch {
+  } catch (error) {
     printerStore.lost = true;
+    printerStore.error = error.message; // se muestra en Configuración para saber por qué no conecta
     return false;
+  } finally {
+    printerStore.trying = false;
   }
 }
 

@@ -513,7 +513,7 @@
             <section v-if="printRoute.mode !== 'remote' && printerStore.mode !== 'browser'" class="adm-card cfg-card">
               <h3>Impresora térmica</h3>
               <p class="state-line" :class="printerStore.connected ? 'on' : 'off'">
-                <i></i>{{ printerStore.connected ? `Conectada: ${printerStore.deviceName}` : printerStore.deviceName ? `Elegida: ${printerStore.deviceName} (se conecta al imprimir)` : 'Sin impresora elegida' }}
+                <i></i>{{ printerLine }}
               </p>
               <div class="adm-choices">
                 <button type="button" class="adm-choice" :aria-pressed="printerStore.paper === '80'" @click="savePrinterSettings({ paper: '80' })">
@@ -854,7 +854,7 @@ import { authStore, isPlatformStaff, setSession } from "../authStore";
 import QRCode from "qrcode";
 import { closingLine } from "../ticketShell";
 import { prettyPhone } from "../phone";
-import { directPrinting, printerStore, printerSupport, printTestPage, savePrinterSettings, connectPrinter } from "../thermalPrinter";
+import { directPrinting, printerStore, printerSupport, printTestPage, savePrinterSettings, connectPrinter, startPrinterWatch } from "../thermalPrinter";
 import { printRoute, savePrintRoute } from "../printRoute";
 import { stationState, syncPrintStation } from "../printStation";
 import { SCALE_COMMANDS, connectScale, disconnectScale, saveScaleSettings, scaleLive, scaleStore, scaleSupported } from "../scale";
@@ -886,6 +886,16 @@ function setPrintRoute(mode) {
 }
 if (printRoute.mode === "remote") checkStation();
 const printerErr = ref("");
+// Aquí también se conecta sola (no solo en Ventas) y, si no puede, dice por qué
+if (printerStore.mode !== "browser" && printRoute.mode !== "remote") startPrinterWatch();
+const printerLine = computed(() => {
+  const name = printerStore.deviceName;
+  if (printerStore.connected) return `Conectada: ${name}`;
+  if (!name) return "Sin impresora elegida";
+  if (printerStore.trying) return `Elegida: ${name} (conectando…)`;
+  if (printerStore.error) return `Elegida: ${name}. No se pudo conectar: ${printerStore.error}`;
+  return `Elegida: ${name} (se conecta al imprimir)`;
+});
 // Báscula: el reloj hace que «en vivo» se apague si deja de mandar peso
 const scaleTick = ref(Date.now());
 let scaleTimer = null;
