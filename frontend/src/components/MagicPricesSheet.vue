@@ -372,6 +372,13 @@
                     <span>Nombre</span>
                     <input v-model="row.name" class="mg-inp" placeholder="Coca-Cola 600 ml" />
                   </label>
+                  <div v-if="row.similar && row.similar.length" class="mg-similar" role="status">
+                    <p>Posibles coincidencias: ¿ya lo tienes registrado?</p>
+                    <button v-for="opt in row.similar" :key="opt.id" type="button" @click="useExisting(row, opt)">
+                      <b>{{ opt.name }}</b>
+                      <span>{{ money(opt.oldPrice) }} · Es este</span>
+                    </button>
+                  </div>
                   <p v-if="row.isPack || row.packSize > 1" class="mg-pack">
                     Pack · {{ row.packs || 1 }} ×
                     <input v-model.number="row.packSize" class="mg-inp num tiny" type="number" min="0" step="1" aria-label="Piezas por pack" @input="onPackSize(row)" />
@@ -945,9 +952,40 @@ function fillPicks(data) {
       lot: String(row.lot || "").trim(),
       expiresAt: String(row.expiresAt || "").slice(0, 10),
       menuId: menuFor(typeof row === "string" ? row : row.name),
+      similar: Array.isArray(row.similar) ? row.similar : [],
       checked: true,
     };
   });
+}
+
+/** «Es este»: lo que se iba a registrar como nuevo se suma al producto que ya existe (precio, costo y existencias). */
+function useExisting(row, opt) {
+  picks.value.push({
+    key: `u-${row.key}-${opt.id}`,
+    id: opt.id,
+    name: opt.name,
+    oldPrice: opt.oldPrice,
+    oldCost: opt.oldCost,
+    oldStock: opt.oldStock,
+    price: row.price > 0 ? row.price : opt.oldPrice,
+    cost: row.cost ?? 0,
+    stockIn: Number(row.stockIn) || 0,
+    packSize: Number(row.packSize) || 0,
+    packs: Number(row.packs) || 1,
+    isPack: Boolean(row.isPack),
+    lot: String(row.lot || "").trim(),
+    expiresAt: String(row.expiresAt || "").slice(0, 10),
+    from: row.name,
+    note: row.note || null,
+    total: row.total,
+    checked: true,
+    options: null,
+    costUp: false,
+    costChangePct: 0,
+    newMargin: undefined,
+    suggestedPrice: 0,
+  });
+  news.value = news.value.filter((r) => r !== row);
 }
 
 function addExtra() {
@@ -1723,6 +1761,10 @@ onMounted(async () => {
 .mg-tags .mg-pill { background: var(--timber-surface); }
 .mg-tags .mg-pill.warn { background: var(--timber-warning-soft); }
 .mg-choose { max-width: 26rem; }
+.mg-similar { display: grid; gap: 0.3rem; margin: 0.4rem 0; padding: 0.55rem 0.7rem; border-radius: 0.7rem; background: var(--timber-warning-soft); }
+.mg-similar p { margin: 0; font-size: 0.8rem; font-weight: 700; }
+.mg-similar button { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; padding: 0.35rem 0.5rem; border: 1px solid var(--timber-line, #e3e8f0); border-radius: 0.55rem; background: var(--timber-panel, #fff); color: inherit; font: inherit; font-size: 0.86rem; text-align: left; cursor: pointer; }
+.mg-similar button span { flex-shrink: 0; font-size: 0.78rem; font-weight: 700; text-decoration: underline; }
 .mg-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(6.4rem, 1fr)); gap: 0.45rem; }
 .mg-fields.top { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .mg-fields.bottom { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 0.1rem; }

@@ -1595,6 +1595,13 @@
               <label class="field wide">
                 <span>Nombre</span>
                 <input v-model="foodForm.name" class="inp" :placeholder="namePlaceholder" required @blur="autoFillFromName" />
+                <div v-if="similar.length" class="similar" role="status">
+                  <p>Posibles coincidencias: ¿ya lo tienes registrado?</p>
+                  <button v-for="s in similar" :key="s.id" type="button" @click="openSimilar(s)">
+                    <b>{{ s.name }}</b>
+                    <span>{{ money(s.oldPrice) }} · Abrir</span>
+                  </button>
+                </div>
               </label>
 
               <label class="field m-wide">
@@ -2120,6 +2127,32 @@ export default {
       menuId: "",
       saleUnit: "pz",
     });
+
+    // «Posibles coincidencias»: al escribir el nombre de un producto nuevo, avisa si ya hay uno parecido (nombre y presentación)
+    const similar = ref([]);
+    let similarTimer = null;
+    let similarSeq = 0;
+    watch(
+      () => (showFoodForm.value && !editingFood.value ? foodForm.name.trim() : ""),
+      (name) => {
+        clearTimeout(similarTimer);
+        similar.value = [];
+        if (name.length < 3) return;
+        similarTimer = setTimeout(async () => {
+          const mine = ++similarSeq;
+          try {
+            const res = await apiService.similarFoods(name);
+            if (mine === similarSeq) similar.value = res.items || [];
+          } catch {
+            /* sin internet o sin permiso: simplemente no se muestran */
+          }
+        }, 400);
+      }
+    );
+    function openSimilar(item) {
+      const food = pickFoods.value.find((p) => String(p.id) === String(item.id));
+      if (food) editFood(food);
+    }
 
     // Búsqueda y vista de lista en modo catálogo
     const catalogSearch = ref("");
@@ -5046,6 +5079,8 @@ export default {
       TAX_RATE,
       taxPercent,
       duplicateCode,
+      similar,
+      openSimilar,
       catalogSearch,
       viewMode,
       GRID_SIZES,
@@ -7421,6 +7456,10 @@ html[data-theme="dark"] .avatar {
   display: flex;
   margin: 0.75rem auto;
 }
+.similar { display: grid; gap: 0.3rem; margin-top: 0.4rem; padding: 0.55rem 0.7rem; border-radius: 0.7rem; background: var(--timber-accent-soft, #fdf1de); }
+.similar p { margin: 0; font-size: 0.8rem; font-weight: 700; }
+.similar button { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; padding: 0.35rem 0.5rem; border: 1px solid var(--timber-line, #e3e8f0); border-radius: 0.55rem; background: var(--timber-panel, #fff); color: inherit; font: inherit; font-size: 0.86rem; text-align: left; cursor: pointer; }
+.similar button span { flex-shrink: 0; font-size: 0.78rem; font-weight: 700; text-decoration: underline; }
 .dup-warn {
   display: flex;
   flex-wrap: wrap;

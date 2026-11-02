@@ -224,6 +224,9 @@ export const apiService = {
   suggestProduct(payload: { code?: string; name?: string; categories?: string[] }) {
     return axios.post('/foods/suggest', payload, { timeout: 45_000 }).then((r) => r.data);
   },
+  similarFoods(name: string, exceptId = '') {
+    return axios.get('/foods/similar', { params: { name, exceptId } }).then((r) => r.data);
+  },
   lookupOnline(code: string) {
     return axios.get('/foods/online', { params: { code } }).then((r) => r.data);
   },

@@ -153,6 +153,28 @@ function enrichItem(item) {
   };
 }
 
+const SIMILAR_MIN = 0.35;
+
+/**
+ * «Posibles coincidencias»: productos de la tienda con nombre parecido y la misma presentación (si dos tamaños chocan, no aparecen).
+ * Devuelve pocos y con el mismo formato que las opciones de «elige cuál es».
+ */
+function similarFoods(name, foods, { limit = 3, exceptId = '' } = {}) {
+  return (foods || [])
+    .filter((food) => String(food.id) !== String(exceptId))
+    .map((food) => ({ food, score: scoreName(name, food.name || '') }))
+    .filter((row) => row.score >= SIMILAR_MIN)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    .map(({ food }) => ({
+      id: String(food.id),
+      name: food.name || '',
+      oldPrice: roundPrice(food.price),
+      oldCost: roundPrice(food.cost),
+      oldStock: Math.max(0, Number(food.stock) || 0),
+    }));
+}
+
 function matchItems(items, foods) {
   const catalog = (foods || []).map((food) => ({
     id: String(food.id),
@@ -253,6 +275,7 @@ function matchItems(items, foods) {
       });
     } else if (!ranked.length) {
       unknown.push({
+        similar: similarFoods(item.name, foods),
         name: item.name,
         cost: item.cost,
         lineCost: item.lineCost,
@@ -308,6 +331,7 @@ module.exports = {
   scoreName,
   tokens,
   matchItems,
+  similarFoods,
   roundPrice,
   suggestSell,
   inferPackSize,

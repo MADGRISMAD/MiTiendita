@@ -285,3 +285,25 @@ test('el prompt pide separar los sabores en "variants" sin repartir cantidades',
   const src = require('fs').readFileSync(require.resolve('../services/gemini.service'), 'utf8');
   for (const frase of ['"variants"', 'CAM/LIMM/HAB', 'NO repartas tú las cantidades']) assert.ok(src.includes(frase), frase);
 });
+
+test('posibles coincidencias: mismo producto con otras palabras y misma presentación; otro tamaño no aparece', () => {
+  const foods = [
+    { id: '1', name: 'Del Valle Durazno 237ml', price: 15, cost: 10, stock: 3 },
+    { id: '2', name: 'Del Valle Durazno 400 ml', price: 20, cost: 14, stock: 1 },
+    { id: '3', name: 'Coca-Cola 600 ml', price: 20, cost: 14, stock: 5 },
+  ];
+  const sim = inv.similarFoods('Jugo Del Valle néctar durazno 237 ml', foods);
+  assert.deepEqual(sim.map((s) => s.id), ['1']);
+  assert.equal(sim[0].oldPrice, 15);
+  assert.deepEqual(inv.similarFoods('Del Valle Durazno 237 ml', foods, { exceptId: '1' }), []);
+  assert.deepEqual(inv.similarFoods('Papel higiénico', foods), []);
+});
+
+test('un producto que no se reconoce solo trae sus posibles coincidencias en «nuevos»', () => {
+  const foods = [{ id: '9', name: 'Sabritas Original 45 g', price: 19, cost: 13, stock: 2 }];
+  const m = inv.matchItems([{ raw: 'x', name: 'Papas Sabritas sal 45 g', packs: 1, packSize: 1, cost: 12 }], foods);
+  const all = [...m.unknown, ...m.choose];
+  assert.equal(all.length, 1);
+  const options = all[0].similar || all[0].options;
+  assert.equal(options[0].id, '9');
+});

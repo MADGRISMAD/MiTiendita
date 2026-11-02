@@ -5,6 +5,7 @@ const limits = require('../services/plan-limits.service');
 const { ObjectId } = require('mongodb');
 const barcodeLookup = require('../services/barcode-lookup.service');
 const productSuggest = require('../services/product-suggest.service');
+const magic = require('../services/magic-inventory.service');
 const saleAudit = require('../services/sale-audit.service');
 const { sanitizePriceRows, MAX_ROWS } = require('../services/bulk-prices.service');
 
@@ -319,6 +320,19 @@ async function lookupFood(req, res) {
   }
 }
 
+/** «Posibles coincidencias» al escribir el nombre de un producto nuevo: parecidos en nombre y presentación, para no registrarlo dos veces. */
+async function similarFoods(req, res) {
+  try {
+    const name = String(req.query.name || '').trim();
+    if (name.length < 3) return res.status(200).json({ items: [] });
+    const all = await db.GetFoods(req.tenantId);
+    return res.status(200).json({ items: magic.similarFoods(name, all, { exceptId: String(req.query.exceptId || '') }) });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).send(err.message || 'Error al buscar coincidencias');
+  }
+}
+
 /** Registro de un producto nuevo: nombre, presentación, categoría y unidad sugeridos (bases gratuitas y, si hace falta, IA sin gastar usos del plan). */
 async function suggestProduct(req, res) {
   try {
@@ -411,6 +425,7 @@ async function deleteAllFoods(req, res) {
 module.exports = {
   lookupOnline,
   suggestProduct,
+  similarFoods,
   listMenus,
   getMenu,
   createMenu,
