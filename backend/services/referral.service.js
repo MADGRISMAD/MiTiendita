@@ -154,6 +154,71 @@ async function commissionsBook(range, ownerEmail = '') {
   return { total: sum('earned'), pending: sum('pending'), paid: sum('paid'), count: bySeller.reduce((a, s) => a + s.count, 0), bySeller };
 }
 
+// ───────── Pasar comisiones entre vendedores ─────────
+async function requireReferrer(id, message = 'Vendedor no encontrado.') {
+  const referrer = await refDb.GetReferrerById(id);
+  if (!referrer) throw new ReferralError(404, message);
+  return referrer;
+}
+
+/** Comisiones que quedaron sin vendedor (el vendedor se eliminó), por tienda: para pasarlas a otro. */
+async function orphanCommissions() {
+  const groups = await refDb.ListOrphanCommissionGroups();
+  return groups
+    .map((g) => ({
+      tenantId: g.tenantId,
+      businessName: g.businessName || 'Tienda',
+      fromCode: g.code,
+      count: g.count,
+      pending: tiers.round2(g.pending),
+      paid: tiers.round2(g.paid),
+      earned: tiers.round2(g.pending + g.paid),
+      firstAt: g.firstAt,
+    }))
+    .sort((a, b) => new Date(a.firstAt) - new Date(b.firstAt));
+}
+
+/** Pasa a un vendedor las comisiones sin dueño de una tienda. Nunca toca las de un vendedor que sí existe. */
+async function reassignOrphans({ tenantId, toReferrerId }) {
+  const target = await requireReferrer(toReferrerId, 'Elige a quién pasarlas.');
+  const groups = (await refDb.ListOrphanCommissionGroups()).filter((g) => g.tenantId === String(tenantId));
+  if (!groups.length) throw new ReferralError(404, 'Esa tienda no tiene comisiones sin vendedor.');
+  let moved = 0;
+  for (const g of groups) {
+    moved += await refDb.ReassignCommissions({ tenantId: String(tenantId), referrerId: g.referrerId, status: { $ne: 'void' } }, target, g.referrerId);
+  }
+  return { moved, to: { id: target.id, name: target.name, code: target.code } };
+}
+
+/** Al cambiar el vendedor de una tienda: pasa al nuevo las comisiones que la tienda ya había generado con otros. */
+async function moveTenantCommissions({ tenantId, toReferrerId }) {
+  const target = await requireReferrer(toReferrerId);
+  const all = await refDb.ListCommissions({ tenantId: String(tenantId), limit: 1000 });
+  const fromIds = [...new Set(all.filter((c) => c.status !== 'void' && c.referrerId !== target.id).map((c) => c.referrerId))];
+  let moved = 0;
+  for (const fromId of fromIds) {
+    moved += await refDb.ReassignCommissions({ tenantId: String(tenantId), referrerId: fromId, status: { $ne: 'void' } }, target, fromId);
+  }
+  return { moved };
+}
+
+/** Lo que ya generó una tienda (para avisar antes de cambiarle el vendedor). */
+async function tenantCommissionSummary(tenantId) {
+  const all = (await refDb.ListCommissions({ tenantId: String(tenantId), limit: 1000 })).filter((c) => c.status !== 'void');
+  return { count: all.length, earned: tiers.round2(all.reduce((a, c) => a + Number(c.commission || 0), 0)) };
+}
+
+/** Pasa TODO un vendedor (comisiones, pagos y tiendas) a otro; se usa antes de eliminarlo para no perder su historial. */
+async function transferReferrer({ fromId, toId }) {
+  if (String(fromId) === String(toId)) throw new ReferralError(400, 'Elige a otro vendedor.');
+  const to = await requireReferrer(toId, 'Elige a quién pasar su historial.');
+  await requireReferrer(fromId);
+  const commissions = await refDb.ReassignCommissions({ referrerId: String(fromId) }, to, fromId);
+  const payouts = await refDb.ReassignPayouts(fromId, to.id);
+  const tenants = await refDb.ReassignTenants(fromId, to);
+  return { commissions, payouts, tenants, to: { id: to.id, name: to.name, code: to.code } };
+}
+
 /** El vendedor ligado a la cuenta de un dueño (o null). */
 const ownerSeller = (email) => refDb.GetReferrerByOwnerEmail(String(email || '').toLowerCase());
 
@@ -367,6 +432,11 @@ module.exports = {
   createReferrer,
   updateReferrer,
   linkOwner,
+  orphanCommissions,
+  reassignOrphans,
+  moveTenantCommissions,
+  tenantCommissionSummary,
+  transferReferrer,
   commissionsBook,
   ownerSeller,
   ownerEarnings,

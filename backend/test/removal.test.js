@@ -87,6 +87,7 @@ test('borrar un vendedor quita su registro, su acceso y sus notas; sus tiendas q
 function deps(w, over = {}) {
   const revoked = [];
   const cancelled = [];
+  const transfers = [];
   const tenants = w.data.tenants.map((t) => ({ ...t, id: String(t._id) }));
   return {
     revoked,
@@ -103,6 +104,14 @@ function deps(w, over = {}) {
       GetReferrerById: async (id) => w.data.referrers.map((r) => ({ ...r, id: String(r._id) })).find((r) => r.id === String(id)) || null,
       SumCommissions: async () => over.sums || [],
     },
+    referrals: {
+      transferReferrer: async ({ fromId, toId }) => {
+        if (String(fromId) === String(toId)) throw Object.assign(new Error('Elige a otro vendedor.'), { status: 400 });
+        transfers.push([String(fromId), String(toId)]);
+        return { commissions: 1, payouts: 0, tenants: 1 };
+      },
+    },
+    transfers,
     col: w.col,
     revokeSessions: async (id) => revoked.push(String(id)),
   };
@@ -155,4 +164,15 @@ test('eliminar un vendedor exige su nombre, y no deja si tiene comisiones por pa
   assert.equal(w.data.referrers.length, 0);
   assert.equal(free.revoked.length, 1, 'se cierran las sesiones de sus accesos al portal');
   await assert.rejects(removal.removeReferrer(free, String(new ObjectId()), 'x'), (e) => e.status === 404);
+});
+
+test('eliminar un vendedor pasando su historial a otro: no se bloquea por comisiones por pagar y avisa a quién pasó', async () => {
+  const w = world();
+  const d = deps(w, { sums: [{ referrerId: String(R1), status: 'pending', total: 120.5, count: 2 }] });
+  await assert.rejects(removal.removeReferrer(d, String(R1), 'Ana Vendedora', { transferTo: String(R1) }), (e) => e.status === 400);
+  assert.equal(w.data.referrers.length, 1, 'si el traspaso falla no se borra');
+  const r = await removal.removeReferrer(d, String(R1), 'Ana Vendedora', { transferTo: 'otro-id' });
+  assert.deepEqual(d.transfers, [[String(R1), 'otro-id']]);
+  assert.equal(r.transferred.commissions, 1);
+  assert.equal(w.data.referrers.length, 0);
 });

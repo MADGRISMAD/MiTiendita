@@ -686,8 +686,14 @@ export const apiService = {
   platformRemoveTenant(id: string, confirm: string) {
     return axios.post(`/platform/tenants/${id}/remove`, { confirm }, { timeout: 60_000 }).then((r) => r.data);
   },
-  platformRemoveReferrer(id: string, confirm: string) {
-    return axios.post(`/platform/referrers/${id}/remove`, { confirm }, { timeout: 60_000 }).then((r) => r.data);
+  platformRemoveReferrer(id: string, confirm: string, transferTo = '') {
+    return axios.post(`/platform/referrers/${id}/remove`, { confirm, transferTo }, { timeout: 60_000 }).then((r) => r.data);
+  },
+  platformOrphanCommissions() {
+    return axios.get('/platform/orphan-commissions').then((r) => r.data);
+  },
+  platformReassignOrphans(tenantId: string, toReferrerId: string) {
+    return axios.post('/platform/orphan-commissions/reassign', { tenantId, toReferrerId }).then((r) => r.data);
   },
   platformReferrers() {
     return cachedGet('/platform/referrers');
@@ -707,8 +713,8 @@ export const apiService = {
   platformVoidCommission(id: string, reason = '') {
     return axios.post(`/platform/commissions/${id}/void`, { reason }).then((r) => r.data);
   },
-  platformSetTenantReferrer(tenantId: string, code: string | null) {
-    return axios.put(`/platform/tenants/${tenantId}/referrer`, { code }).then((r) => r.data);
+  platformSetTenantReferrer(tenantId: string, code: string | null, moveCommissions = false) {
+    return axios.put(`/platform/tenants/${tenantId}/referrer`, { code, moveCommissions }).then((r) => r.data);
   },
   platformManualPayment(tenantId: string, payload: { amount: number; months?: number; note?: string }) {
     return axios.post(`/platform/tenants/${tenantId}/manual-payment`, payload).then((r) => r.data);

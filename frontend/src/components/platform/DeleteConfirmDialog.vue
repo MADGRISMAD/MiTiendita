@@ -24,6 +24,8 @@
           </template>
         </div>
 
+        <slot />
+
         <label class="adm-field">
           <span>
             Para confirmar, escribe <b class="del-name">{{ expected }}</b>

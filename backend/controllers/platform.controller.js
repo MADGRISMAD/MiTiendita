@@ -211,7 +211,9 @@ async function getTenant(req, res) {
       referrals.brief(tenant.referrerId).catch(() => null),
       branchInfo(tenant),
     ]);
-    return res.status(200).json({ ...card, usage, referrer, ...relatives, canDelete: !tenant.isBranch && (await isOwnerRequest(req)) });
+    const owner = await isOwnerRequest(req);
+    const commissions = owner ? await referrals.tenantCommissionSummary(tenant.id).catch(() => null) : null;
+    return res.status(200).json({ ...card, usage, referrer, ...relatives, canDelete: !tenant.isBranch && owner, canMoveCommissions: owner, commissions });
   } catch (err) {
     console.error(err);
     return res.status(500).send(err.message || 'No pude abrir ese cliente.');
@@ -989,6 +991,7 @@ function removalDeps() {
     db,
     mp,
     refDb: refDbRaw,
+    referrals,
     col: (name) => db.getCollection(name),
     revokeSessions: (userId) => db.RevokeUserSessions(userId, 'account_removed'),
   };
@@ -1003,11 +1006,14 @@ async function removeEntity(req, res, kind) {
     const result =
       kind === 'tenant'
         ? await removal.removeTenant(removalDeps(), req.params.id, confirm)
-        : await removal.removeReferrer(removalDeps(), req.params.id, confirm);
+        : await removal.removeReferrer(removalDeps(), req.params.id, confirm, { transferTo: String(req.body?.transferTo || '') });
     await audit.record(req, {
       type: kind === 'tenant' ? 'tenant_removed' : 'referrer_removed',
-      message: kind === 'tenant' ? `Eliminó la tienda «${result.name}»` : `Eliminó al vendedor «${result.name}» (${result.code})`,
-      meta: { id: result.id, removed: result.removed },
+      message:
+        kind === 'tenant'
+          ? `Eliminó la tienda «${result.name}»`
+          : `Eliminó al vendedor «${result.name}» (${result.code})${result.transferred ? ` y pasó su historial a ${result.transferred.to.name} (${result.transferred.to.code})` : ''}`,
+      meta: { id: result.id, removed: result.removed, transferred: result.transferred || null },
     }).catch(() => {});
     return res.status(200).json({ ok: true, ...result });
   } catch (err) {
@@ -1018,6 +1024,32 @@ async function removeEntity(req, res, kind) {
 }
 const removeTenant = (req, res) => removeEntity(req, res, 'tenant');
 const removeReferrer = (req, res) => removeEntity(req, res, 'referrer');
+
+/** Comisiones que quedaron sin vendedor (se eliminó), para pasarlas a otro. Solo socios. */
+async function orphanCommissions(req, res) {
+  try {
+    if (!(await isOwnerRequest(req))) return res.status(403).send('Esto es solo para los socios.');
+    return res.status(200).json({ items: await referrals.orphanCommissions() });
+  } catch (err) {
+    return refFail(res, err);
+  }
+}
+
+async function reassignOrphanCommissions(req, res) {
+  try {
+    if (!(await isOwnerRequest(req))) return res.status(403).send('Esto es solo para los socios.');
+    const result = await referrals.reassignOrphans({ tenantId: String(req.body?.tenantId || ''), toReferrerId: String(req.body?.toReferrerId || '') });
+    await audit.record(req, {
+      tenantId: String(req.body?.tenantId || ''),
+      type: 'commissions_reassigned',
+      message: `Pasó ${result.moved} comisiones sin vendedor a ${result.to.name} (${result.to.code})`,
+      meta: result,
+    }).catch(() => {});
+    return res.status(200).json(result);
+  } catch (err) {
+    return refFail(res, err);
+  }
+}
 
 /** Mi código de vendedor (solo socios): el vendedor ligado a mi cuenta, o que aún no lo he activado. */
 async function mySeller(req, res) {
@@ -1180,15 +1212,19 @@ async function setTenantReferrer(req, res) {
     }
     const referrer = await referrals.findActiveByCode(raw);
     if (!referrer) return res.status(400).send('Ese código no existe o el vendedor está pausado.');
+    // Pasar también las comisiones que la tienda ya generó con otro vendedor: solo lo deciden los socios
+    const moveCommissions = Boolean(req.body?.moveCommissions);
+    if (moveCommissions && !(await isOwnerRequest(req))) return res.status(403).send('Pasar comisiones entre vendedores solo lo pueden hacer los socios.');
     const fields = referrals.referralFields(referrer);
     await db.UpdateTenant(tenant.id, fields);
+    const moved = moveCommissions ? await referrals.moveTenantCommissions({ tenantId: tenant.id, toReferrerId: referrer.id }) : { moved: 0 };
     await audit.record(req, {
       tenantId: tenant.id,
       type: 'referrer_assigned',
       message: `Asignó la tienda al vendedor ${referrer.name} (${referrer.code})`,
-      meta: { referrerId: referrer.id },
+      meta: { referrerId: referrer.id, commissionsMoved: moved.moved },
     });
-    return res.status(200).json({ referrerId: referrer.id, referralCode: referrer.code, seller: referrer.name });
+    return res.status(200).json({ referrerId: referrer.id, referralCode: referrer.code, seller: referrer.name, commissionsMoved: moved.moved });
   } catch (err) {
     return refFail(res, err);
   }
@@ -1309,6 +1345,8 @@ async function manualPayment(req, res) {
 }
 
 module.exports = {
+  orphanCommissions,
+  reassignOrphanCommissions,
   removeTenant,
   removeReferrer,
   mySeller,
