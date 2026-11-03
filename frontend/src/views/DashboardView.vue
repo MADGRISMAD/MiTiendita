@@ -359,6 +359,54 @@
         </section>
       </div>
 
+      <!-- Cortes X (solo el dueño) -->
+      <section v-if="isAdmin" class="card" :class="{ busy: cutsLoading }">
+        <div class="card-head">
+          <div>
+            <h2>Cortes X</h2>
+            <p>Entregas de caja entre cajeros {{ periodPhrase }}</p>
+          </div>
+          <button type="button" class="btn sm" :disabled="cutsLoading" @click="loadCuts">{{ cutsLoaded ? 'Actualizar' : 'Ver cortes' }}</button>
+        </div>
+        <p v-if="cutsErr" class="empty cut-bad">{{ cutsErr }}</p>
+        <template v-else-if="cutsLoaded">
+          <div v-if="cuts.length" class="cut-filters">
+            <select v-model="cutFilter.register" class="inp" aria-label="Filtrar por caja">
+              <option value="">Todas las cajas</option>
+              <option v-for="n in cutRegisters" :key="n" :value="String(n)">{{ registerName(n) }}</option>
+            </select>
+            <select v-model="cutFilter.user" class="inp" aria-label="Filtrar por cajero">
+              <option value="">Todos los cajeros</option>
+              <option v-for="u in cutUsers" :key="u" :value="u">{{ u }}</option>
+            </select>
+            <select v-model="cutFilter.status" class="inp" aria-label="Filtrar por estado">
+              <option value="">Todos los estados</option>
+              <option v-for="(t, k) in CUT_STATUS_TEXT" :key="k" :value="k">{{ t }}</option>
+            </select>
+          </div>
+          <div v-if="shownCuts.length" class="cut-wrap">
+            <table class="cut-table">
+              <thead>
+                <tr><th>Caja</th><th>Entrega</th><th>Recibe</th><th>Hora</th><th class="r">Esperado</th><th class="r">Contado</th><th class="r">Diferencia</th><th>Estado</th></tr>
+              </thead>
+              <tbody>
+                <tr v-for="c in shownCuts" :key="c.id" :class="{ 'cut-flag': c.difference < 0 || c.status === 'disputed' }">
+                  <td>{{ registerName(c.registerId) }}</td>
+                  <td>{{ c.fromUser || '—' }}</td>
+                  <td>{{ c.toUser || '—' }}</td>
+                  <td>{{ cutTime(c.createdAt) }}</td>
+                  <td class="r">{{ money(c.expectedCash) }}</td>
+                  <td class="r">{{ money(c.countedCash) }}</td>
+                  <td class="r cut-diff" :class="{ bad: c.difference < 0 }">{{ money(c.difference) }} <small>{{ cutLabel(c.difference) }}</small></td>
+                  <td><span class="pill" :class="cutPill(c.status)">{{ CUT_STATUS_TEXT[c.status] || '—' }}</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p v-else class="empty">{{ cuts.length ? 'Ningún corte coincide con los filtros.' : 'Aún no hay Cortes X.' }}</p>
+        </template>
+      </section>
+
       <!-- Ventas del periodo -->
       <section class="card sales" :class="{ busy: loading }">
         <div class="card-head">
@@ -428,13 +476,16 @@ import { computed, onMounted, ref, watch } from "vue";
 import AppShell from "../components/AppShell.vue";
 import GettingStarted from "../components/GettingStarted.vue";
 import PosIcon from "../components/PosIcon.js";
-import { apiService } from "../apiService";
+import { apiService, apiErrorMessage } from "../apiService";
 import { venueStore } from "../venueStore";
 import { hasRole } from "../authStore";
 import { lineBreakdown, rateOf } from "../tax";
 import { fromStoreWall, storeClock, toStoreWall } from "../storeTime";
 import { fold } from "../textUtils";
 import { downloadCsv } from "../download";
+import { cutLabel, cutDifference } from "../cutX";
+import { getRegistersCached } from "../registerPicker";
+import { CUT_STATUS_TEXT } from "../cashCloseData";
 
 const PERIOD_KEY = "timber_report_period";
 const PERIODS = [
@@ -1278,6 +1329,59 @@ function exportExpiry() {
   download("caducidad.csv", ["Producto", "Lote", "Caducidad", "Dias", "Cantidad", "Costo unitario", "Alerta"], rows);
 }
 
+// ---------- Cortes X (solo dueño; se piden al pulsar el botón) ----------
+const cuts = ref([]);
+const cutsLoaded = ref(false);
+const cutsLoading = ref(false);
+const cutsErr = ref("");
+const cutRegs = ref([]);
+const cutFilter = ref({ register: "", user: "", status: "" });
+async function loadCuts() {
+  cutsLoading.value = true;
+  cutsErr.value = "";
+  try {
+    const r = range.value;
+    const [list, regs] = await Promise.all([
+      apiService.listCashCuts({ from: toServer(r.from), to: toServer(r.to) }),
+      getRegistersCached(() => apiService.getRegisters()).catch(() => null),
+    ]);
+    const regList = Array.isArray(regs) ? regs : regs?.registers;
+    cutRegs.value = Array.isArray(regList) ? regList : [];
+    cuts.value = (Array.isArray(list) ? list : list?.cuts || []).map((c) => ({
+      ...c,
+      difference: c.difference != null ? Number(c.difference) : cutDifference(c.countedCash, c.expectedCash),
+    }));
+    cutsLoaded.value = true;
+  } catch (e) {
+    cutsErr.value = apiErrorMessage(e, "No se pudieron cargar los Cortes X.");
+  } finally {
+    cutsLoading.value = false;
+  }
+}
+function registerName(n) {
+  const r = cutRegs.value.find((x) => x.number === Number(n));
+  return r?.name || `Caja ${n}`;
+}
+const cutRegisters = computed(() => [...new Set(cuts.value.map((c) => c.registerId))].sort((a, b) => a - b));
+const cutUsers = computed(() => [...new Set(cuts.value.flatMap((c) => [c.fromUser, c.toUser]).filter(Boolean))].sort());
+const shownCuts = computed(() => {
+  const f = cutFilter.value;
+  return cuts.value.filter(
+    (c) =>
+      (!f.register || String(c.registerId) === f.register) &&
+      (!f.user || c.fromUser === f.user || c.toUser === f.user) &&
+      (!f.status || c.status === f.status),
+  );
+});
+function cutTime(d) {
+  const t = new Date(d);
+  return Number.isNaN(t.getTime()) ? "—" : `${fmtDay(t)} ${storeClock(t, venueStore.timezone)}`;
+}
+const cutPill = (st) => (st === "disputed" ? "bad" : st === "confirmed" ? "good" : "warn");
+watch(range, () => {
+  if (cutsLoaded.value) loadCuts();
+});
+
 onMounted(async () => {
   load();
   const [f, m, low, exp, cash] = await Promise.allSettled([
@@ -1839,6 +1943,17 @@ onMounted(async () => {
 .s-main strong { font-variant-numeric: tabular-nums; }
 .s-main small { overflow: hidden; font-size: 0.78rem; color: var(--timber-muted); text-overflow: ellipsis; white-space: nowrap; }
 .s-pay { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.82rem; font-weight: 600; color: var(--timber-muted); }
+.cut-filters { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.6rem; }
+.cut-filters .inp { flex: 1 1 10rem; min-height: 2.5rem; width: auto; }
+.cut-wrap { overflow-x: auto; }
+.cut-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; font-variant-numeric: tabular-nums; }
+.cut-table th { padding: 0.4rem 0.5rem; text-align: left; font-size: 0.76rem; font-weight: 800; color: var(--timber-muted); white-space: nowrap; }
+.cut-table td { padding: 0.5rem; border-top: 1px solid var(--timber-line); white-space: nowrap; }
+.cut-table .r { text-align: right; }
+.cut-table .cut-flag { background: var(--timber-danger-soft); }
+.cut-diff.bad { font-weight: 800; color: var(--timber-danger); }
+.cut-diff small { font-weight: 600; color: var(--timber-muted); }
+.cut-bad { color: var(--timber-danger); }
 .pill {
   padding: 0.2rem 0.6rem;
   border-radius: 999px;

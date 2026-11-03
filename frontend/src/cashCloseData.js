@@ -38,6 +38,39 @@ function pickOpening(s, hint) {
   return Number.isFinite(h) && h > 0 ? h : 0;
 }
 
+/** Texto del estado de un Corte X. */
+export const CUT_STATUS_TEXT = { pending: "Pendiente", confirmed: "Confirmado", disputed: "En disputa" };
+
+/**
+ * Secciones «Por cajero» y «Cortes X» del corte final. `show` es false cuando hay un solo tramo
+ * y ningún corte X (tiendas de una caja y un cajero imprimen igual que siempre).
+ */
+export function cashCloseSections(segments, cuts) {
+  const segs = Array.isArray(segments) ? segments : [];
+  const list = Array.isArray(cuts) ? cuts : [];
+  return {
+    show: segs.length > 1 || list.length > 0,
+    byCashier: segs.map((g) => ({
+      label: g.user || "Sin cajero",
+      cash: Number(g.cash || 0),
+      card: Number(g.card || 0),
+      total: Number(g.total || 0),
+      count: Number(g.count || 0),
+    })),
+    cuts: list.map((c) => ({
+      id: c.id,
+      clock: clock(c.createdAt),
+      from: c.fromUser || "—",
+      to: c.toUser || "—",
+      expected: Number(c.expectedCash || 0),
+      counted: Number(c.countedCash || 0),
+      difference: Number(c.difference || 0),
+      status: c.status,
+      statusText: CUT_STATUS_TEXT[c.status] || "—",
+    })),
+  };
+}
+
 /**
  * Arma el objeto que espera buildCashClose() (escpos.js).
  * hint.openingFloat: fondo conocido por la pantalla (respaldo si el turno no lo trae).
@@ -175,6 +208,7 @@ export function buildCashCloseData(session, orders, printedAt = new Date(), hint
       amount: num(o.total),
       void: isVoid(o),
     })),
+    sections: cashCloseSections(s.segments, s.cuts),
     printedText: `${shortDate(printedAt)} ${clock(printedAt)}`,
   };
 }
@@ -186,7 +220,7 @@ export async function printCashCloseById(id, hint = {}) {
   const raw = await apiService.getCashSessionById(sid);
   const base = raw?.session || raw;
   // Los abonos de clientes vienen en los totales del servidor
-  const session = { ...base, abonos: base?.abonos || raw?.totals?.abonos };
+  const session = { ...base, abonos: base?.abonos || raw?.totals?.abonos, segments: raw?.segments, cuts: raw?.cuts };
   let orders = Array.isArray(raw?.orders) ? raw.orders : null;
   if (!orders) {
     const all = await apiService.getOrders({ cashSessionId: sid }).catch(() => []);

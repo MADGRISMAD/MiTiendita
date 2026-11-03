@@ -1274,7 +1274,8 @@ function iconOf(type) {
   if (type === "purchase_confirmed") return { name: "truck", tone: "good" };
   if (type === "stock_adjusted") return { name: "sliders", tone: "warn" };
   if (type === "supplier_exchange") return { name: "truck", tone: "info" };
-  if (type === "cash_opened" || type === "cash_closed") return { name: "sliders", tone: "info" };
+  if (type === "cash_cut_disputed") return { name: "sliders", tone: "warn" };
+  if (type === "cash_opened" || type === "cash_cut" || type === "cash_cut_confirmed" || type === "cash_closed") return { name: "sliders", tone: "info" };
   if (["sale_voided", "order_line_removed", "price_changed", "cost_changed", "discount_applied", "customer_deleted", "product_deleted", "category_deleted"].includes(type)) return { name: "sliders", tone: "warn" };
   if (String(type).startsWith("supplier_")) return { name: "users", tone: "info" };
   return { name: "history", tone: "" };
@@ -1365,7 +1366,7 @@ const LOG_GROUPS = [
   { id: "", label: "Todo", types: [] },
   { id: "ventas", label: "Anulaciones, productos quitados y descuentos", types: ["sale_voided", "order_line_removed", "discount_applied"] },
   { id: "precios", label: "Precios y costos", types: ["price_changed", "cost_changed"] },
-  { id: "caja", label: "Caja (apertura y corte)", types: ["cash_opened", "cash_closed"] },
+  { id: "caja", label: "Caja (apertura y corte)", types: ["cash_opened", "cash_closed", "cash_cut", "cash_cut_confirmed", "cash_cut_disputed"] },
   { id: "inventario", label: "Inventario", types: ["stock_adjusted", "supplier_exchange", "purchase_confirmed", "supplier_created", "supplier_deleted"] },
   { id: "clientes", label: "Clientes dados de baja", types: ["customer_deleted"] },
   { id: "catalogo", label: "Productos y categorías", types: ["product_created", "product_updated", "product_deleted", "category_created", "category_renamed", "category_deleted"] },

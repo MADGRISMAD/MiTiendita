@@ -129,6 +129,24 @@
               </div>
             </div>
 
+            <template v-if="sections.show">
+              <p class="tk-sec">Por cajero</p>
+              <div class="cc-sum">
+                <div v-for="g in sections.byCashier" :key="g.label" class="cc-row">
+                  <i></i><span>{{ g.label }} · {{ g.count }}</span><b>{{ money(g.total) }}</b>
+                </div>
+              </div>
+              <template v-if="sections.cuts.length">
+                <p class="tk-sec">Cortes X · {{ sections.cuts.length }}</p>
+                <div class="cc-list">
+                  <div v-for="c in sections.cuts" :key="c.id" class="cc-cut" :class="{ bad: c.difference < 0 || c.status === 'disputed' }">
+                    <div class="tk-line"><span>{{ c.clock }} · {{ c.from }} → {{ c.to }}</span><i class="tk-dots"></i><span>{{ c.statusText }}</span></div>
+                    <small>Esperado {{ money(c.expected) }} · Contado {{ money(c.counted) }} · Dif. {{ money(c.difference) }}</small>
+                  </div>
+                </div>
+              </template>
+            </template>
+
             <div v-if="session.notes" class="cc-notes">
               <span>Observaciones</span>
               <p>{{ session.notes }}</p>
@@ -178,7 +196,7 @@ import {
   savePrinterSettings,
   printCashCloseDirect,
 } from "../thermalPrinter";
-import { buildCashCloseData } from "../cashCloseData";
+import { buildCashCloseData, cashCloseSections } from "../cashCloseData";
 import PosIcon from "../components/PosIcon.js";
 import TicketHeader from "../components/TicketHeader.vue";
 import TicketBarcode from "../components/TicketBarcode.vue";
@@ -296,6 +314,8 @@ const verdict = computed(() => {
   return { word: "Sobran", sub: money(diff), title: `Sobraron ${money(diff)}`, solid: true };
 });
 
+const sections = computed(() => cashCloseSections(session.value?.segments, session.value?.cuts));
+
 const duration = computed(() => {
   const a = validDate(session.value?.openedAt);
   const b = validDate(session.value?.closedAt) || printedAt;
@@ -386,7 +406,7 @@ onMounted(async () => {
     // El servidor responde { session, totals, orders }; se aceptan también las formas ya desenvueltas
     const raw = await apiService.getCashSessionById(id);
     const base = raw?.session || raw;
-    session.value = { ...base, abonos: base?.abonos || raw?.totals?.abonos };
+    session.value = { ...base, abonos: base?.abonos || raw?.totals?.abonos, segments: raw?.segments, cuts: raw?.cuts };
     let list = Array.isArray(raw?.orders) ? raw.orders : null;
     if (!list) {
       const all = await apiService.getOrders({ cashSessionId: id }).catch(() => []);
@@ -414,6 +434,11 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+/* Cortes X del turno */
+.cc-cut { display: grid; padding: 1mm 0; border-bottom: 1px dashed currentColor; }
+.cc-cut small { font-size: 0.8em; opacity: 0.8; }
+.cc-cut.bad { font-weight: 800; }
+
 /* Turno: abrió ●━━━━● cerró */
 .cc-shift {
   display: grid;
