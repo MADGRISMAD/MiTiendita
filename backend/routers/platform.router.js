@@ -38,14 +38,10 @@ router.post('/desktop-licenses/:id/revoke', ...adminOnly, writeLimit, desktop.re
 // Catálogos maestros por giro (productos que ya vienen cargados en las tiendas nuevas)
 router.get('/catalogs', ...adminOnly, catalogs.summary);
 router.get('/catalogs/:catalog/items', ...adminOnly, catalogs.list);
-router.get('/catalogs/:catalog/codes', ...adminOnly, catalogs.codesReport);
-router.post('/catalogs/:catalog/codes/online', ...adminOnly, catalogs.codesOnline);
-router.post('/catalogs/:catalog/codes/suggest', ...adminOnly, catalogs.codesSuggest);
 router.post('/catalogs/:catalog/recode/preview', ...adminOnly, catalogs.recodePreview);
 router.post('/catalogs/:catalog/recode/apply', ...adminOnly, writeLimit, catalogs.recodeApply);
 router.post('/catalogs/:catalog/items', ...adminOnly, writeLimit, catalogs.create);
 router.post('/catalogs/:catalog/clear', ...adminOnly, writeLimit, catalogs.clearCatalog);
-router.post('/catalogs/:catalog/clear-unverified', ...adminOnly, writeLimit, catalogs.clearUnverified);
 router.post('/catalogs/:catalog/import', ...adminOnly, writeLimit, catalogs.importRows);
 router.post('/catalogs/:catalog/from-tenant', ...adminOnly, writeLimit, catalogs.addFromTenant);
 router.put('/catalogs/:catalog/items/:key', ...adminOnly, writeLimit, catalogs.update);

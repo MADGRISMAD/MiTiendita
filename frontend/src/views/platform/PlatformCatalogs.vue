@@ -4,8 +4,6 @@
       <template v-if="mode === 'catalog'">
         <button type="button" class="adm-btn" :disabled="!items.length" @click="exportCatalog">Exportar</button>
         <button type="button" class="adm-btn" @click="showImport = !showImport">Importar archivo</button>
-        <button type="button" class="adm-btn" :aria-pressed="showCodes" @click="showCodes = !showCodes">Verificar códigos</button>
-        <button type="button" class="adm-btn danger-ghost" :disabled="busy || !unverifiedCount" @click="clearUnverified">Eliminar no verificados ({{ unverifiedCount }})</button>
         <button type="button" class="adm-btn danger-ghost" :disabled="busy || !items.length" @click="clearCatalog">Eliminar catálogo</button>
         <button type="button" class="adm-btn primary" @click="openEdit(null)">Agregar producto</button>
       </template>
@@ -58,124 +56,6 @@
             <li v-if="importResult.errors.length > 15">…y {{ importResult.errors.length - 15 }} más.</li>
           </ul>
         </div>
-      </section>
-
-      <section v-if="showCodes" class="adm-card pf-card-stack">
-        <div class="adm-card-head">
-          <div>
-            <h2>Verificar códigos de barras</h2>
-            <p>
-              Primero revisa lo que se puede saber sin internet (dígito verificador, longitud, repetidos y sin código). Después compara el nombre de cada producto con
-              bases públicas (Open Food Facts y hermanas, UPCitemdb). Es una guía: nada se cambia solo.
-            </p>
-          </div>
-        </div>
-        <div class="acts">
-          <button type="button" class="adm-btn primary" :disabled="codesBusy || onlineRunning || suggestRunning" @click="runAll">
-            {{ allRunning ? "Revisando…" : "Revisar y proponer cambios" }}
-          </button>
-          <button type="button" class="adm-btn" :disabled="codesBusy || onlineRunning || suggestRunning" title="Solo lo que se puede saber sin internet" @click="runCodes">Solo revisión rápida</button>
-          <button v-if="allRunning" type="button" class="adm-btn" @click="stopAll">Detener</button>
-          <label class="cat-checks"><span><input v-model="onlyUnverified" type="checkbox" :disabled="onlineRunning" /> Solo los que no están verificados</span></label>
-        </div>
-        <p v-if="codesError" class="pf-err" role="alert">{{ codesError }}</p>
-        <template v-if="codes">
-          <p class="adm-hint">
-            {{ codes.counts.total }} productos: <strong>{{ codes.counts.ok }}</strong> con código válido ·
-            <strong>{{ codes.counts.digit }}</strong> con dígito verificador mal · <strong>{{ codes.counts.length }}</strong> con longitud rara ·
-            <strong>{{ codes.counts.missing }}</strong> sin código · <strong>{{ codes.counts.duplicate }}</strong> con código repetido ·
-            <strong>{{ codes.counts.sameName }}</strong> con el mismo nombre y otro código ·
-            {{ codes.counts.internal }} con clave propia o PLU (no se revisan).
-          </p>
-          <p v-if="!codes.problems.length" class="pf-ok" role="status">Sin problemas en lo que se puede revisar sin internet.</p>
-          <ul v-else class="pf-list">
-            <li v-for="p in codes.problems" :key="p.key" class="cat-row">
-              <span class="body">
-                <strong>{{ p.name }}<template v-if="p.presentation"> · {{ p.presentation }}</template></strong>
-                <small>{{ p.code || "sin código" }} · {{ p.section }}<template v-if="p.sharedWith.length"> · mismo código que: {{ p.sharedWith.join(", ") }}</template><template v-if="p.sameNameAs?.length"> · mismo nombre que: {{ p.sameNameAs.join(", ") }}</template></small>
-              </span>
-              <span class="adm-pill bad" v-for="i in p.issues" :key="i">{{ ISSUE_LABEL[i] }}</span>
-              <span class="acts">
-                <button type="button" class="adm-btn sm" :disabled="suggestRunning" @click="runSuggest([p.key])">Buscar código</button>
-                <button type="button" class="adm-btn sm" @click="editByKey(p.key)">Editar</button>
-              </span>
-            </li>
-          </ul>
-
-          <div v-if="fixKeys.length || proposalKeys.length" class="pf-fix">
-            <div class="acts">
-              <button v-if="!suggestRunning" type="button" class="adm-btn" :disabled="onlineRunning || !fixKeys.length" @click="runSuggest(fixKeys)">
-                Buscar el código correcto de los {{ fixKeys.length }} con problema
-              </button>
-              <button v-else type="button" class="adm-btn" @click="stopSuggest = true">Detener</button>
-              <span v-if="suggestTotal" class="pf-muted cat-progress">{{ suggestDone }} de {{ suggestTotal }} buscados</span>
-            </div>
-            <p v-if="suggestNote" class="adm-hint">{{ suggestNote }}</p>
-            <template v-if="proposalKeys.length">
-              <p class="adm-hint">
-                Propuestas para <strong>{{ proposalKeys.length }}</strong> productos. Nada se cambia hasta que tú lo autorices: «Confirmado» es un código que existe en las bases y trae el
-                mismo nombre; «Sin confirmar» solo tiene el dígito corregido; «Por nombre» salió de buscar el nombre y puede ser de otro país.
-              </p>
-              <div v-if="confirmedKeys.length" class="acts">
-                <button type="button" class="adm-btn primary" :disabled="busy" @click="applyConfirmed">{{ confirmedKeys.length === 1 ? "Aplicar la corrección confirmada" : `Aplicar las ${confirmedKeys.length} correcciones confirmadas` }}</button>
-              </div>
-              <ul class="pf-list">
-                <li v-for="k in proposalKeys" :key="k" class="cat-row cat-fix">
-                  <span class="body">
-                    <strong>{{ nameOf(k) }}</strong>
-                    <small>Código actual: {{ codeOf(k) || "sin código" }}</small>
-                    <small v-if="reasonOf(k)" class="cat-reason">{{ reasonOf(k) }}</small>
-                    <span v-for="c in suggestions[k]" :key="c.code" class="cat-cand">
-                      <span class="body">
-                        <strong>{{ c.code }}</strong>
-                        <small v-if="c.name">{{ [c.name, c.quantity].filter(Boolean).join(" · ") }} · {{ c.source }}<template v-if="c.mexico"> · México</template></small>
-                        <small v-else>Solo se ajustó el último dígito para que cuadre la cuenta; ninguna fuente lo confirma. Revísalo con el producto en mano antes de usarlo.</small>
-                      </span>
-                      <span class="adm-pill" :class="CONFIDENCE[c.confidence].tone">{{ CONFIDENCE[c.confidence].label }}</span>
-                      <button type="button" class="adm-btn sm" :disabled="busy" @click="useCode(k, c)">Usar este código</button>
-                    </span>
-                  </span>
-                </li>
-              </ul>
-            </template>
-          </div>
-
-          <div class="acts">
-            <button v-if="!onlineRunning" type="button" class="adm-btn primary" :disabled="!codes.onlineKeys.length" @click="runOnline">
-              Comparar {{ codes.onlineKeys.length }} con internet
-            </button>
-            <button v-else type="button" class="adm-btn" @click="stopOnline = true">Detener</button>
-            <span v-if="onlineTotal" class="pf-muted cat-progress">{{ onlineDone }} de {{ onlineTotal }} revisados</span>
-          </div>
-          <p v-if="onlineNote" class="adm-hint">{{ onlineNote }}</p>
-          <template v-if="onlineDone">
-            <p class="adm-hint">
-              <strong>{{ onlineCount.same }}</strong> coinciden · <strong>{{ onlineCount.different }}</strong> con otro nombre ·
-              <strong>{{ onlineCount.notfound }}</strong> no aparecen en las bases<template v-if="onlineCount.unavailable"> · {{ onlineCount.unavailable }} sin respuesta</template>.
-            </p>
-            <div v-if="onlineCount.sure" class="acts">
-              <button type="button" class="adm-btn" :disabled="busy" @click="verifyMatching">Marcar como verificados los {{ onlineCount.sure }} que coinciden</button>
-            </div>
-            <ul v-if="onlineReview.length" class="pf-list">
-              <li v-for="r in onlineReview" :key="r.key" class="cat-row">
-                <span class="body">
-                  <strong>{{ nameOf(r.key) }}</strong>
-                  <small>{{ items.find((i) => i.key === r.key)?.code }}</small>
-                  <small v-if="r.online">En internet ({{ r.online.source }}): {{ [r.online.name, r.online.quantity].filter(Boolean).join(" · ") }}</small>
-                  <small v-else>No aparece en las bases públicas: eso no significa que esté mal.</small>
-                </span>
-                <span v-if="r.status === 'different'" class="adm-pill bad">Otro nombre</span>
-                <span v-else-if="r.status === 'same'" class="adm-pill warn">Tamaño distinto</span>
-                <span v-else class="adm-pill">No encontrado</span>
-                <span class="acts">
-                  <button v-if="r.status === 'different'" type="button" class="adm-btn sm" :disabled="suggestRunning" @click="runSuggest([r.key])">Buscar código</button>
-                  <button type="button" class="adm-btn sm" @click="editByKey(r.key)">Editar</button>
-                  <button type="button" class="adm-btn sm" :disabled="busy" @click="verifyOne(r.key)">Está bien</button>
-                </span>
-              </li>
-            </ul>
-          </template>
-        </template>
       </section>
 
       <section class="adm-card pf-card-stack" :class="{ 'adm-loading': loading }">
@@ -451,12 +331,6 @@ function pickCatalog(key) {
   catalog.value = key;
   target.value = key;
   query.value = "";
-  codes.value = null;
-  suggestions.value = {};
-  registered.value = {};
-  onlineResults.value = {};
-  onlineDone.value = 0;
-  onlineTotal.value = 0;
   clearImport();
   loadItems();
 }
@@ -498,222 +372,6 @@ async function removeItem(item) {
   }
 }
 
-// ---------- Verificar códigos ----------
-const ISSUE_LABEL = { digit: "Dígito verificador mal", length: "Longitud rara", missing: "Sin código", duplicate: "Código repetido", sameName: "Mismo producto, otro código" };
-const showCodes = ref(false);
-const onlyUnverified = ref(true);
-const codes = ref(null);
-const codesBusy = ref(false);
-const codesError = ref("");
-const onlineResults = ref({}); // key → resultado de la comparación
-const onlineRunning = ref(false);
-const stopOnline = ref(false);
-const onlineDone = ref(0);
-const onlineTotal = ref(0);
-const onlineNote = ref("");
-
-const nameOf = (key) => items.value.find((i) => i.key === key)?.name || key;
-function editByKey(key) {
-  const item = items.value.find((i) => i.key === key);
-  if (item) openEdit(item);
-}
-const onlineList = computed(() => Object.entries(onlineResults.value).map(([key, r]) => ({ key, ...r })));
-const onlineCount = computed(() => {
-  const count = { same: 0, different: 0, notfound: 0, unavailable: 0, sure: 0 };
-  for (const r of onlineList.value) {
-    if (r.status in count) count[r.status] += 1;
-    if (r.status === "same" && !r.sizeDiffers) count.sure += 1;
-  }
-  return count;
-});
-// Lo que conviene mirar: otro nombre, tamaño distinto o no encontrado (lo que coincide y está bien no estorba)
-const onlineReview = computed(() => onlineList.value.filter((r) => r.status === "different" || r.status === "notfound" || (r.status === "same" && r.sizeDiffers)));
-
-async function runCodes() {
-  codesBusy.value = true;
-  codesError.value = "";
-  onlineResults.value = {};
-  suggestions.value = {};
-  registered.value = {};
-  suggestNote.value = "";
-  onlineDone.value = 0;
-  onlineTotal.value = 0;
-  onlineNote.value = "";
-  try {
-    codes.value = await apiService.platformCatalogCodes(catalog.value, onlyUnverified.value);
-  } catch (e) {
-    codesError.value = errText(e, "No pude revisar los códigos.");
-  } finally {
-    codesBusy.value = false;
-  }
-}
-async function runOnline() {
-  const keys = [...codes.value.onlineKeys];
-  const size = codes.value.batch || 8;
-  onlineRunning.value = true;
-  stopOnline.value = false;
-  onlineResults.value = {};
-  onlineDone.value = 0;
-  onlineTotal.value = keys.length;
-  onlineNote.value = "";
-  let silent = 0;
-  try {
-    for (let i = 0; i < keys.length && !stopOnline.value; i += size) {
-      const { results } = await apiService.platformCatalogCodesOnline(catalog.value, keys.slice(i, i + size));
-      const next = { ...onlineResults.value };
-      for (const r of results) if (r.status !== "skipped") next[r.key] = r;
-      onlineResults.value = next;
-      onlineDone.value = Math.min(i + size, keys.length);
-      silent = results.every((r) => r.status === "unavailable") ? silent + 1 : 0;
-      if (silent >= 3) {
-        onlineNote.value = "Las bases públicas no están respondiendo; se detuvo. Intenta de nuevo en un rato.";
-        break;
-      }
-    }
-    if (stopOnline.value) onlineNote.value = "Se detuvo; lo revisado hasta ahora se conserva.";
-  } catch (e) {
-    onlineNote.value = errText(e, "Se cortó la comparación con internet.");
-  } finally {
-    onlineRunning.value = false;
-  }
-}
-// Propuestas de código correcto: el servidor las busca, la persona autoriza cada cambio
-const CONFIDENCE = {
-  confirmed: { label: "Confirmado", tone: "good" },
-  ai_confirmed: { label: "IA + base pública", tone: "good" },
-  ai_page: { label: "IA con página", tone: "warn" },
-  check_digit: { label: "Sin confirmar", tone: "warn" },
-  search: { label: "Por nombre", tone: "warn" },
-};
-const suggestions = ref({}); // key → candidatos
-const suggestRunning = ref(false);
-const stopSuggest = ref(false);
-const suggestDone = ref(0);
-const suggestTotal = ref(0);
-const suggestNote = ref("");
-
-const codeOf = (key) => items.value.find((i) => i.key === key)?.code || "";
-const registered = ref({}); // key → a qué producto dicen las bases que pertenece hoy su código
-/** Por qué se propone cambiar el código de un producto. */
-function reasonOf(key) {
-  const r = registered.value[key];
-  if (r && !r.same) return `Ese código aparece en ${r.source} como «${[r.name, r.quantity].filter(Boolean).join(" · ")}», no como este producto.`;
-  const problem = codes.value?.problems.find((p) => p.key === key);
-  if (problem?.issues.includes("digit")) return "El dígito verificador no cuadra: es probable que el código esté mal escrito o inventado.";
-  if (problem?.issues.includes("length")) return "La longitud no es la de un código de barras.";
-  if (problem?.issues.includes("missing")) return "No tiene código.";
-  return "";
-}
-// Con problema de código, o con otro nombre en las bases públicas
-const fixKeys = computed(() => [
-  ...new Set([
-    ...(codes.value?.problems || []).filter((p) => p.issues.some((i) => i !== "duplicate" && i !== "sameName")).map((p) => p.key),
-    ...onlineList.value.filter((r) => r.status === "different").map((r) => r.key),
-  ]),
-]);
-const proposalKeys = computed(() => Object.keys(suggestions.value).filter((k) => suggestions.value[k]?.length));
-const confirmedKeys = computed(() => proposalKeys.value.filter((k) => suggestions.value[k][0].confidence === "confirmed"));
-
-async function runSuggest(keys) {
-  const list = [...keys];
-  suggestRunning.value = true;
-  stopSuggest.value = false;
-  suggestDone.value = 0;
-  suggestTotal.value = list.length;
-  suggestNote.value = "";
-  let empty = 0;
-  try {
-    for (let i = 0; i < list.length && !stopSuggest.value; i += 4) {
-      const res = await apiService.platformCatalogCodesSuggest(catalog.value, list.slice(i, i + 4));
-      suggestions.value = { ...suggestions.value, ...res.suggestions };
-      registered.value = { ...registered.value, ...res.registered };
-      suggestDone.value = Math.min(i + 4, list.length);
-      empty = Object.values(res.suggestions).every((c) => !c.length) ? empty + 1 : 0;
-    }
-    if (stopSuggest.value) suggestNote.value = "Se detuvo; lo encontrado hasta ahora se conserva.";
-    else if (list.length && !proposalKeys.value.length) suggestNote.value = "No encontré códigos para proponer. Si el producto lo tienes en la mano, lo más seguro es escanearlo con la cámara y editar el código.";
-    else if (empty >= 3) suggestNote.value = "Varios productos quedaron sin propuesta: las bases públicas no los tienen o no respondieron.";
-  } catch (e) {
-    suggestNote.value = errText(e, "Se cortó la búsqueda de códigos.");
-  } finally {
-    suggestRunning.value = false;
-  }
-}
-// Todo en uno: revisión rápida, comparar con internet y buscar el código correcto de los que no coinciden
-const allRunning = ref(false);
-function stopAll() {
-  stopOnline.value = true;
-  stopSuggest.value = true;
-  allRunning.value = false;
-}
-async function runAll() {
-  allRunning.value = true;
-  await runCodes();
-  if (!codes.value || !allRunning.value) return void (allRunning.value = false);
-  if (codes.value.onlineKeys.length) await runOnline();
-  if (allRunning.value && !stopOnline.value && fixKeys.value.length) await runSuggest(fixKeys.value);
-  allRunning.value = false;
-}
-function dropFixed(key) {
-  const { [key]: _gone, ...rest } = suggestions.value;
-  suggestions.value = rest;
-  if (codes.value) codes.value = { ...codes.value, problems: codes.value.problems.filter((p) => p.key !== key) };
-  onlineResults.value = Object.fromEntries(Object.entries(onlineResults.value).filter(([k]) => k !== key));
-}
-async function useCode(key, cand) {
-  const named = (cand.name ? `\nSegún ${cand.source}: ${[cand.name, cand.quantity].filter(Boolean).join(" · ")}` : "") + (reasonOf(key) ? `\n\nMotivo: ${reasonOf(key)}` : "");
-  const sure = ["confirmed", "ai_confirmed", "ai_page"].includes(cand.confidence);
-  const warn = sure ? "" : "\n\nATENCIÓN: este código NO está confirmado; ninguna fuente lo muestra con este producto. Un código equivocado cobra el producto que no es. Úsalo solo si lo verificaste con el producto en mano.";
-  if (!(await confirmDialog(`¿Cambiar el código de «${nameOf(key)}»?\n\nAntes: ${codeOf(key) || "sin código"}\nAhora: ${cand.code}${named}${warn}`, { confirmLabel: "Cambiar código", cancelLabel: "Volver", tone: sure ? "warn" : "danger" }))) return;
-  busy.value = true;
-  try {
-    await apiService.platformCatalogSave(catalog.value, { code: cand.code }, key);
-    dropFixed(key);
-    say(`Código de «${nameOf(key)}» cambiado a ${cand.code}.`);
-    await loadItems();
-  } catch (e) {
-    error.value = errText(e, "No pude cambiar el código.");
-  } finally {
-    busy.value = false;
-  }
-}
-async function applyConfirmed() {
-  const keys = [...confirmedKeys.value];
-  if (!(await confirmDialog(`Se cambiará el código de ${keys.length} productos.\n\nTodos están confirmados: el código existe en las bases públicas y el nombre coincide con el tuyo.`, { confirmLabel: "Cambiar códigos", cancelLabel: "Volver" }))) return;
-  busy.value = true;
-  let done = 0;
-  try {
-    for (const key of keys) {
-      await apiService.platformCatalogSave(catalog.value, { code: suggestions.value[key][0].code }, key);
-      dropFixed(key);
-      done += 1;
-    }
-    say(`${done} códigos corregidos.`);
-  } catch (e) {
-    error.value = `${errText(e, "No pude cambiar un código.")} Se alcanzaron a cambiar ${done} de ${keys.length}.`;
-  } finally {
-    busy.value = false;
-    await loadItems();
-  }
-}
-
-async function markVerified(keys) {
-  busy.value = true;
-  try {
-    for (const key of keys) await apiService.platformCatalogSave(catalog.value, { verified: true }, key);
-    const gone = new Set(keys);
-    onlineResults.value = Object.fromEntries(Object.entries(onlineResults.value).filter(([k]) => !gone.has(k)));
-    say(`${keys.length} producto(s) marcados como verificados.`);
-    await Promise.all([loadItems(), loadCatalogs()]);
-  } catch (e) {
-    error.value = errText(e, "No pude marcar los productos.");
-  } finally {
-    busy.value = false;
-  }
-}
-const verifyOne = (key) => markVerified([key]);
-const verifyMatching = () => markVerified(onlineList.value.filter((r) => r.status === "same" && !r.sizeDiffers).map((r) => r.key));
-
 // ---------- Eliminar todo el catálogo ----------
 async function clearCatalog() {
   const name = catalogLabel(catalog.value);
@@ -735,34 +393,6 @@ async function clearCatalog() {
     await Promise.all([loadItems(), loadCatalogs()]);
   } catch (e) {
     error.value = errText(e, "No pude eliminar el catálogo.");
-  } finally {
-    busy.value = false;
-  }
-}
-
-// ---------- Eliminar en grupo los no verificados ----------
-const unverifiedCount = computed(() => items.value.filter((i) => !i.verified).length);
-async function clearUnverified() {
-  const name = catalogLabel(catalog.value);
-  const total = unverifiedCount.value;
-  const word = await promptDialog(
-    `Vas a ELIMINAR ${total} productos NO verificados del catálogo «${name}». Los ${items.value.length - total} verificados se quedan.\n\nAntes de borrar se descarga una copia en CSV de todo el catálogo. Las tiendas que ya lo cargaron no se ven afectadas.\n\nPara confirmar escribe ELIMINAR.`,
-    { placeholder: "ELIMINAR", confirmLabel: "Eliminar no verificados", tone: "danger" }
-  );
-  if (word === null) return;
-  if (String(word).trim().toUpperCase() !== "ELIMINAR") {
-    error.value = "No se eliminó nada: no escribiste ELIMINAR.";
-    return;
-  }
-  busy.value = true;
-  error.value = "";
-  try {
-    exportCatalog(); // copia de respaldo antes de borrar
-    const r = await apiService.platformCatalogClearUnverified(catalog.value, "ELIMINAR");
-    say(`Se eliminaron ${r.removed} productos no verificados de «${name}». La copia se descargó como catalogo-${catalog.value}.csv.`);
-    await Promise.all([loadItems(), loadCatalogs()]);
-  } catch (e) {
-    error.value = errText(e, "No pude eliminar los productos no verificados.");
   } finally {
     busy.value = false;
   }
@@ -931,27 +561,17 @@ onMounted(async () => {
 .cat-pick { display: flex; align-items: center; gap: 0.6rem; flex: 1 1 auto; min-width: 0; cursor: pointer; }
 .cat-checks { display: grid; gap: 0.4rem; align-content: end; }
 .cat-checks label { display: flex; align-items: center; gap: 0.5rem; font-size: 0.9rem; }
-.pf-fix { display: grid; gap: 0.6rem; padding: 0.8rem 0; border-top: 1px solid var(--timber-line); }
-.cat-fix { align-items: flex-start; }
-.cat-cand { display: flex; align-items: center; gap: 0.6rem; padding: 0.4rem 0.6rem; margin-top: 0.3rem; border: 1px solid var(--timber-line); border-radius: 0.7rem; }
-.cat-cand .body { flex: 1 1 auto; }
-@media (max-width: 40rem) { .cat-cand { flex-wrap: wrap; } }
-.pf-card-stack > .acts, .pf-fix > .acts { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
 .pf-recode { display: grid; gap: 0.6rem; padding: 0.8rem 0; border-top: 1px solid var(--timber-line); }
 .pf-recode > .acts { display: flex; flex-wrap: wrap; gap: 0.5rem; }
-.cat-reason { color: var(--timber-ink); }
-.cat-progress { align-self: center; margin-left: 0.75rem; }
 .pf-err-list { margin: 0.4rem 0 0; padding-left: 1.1rem; }
 @media (max-width: 40rem) {
   .cat-row { flex-wrap: wrap; }
-  .cat-row .body, .cat-cand .body { min-width: 0; overflow-wrap: anywhere; }
+  .cat-row .body { min-width: 0; overflow-wrap: anywhere; }
   .cat-row .acts { flex: 1 1 100%; flex-wrap: wrap; }
   .cat-row .acts .adm-btn { flex: 1 1 auto; }
   .cat-section { padding: 0.3rem 0.6rem; }
-  .cat-cand .adm-btn { flex: 1 1 100%; }
   .adm-btn { white-space: normal; text-align: center; line-height: 1.2; padding-block: 0.45rem; }
-  .pf-card-stack > .acts .adm-btn, .pf-fix > .acts .adm-btn, .pf-recode > .acts .adm-btn { flex: 1 1 100%; }
-  .cat-progress { margin-left: 0; }
+  .pf-card-stack > .acts .adm-btn, .pf-recode > .acts .adm-btn { flex: 1 1 100%; }
   .pf nav.adm-tabs { flex-wrap: wrap; overflow: visible; }
   .pf nav.adm-tabs button { flex: 1 1 9rem; white-space: normal; text-align: center; line-height: 1.2; padding-block: 0.4rem; }
 }

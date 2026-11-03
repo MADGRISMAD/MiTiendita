@@ -1614,9 +1614,6 @@ async function DeleteCatalogItem(catalog, key) {
 async function DeleteAllCatalogItems(catalog) {
   return (await dbConnection.collection('master_catalog_items').deleteMany({ catalog })).deletedCount;
 }
-async function DeleteUnverifiedCatalogItems(catalog) {
-  return (await dbConnection.collection('master_catalog_items').deleteMany({ catalog, verified: { $ne: true } })).deletedCount;
-}
 async function IsCatalogSeeded() {
   return Boolean(await dbConnection.collection('app_state').findOne({ _id: 'master_catalog_seeded' }));
 }
@@ -1717,6 +1714,6 @@ module.exports = {
   CreatePurchase, GetPurchases, GetPurchaseById,
   CreateLot, GetLotsByFood, GetExpiringLots, TakeFromLot, CreateExchange, GetExchanges,
   GetEmailCode, SaveEmailCode, BumpEmailCodeTries, DeleteEmailCode,
-  ListCatalogItems, CountCatalogItems, GetCatalogItem, InsertCatalogItems, UpsertCatalogItem, DeleteCatalogItem, DeleteAllCatalogItems, DeleteUnverifiedCatalogItems, IsCatalogSeeded, MarkCatalogSeeded,
+  ListCatalogItems, CountCatalogItems, GetCatalogItem, InsertCatalogItems, UpsertCatalogItem, DeleteCatalogItem, DeleteAllCatalogItems, IsCatalogSeeded, MarkCatalogSeeded,
   CreatePlatformAudit, ListPlatformAudit, CreateActivityLog, GetActivityLog, GetPaidItemQtySince,
 };

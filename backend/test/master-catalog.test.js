@@ -65,11 +65,6 @@ function memoryDb({ foods = [], menus = [], settings = [], catalogItems = catalo
       for (let i = catalogItems.length - 1; i >= 0; i -= 1) if (catalogItems[i].catalog === c) catalogItems.splice(i, 1);
       return before - catalogItems.length;
     },
-    async DeleteUnverifiedCatalogItems(c) {
-      const before = catalogItems.length;
-      for (let i = catalogItems.length - 1; i >= 0; i -= 1) if (catalogItems[i].catalog === c && !catalogItems[i].verified) catalogItems.splice(i, 1);
-      return before - catalogItems.length;
-    },
     async IsCatalogSeeded() {
       return seeded;
     },
@@ -461,18 +456,4 @@ test('panel: no deja guardar un código con el dígito verificador mal, pero sí
   assert.equal(moved.section, 'B');
   // las claves propias y los PLU no son códigos de barras
   assert.ok(await admin.create(db, 'pharmacy', { name: 'Clave propia', code: 'MT-0001' }));
-});
-
-test('eliminar en grupo los no verificados: pide la palabra, deja los verificados y no toca otros catálogos', async () => {
-  const db = memoryDb({ catalogItems: [] });
-  await admin.create(db, 'pharmacy', { name: 'Verificado', code: '7502000000019', verified: true });
-  await admin.create(db, 'pharmacy', { name: 'Sin verificar A', code: '7502000000026' });
-  await admin.create(db, 'pharmacy', { name: 'Sin verificar B' });
-  await admin.create(db, 'hardware', { name: 'Otro catálogo' });
-  await assert.rejects(admin.removeUnverified(db, 'pharmacy', ''), (e) => e.status === 400);
-  await assert.rejects(admin.removeUnverified(db, 'nada', 'ELIMINAR'), (e) => e.status === 404);
-  assert.equal(await db.CountCatalogItems('pharmacy'), 3, 'sin confirmar no se borra nada');
-  assert.deepEqual(await admin.removeUnverified(db, 'pharmacy', ' eliminar '), { removed: 2 });
-  assert.deepEqual((await db.ListCatalogItems('pharmacy')).map((i) => i.name), ['Verificado']);
-  assert.equal(await db.CountCatalogItems('hardware'), 1);
 });

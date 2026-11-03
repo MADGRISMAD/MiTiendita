@@ -8,7 +8,7 @@ const { CATALOGS } = require('./master-catalog.service');
 const { SALE_UNITS } = require('../utils/units');
 const { httpError } = require('../utils/http-error');
 const { canon } = require('../utils/barcode');
-const { gtinStatus } = require('./catalog-audit.service');
+const { gtinStatus } = require('./product-match');
 
 const MAX_IMPORT_ROWS = 3000;
 const clean = (v, max) => String(v == null ? '' : v).replace(/\s+/g, ' ').trim().slice(0, max);
@@ -113,15 +113,6 @@ async function clear(db, catalog, confirm) {
   return { removed };
 }
 
-/** Elimina de golpe los productos del catálogo que no están marcados como verificados (los verificados se quedan). */
-async function removeUnverified(db, catalog, confirm) {
-  assertCatalog(catalog);
-  if (String(confirm || '').trim().toUpperCase() !== CLEAR_WORD) throw httpError(400, `Para eliminar los no verificados escribe ${CLEAR_WORD}.`);
-  const removed = await db.DeleteUnverifiedCatalogItems(catalog);
-  await db.MarkCatalogSeeded();
-  return { removed };
-}
-
 /**
  * Importa una lista (las filas ya leídas del archivo): crea lo nuevo y actualiza lo que ya existe, que se reconoce por
  * el código (o, sin código, por nombre y presentación). Nunca borra nada. Devuelve qué pasó con cada fila que falló.
@@ -204,4 +195,4 @@ async function addFromTenant(db, catalog, tenantId, foodIds) {
   return { ...result, skipped: wanted.size - rows.length };
 }
 
-module.exports = { summary, list, create, update, remove, clear, removeUnverified, importRows, tenantProducts, addFromTenant, cleanItem };
+module.exports = { summary, list, create, update, remove, clear, importRows, tenantProducts, addFromTenant, cleanItem };

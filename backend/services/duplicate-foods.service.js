@@ -3,7 +3,7 @@
  * Solo propone: la persona confirma cuál es el correcto. Reutiliza las reglas del catálogo (palabras, variantes y tamaño) y la similitud del inventario mágico.
  */
 const { canon, cleanAltCodes } = require('../utils/barcode');
-const { sameProduct, sizeDiffers, gtinStatus } = require('./catalog-audit.service');
+const { sameProduct, sizeDiffers, gtinStatus } = require('./product-match');
 const { tokens, scoreName } = require('./magic-inventory.service');
 
 const MAX_PAIRS = 100;

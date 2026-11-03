@@ -2,7 +2,6 @@ const db = require('../database/mongodb');
 const admin = require('../services/master-catalog-admin.service');
 const { catalogKeyFor, CATALOGS } = require('../services/master-catalog.service');
 const audit = require('../services/platform-audit.service');
-const codeAudit = require('../services/catalog-audit.service');
 const recode = require('../services/catalog-recode.service');
 
 function fail(res, err, fallback) {
@@ -61,35 +60,6 @@ async function remove(req, res) {
   }
 }
 
-/** Revisión local de los códigos del catálogo (sin internet) y la lista de productos que se pueden comparar en línea. */
-async function codesReport(req, res) {
-  try {
-    const onlyUnverified = req.query.onlyUnverified !== '0';
-    const [report, keys] = await Promise.all([codeAudit.localReport(db, req.params.catalog), codeAudit.onlineKeys(db, req.params.catalog, { onlyUnverified })]);
-    return res.json({ ...report, onlineKeys: keys, batch: codeAudit.MAX_BATCH });
-  } catch (err) {
-    return fail(res, err, 'No se pudieron revisar los códigos.');
-  }
-}
-
-/** Posibles códigos correctos para unos productos; el panel los muestra y la persona decide cuál usar. */
-async function codesSuggest(req, res) {
-  try {
-    return res.json(await codeAudit.suggest(db, req.params.catalog, req.body?.keys));
-  } catch (err) {
-    return fail(res, err, 'No se pudieron buscar los códigos.');
-  }
-}
-
-/** Compara con las bases públicas una tanda de productos (el panel va pidiendo tandas). */
-async function codesOnline(req, res) {
-  try {
-    return res.json(await codeAudit.checkOnline(db, req.params.catalog, req.body?.keys));
-  } catch (err) {
-    return fail(res, err, 'No se pudieron comparar los códigos.');
-  }
-}
-
 /** Vista previa: qué códigos del maestro cambiarían si se usan los de una tienda de confianza. */
 async function recodePreview(req, res) {
   try {
@@ -122,17 +92,6 @@ async function clearCatalog(req, res) {
     return res.json(result);
   } catch (err) {
     return fail(res, err, 'No se pudo eliminar el catálogo.');
-  }
-}
-
-/** Elimina de golpe los productos no verificados del catálogo (pide escribir ELIMINAR) y lo anota en la bitácora. */
-async function clearUnverified(req, res) {
-  try {
-    const result = await admin.removeUnverified(db, req.params.catalog, req.body?.confirm);
-    await audit.record(req, { type: 'catalog_unverified_cleared', message: `Eliminó los productos no verificados del catálogo ${label(req.params.catalog)} (${result.removed} productos)`, meta: { catalog: req.params.catalog, removed: result.removed } });
-    return res.json(result);
-  } catch (err) {
-    return fail(res, err, 'No se pudieron eliminar los productos no verificados.');
   }
 }
 
@@ -172,4 +131,4 @@ async function addFromTenant(req, res) {
   }
 }
 
-module.exports = { summary, list, create, update, remove, importRows, tenantProducts, addFromTenant, codesReport, codesOnline, codesSuggest, recodePreview, recodeApply, clearCatalog, clearUnverified };
+module.exports = { summary, list, create, update, remove, importRows, tenantProducts, addFromTenant, recodePreview, recodeApply, clearCatalog };
