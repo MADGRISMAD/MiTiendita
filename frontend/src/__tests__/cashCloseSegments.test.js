@@ -26,7 +26,8 @@ describe("corte final por cajero", () => {
     const r = cashCloseSections([{ user: "Ana", cash: 1, card: 0, total: 1, count: 1 }], [cut({ status: "disputed" })]);
     expect(r.show).toBe(true);
     expect(r.cuts).toHaveLength(1);
-    expect(r.cuts[0]).toMatchObject({ from: "Ana", to: "Luis", expected: 950, counted: 900, difference: -50, status: "disputed", statusText: "En disputa" });
+    expect(r.cuts[0]).toMatchObject({ from: "Ana", to: "Luis", expected: 950, counted: 900, difference: -50, status: "disputed", statusText: "En disputa", confirmed: null });
+    expect(cashCloseSections([], [cut({ status: "disputed", confirmedCash: 880 })]).cuts[0].confirmed).toBe(880);
   });
 
   it("se omite con un solo tramo y sin cortes (o sin datos)", () => {

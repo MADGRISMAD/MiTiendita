@@ -212,12 +212,13 @@ export function buildReceipt(t, { cols = 48, openDrawer = false } = {}) {
 }
 
 /**
- * Corte de caja. `t` trae todo calculado (lo arma PrintCashCloseView → corteData()):
+ * Corte de caja. `t` trae todo calculado (lo arma buildCashCloseData en cashCloseData.js):
  * { shop, kind, address, phone, closed, folio, dateText, openedClock, openedBy, closedClock, closedBy,
  *   deliveredBy, duration, salesCount, articles, average, methods: [{ label, amount }], totalSold,
  *   taxCollected, cardExtraTotal, voidedCount, voidedTotal, opening, cashSales, cashRefunds,
  *   expectedCash, countedCash, verdictWord, verdictSub, notes,
- *   tickets: [{ clock, folio, kind, amount, void }], printedText }
+ *   tickets: [{ clock, folio, kind, amount, void }], printedText,
+ *   sections: { show, byCashier: [{ label, count, total }], cuts: [{ clock, from, to, expected, counted, difference, confirmed, status, statusText }] } }
  */
 export function buildCashClose(t, { cols = 48 } = {}) {
   const p = new EscPos({ cols });
@@ -287,6 +288,20 @@ export function buildCashClose(t, { cols = 48 } = {}) {
   p.size(1);
   if (t.verdictSub) p.line(t.verdictSub);
   p.bold(false).align("left");
+
+  if (t.sections?.show) {
+    section("Por cajero");
+    for (const g of t.sections.byCashier || []) p.lr(`${g.label} · ${g.count}`, money(g.total));
+    const cuts = t.sections.cuts || [];
+    if (cuts.length) {
+      section(`Cortes X · ${cuts.length}`);
+      for (const c of cuts) {
+        p.lr(`${c.clock} ${c.from}>${c.to}`, c.statusText);
+        p.line(`  Esp ${money(c.expected)} Cont ${money(c.counted)} Dif ${money(c.difference)}`);
+        if (c.status === "disputed" && c.confirmed != null) p.line(`  Recibe contó ${money(c.confirmed)}`);
+      }
+    }
+  }
 
   if (t.notes) {
     section("Observaciones");

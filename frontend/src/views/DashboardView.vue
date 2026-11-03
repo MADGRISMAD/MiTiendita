@@ -398,7 +398,10 @@
                   <td class="r">{{ money(c.expectedCash) }}</td>
                   <td class="r">{{ money(c.countedCash) }}</td>
                   <td class="r cut-diff" :class="{ bad: c.difference < 0 }">{{ money(c.difference) }} <small>{{ cutLabel(c.difference) }}</small></td>
-                  <td><span class="pill" :class="cutPill(c.status)">{{ CUT_STATUS_TEXT[c.status] || '—' }}</span></td>
+                  <td>
+                    <span class="pill" :class="cutPill(c.status)">{{ CUT_STATUS_TEXT[c.status] || '—' }}</span>
+                    <small v-if="c.status === 'disputed' && c.confirmedCash != null" class="cut-conf">Recibe contó {{ money(c.confirmedCash) }}</small>
+                  </td>
                 </tr>
               </tbody>
             </table>
@@ -1378,7 +1381,7 @@ function cutTime(d) {
   return Number.isNaN(t.getTime()) ? "—" : `${fmtDay(t)} ${storeClock(t, venueStore.timezone)}`;
 }
 const cutPill = (st) => (st === "disputed" ? "bad" : st === "confirmed" ? "good" : "warn");
-watch(range, () => {
+watch([period, customFrom, customTo], () => {
   if (cutsLoaded.value) loadCuts();
 });
 
@@ -1953,6 +1956,7 @@ onMounted(async () => {
 .cut-table .cut-flag { background: var(--timber-danger-soft); }
 .cut-diff.bad { font-weight: 800; color: var(--timber-danger); }
 .cut-diff small { font-weight: 600; color: var(--timber-muted); }
+.cut-conf { display: block; font-size: 0.76rem; color: var(--timber-muted); }
 .cut-bad { color: var(--timber-danger); }
 .pill {
   padding: 0.2rem 0.6rem;

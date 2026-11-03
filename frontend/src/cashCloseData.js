@@ -65,6 +65,7 @@ export function cashCloseSections(segments, cuts) {
       expected: Number(c.expectedCash || 0),
       counted: Number(c.countedCash || 0),
       difference: Number(c.difference || 0),
+      confirmed: c.confirmedCash != null ? Number(c.confirmedCash) : null,
       status: c.status,
       statusText: CUT_STATUS_TEXT[c.status] || "—",
     })),

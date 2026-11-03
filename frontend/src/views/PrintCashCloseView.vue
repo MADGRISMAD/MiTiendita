@@ -142,6 +142,7 @@
                   <div v-for="c in sections.cuts" :key="c.id" class="cc-cut" :class="{ bad: c.difference < 0 || c.status === 'disputed' }">
                     <div class="tk-line"><span>{{ c.clock }} · {{ c.from }} → {{ c.to }}</span><i class="tk-dots"></i><span>{{ c.statusText }}</span></div>
                     <small>Esperado {{ money(c.expected) }} · Contado {{ money(c.counted) }} · Dif. {{ money(c.difference) }}</small>
+                    <small v-if="c.status === 'disputed' && c.confirmed != null">Recibe contó {{ money(c.confirmed) }}</small>
                   </div>
                 </div>
               </template>
