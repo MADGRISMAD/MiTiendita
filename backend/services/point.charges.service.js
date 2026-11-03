@@ -7,6 +7,10 @@ const db = require('../database/point.db');
 const svc = require('./mercadopago.point.service');
 
 const PAID = new Set(['processed']);
+// El pago puede figurar aprobado en la transacción antes de que la orden cambie a «processed». Por esa vía solo se acepta si el monto
+// es exacto y el pago SIGUE aprobado en una segunda revisión unos segundos después (así un aprobado que no se concreta no cuenta).
+const PAYMENT_PAID = new Set(['processed', 'approved', 'accredited']);
+const CONFIRM_MS = 5000;
 const FAILED = new Set(['failed', 'canceled', 'cancelled', 'expired']);
 // Mercado Pago no resuelve este estado solo: hay que confirmar en la terminal si el pago se hizo
 const NEEDS_REVIEW = new Set(['action_required']);
@@ -125,7 +129,19 @@ async function syncCharge(tenantId, chargeId) {
   const s = String(mpOrder.status || '').toLowerCase();
   const payment = mpOrder.transactions?.payments?.[0];
 
-  if (PAID.has(s)) {
+  const orderPaid = PAID.has(s);
+  const paymentApproved = !orderPaid && !FAILED.has(s) && PAYMENT_PAID.has(String(payment?.status || '').toLowerCase());
+  if (paymentApproved) {
+    const approvedAmount = Number(payment?.paid_amount ?? 0);
+    const firstSeen = charge.approvedSeenAt ? new Date(charge.approvedSeenAt).getTime() : 0;
+    const exact = Math.abs(approvedAmount - charge.amount) <= 0.01;
+    if (exact && !firstSeen) {
+      await db.UpdatePointCharge(chargeId, { approvedSeenAt: new Date(), mpStatus: s, updatedAt: new Date() }, tenantId);
+      return { ...charge, mpStatus: s };
+    }
+    if (!exact || Date.now() - firstSeen < CONFIRM_MS) return { ...charge, mpStatus: s };
+  }
+  if (orderPaid || paymentApproved) {
     const paid = Number(payment?.paid_amount ?? payment?.amount ?? 0);
     const mismatch = Math.abs(paid - charge.amount) > 0.01;
     return db.UpdatePointCharge(chargeId, {
@@ -144,7 +160,10 @@ async function syncCharge(tenantId, chargeId) {
   if (FAILED.has(s)) {
     return db.UpdatePointCharge(chargeId, { status: 'failed', mpStatus: s, updatedAt: new Date() }, tenantId);
   }
-  if (s !== charge.mpStatus) await db.UpdatePointCharge(chargeId, { mpStatus: s, updatedAt: new Date() }, tenantId);
+  // Si había un «aprobado» que ya no se sostiene, se descarta
+  if (s !== charge.mpStatus || charge.approvedSeenAt) {
+    await db.UpdatePointCharge(chargeId, { mpStatus: s, approvedSeenAt: null, updatedAt: new Date() }, tenantId);
+  }
   return { ...charge, mpStatus: s };
 }
 

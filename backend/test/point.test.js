@@ -358,3 +358,42 @@ test('un cobro usado por una venta que ya no existe se puede usar en una venta n
   await assert.rejects(charges.consumeCharge('t1', usado.id, { clientSaleId: 'OTRA', total: 70 }), (e) => e.code === 'charge_used');
   store.sales = [];
 });
+
+test('pago aprobado en la transacción con la orden aún en «at_terminal»: solo cuenta si el monto es exacto y se sostiene en una segunda revisión', async () => {
+  store.charges.length = 0;
+  mp.orders = {};
+  await ready('t1');
+  const c = addCharge({ mpOrderId: 'APR1', amount: 85 });
+  mp.orders.APR1 = { id: 'APR1', status: 'at_terminal', transactions: { payments: [{ amount: '85.00', paid_amount: '85.00', status: 'approved' }] } };
+  // primera vez: se anota, todavía no se da por pagado
+  assert.equal((await charges.syncCharge('t1', c.id)).status, 'pending');
+  assert.ok(store.charges[0].approvedSeenAt);
+  // muy pronto después: sigue pendiente
+  assert.equal((await charges.syncCharge('t1', c.id)).status, 'pending');
+  // pasados unos segundos y todavía aprobado: pagado
+  store.charges[0].approvedSeenAt = ago(10_000);
+  assert.equal((await charges.syncCharge('t1', c.id)).status, 'paid');
+});
+
+test('pago «aprobado» que no se sostiene, de otro monto o con la orden fallida no se da por pagado', async () => {
+  store.charges.length = 0;
+  mp.orders = {};
+  await ready('t1');
+  // se cae antes de la segunda revisión
+  const a = addCharge({ mpOrderId: 'APR2', amount: 40 });
+  mp.orders.APR2 = { id: 'APR2', status: 'at_terminal', transactions: { payments: [{ amount: '40.00', paid_amount: '40.00', status: 'approved' }] } };
+  await charges.syncCharge('t1', a.id);
+  mp.orders.APR2.transactions.payments[0].status = 'created';
+  store.charges[0].approvedSeenAt = ago(10_000);
+  assert.equal((await charges.syncCharge('t1', a.id)).status, 'pending');
+  assert.equal(store.charges[0].approvedSeenAt, null, 'el «aprobado» descartado no se arrastra');
+  // monto distinto: nunca por esta vía
+  const b = addCharge({ mpOrderId: 'APR3', amount: 40 });
+  mp.orders.APR3 = { id: 'APR3', status: 'at_terminal', transactions: { payments: [{ amount: '55.00', paid_amount: '55.00', status: 'approved' }] } };
+  store.charges[1].approvedSeenAt = ago(10_000);
+  assert.equal((await charges.syncCharge('t1', b.id)).status, 'pending');
+  // la orden terminó fallida aunque el pago diga aprobado: manda la orden
+  const d = addCharge({ mpOrderId: 'APR4', amount: 40 });
+  mp.orders.APR4 = { id: 'APR4', status: 'failed', transactions: { payments: [{ amount: '40.00', paid_amount: '40.00', status: 'approved' }] } };
+  assert.equal((await charges.syncCharge('t1', d.id)).status, 'failed');
+});
