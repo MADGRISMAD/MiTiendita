@@ -64,6 +64,7 @@ import { alertDialog, confirmDialog } from "../dialog";
 import PosIcon from "./PosIcon.js";
 import { apiService, apiErrorMessage } from "../apiService";
 import { allowedCounts, multicajaMode } from "../multicajaPlan";
+import { invalidateRegisters } from "../registerPicker";
 
 const loading = ref(true);
 const busy = ref(false);
@@ -126,6 +127,7 @@ function setCount(n) {
 
 async function load() {
   err.value = "";
+  invalidateRegisters();
   try {
     apply(await apiService.getRegisters());
     if (mode.value === "panel") {
@@ -149,6 +151,7 @@ async function save() {
   err.value = flash.value = "";
   try {
     apply(await apiService.saveRegisters(count.value, names.value.map((n) => String(n || "").trim().slice(0, 30))));
+    invalidateRegisters();
     flash.value = "Cajas guardadas.";
   } catch (e) {
     err.value = apiErrorMessage(e, "No se pudieron guardar las cajas.");
@@ -180,6 +183,7 @@ async function release(r) {
   err.value = flash.value = "";
   try {
     await apiService.releaseRegister(r.number);
+    invalidateRegisters();
     refresh(await apiService.getRegisters());
     flash.value = `Caja ${r.number} liberada.`;
   } catch (e) {

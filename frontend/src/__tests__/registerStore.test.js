@@ -22,6 +22,7 @@ import { registerStore, registerHeaders } from "../registerStore";
 beforeEach(() => {
   store.clear();
   broken = false;
+  registerStore.clear();
 });
 
 describe("caja de esta computadora", () => {
@@ -87,8 +88,16 @@ describe("hasChoice", () => {
     registerStore.clear();
     expect(registerStore.hasChoice()).toBe(false);
   });
-  it("sin almacenamiento es falso", () => {
+  it("sin almacenamiento es falso hasta elegir; luego vale en memoria", () => {
     broken = true;
     expect(registerStore.hasChoice()).toBe(false);
+    expect(registerStore.set(3)).toBe(false);
+    expect(registerStore.hasChoice()).toBe(true);
+    expect(registerStore.current()).toBe(3);
+    registerStore.clear();
+    expect(registerStore.hasChoice()).toBe(false);
+  });
+  it("set devuelve true si guardó", () => {
+    expect(registerStore.set(2)).toBe(true);
   });
 });

@@ -3,7 +3,7 @@
     <div class="caja">
       <header class="caja-head">
         <div class="caja-title">
-          <h1>Caja</h1>
+          <h1>Caja<span v-if="registerName"> · {{ registerName }}</span></h1>
           <p>
             <span class="state-dot" :class="cashOpen ? 'on' : 'off'" aria-hidden="true"></span>
             <span>{{ headline }}<span v-if="cashOpen && session?.openedBy" class="hide-mobile"> · abrió {{ session.openedBy }}</span></span>
@@ -526,6 +526,8 @@ import { computed, onMounted, onUnmounted, reactive, ref, watch } from "vue";
 import AppShell from "../components/AppShell.vue";
 import PosIcon from "../components/PosIcon.js";
 import { apiService } from "../apiService";
+import { registerStore } from "../registerStore";
+import { getRegistersCached, pickerState, registerLabel } from "../registerPicker";
 import { venueStore } from "../venueStore";
 import { defaultPayMethod, onlyEnabled } from "../payMethods";
 import { formatStoreDate, storeClock, storeDayKey } from "../storeTime";
@@ -878,6 +880,23 @@ function replaceOrder(updated) {
     if (i >= 0) list.value[i] = updated;
   }
 }
+
+// Varias cajas: el encabezado dice cuál es esta computadora
+const registerName = ref("");
+function loadRegisterName() {
+  getRegistersCached(() => apiService.getRegisters())
+    .then((d) => (registerName.value = registerLabel(d, registerStore.current())))
+    .catch(() => {});
+}
+loadRegisterName();
+// Cambio de caja sin recargar la página
+watch(
+  () => pickerState.version,
+  () => {
+    loadRegisterName();
+    load();
+  }
+);
 
 async function loadCash() {
   try {

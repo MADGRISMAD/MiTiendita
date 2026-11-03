@@ -1817,7 +1817,7 @@ import { ref, reactive, computed, onMounted, onUnmounted, watch, nextTick } from
 import { useRoute, useRouter } from "vue-router";
 import { apiService, apiErrorMessage, apiErrorCode } from "../apiService";
 import { registerStore } from "../registerStore";
-import { registerLabel } from "../registerPicker";
+import { getRegistersCached, pickerState, registerLabel, setCartDirty } from "../registerPicker";
 import { store } from "../store";
 import { venueStore, fetchVenueSettings } from "../venueStore";
 import { defaultPayMethod, onlyEnabled } from "../payMethods";
@@ -2614,10 +2614,21 @@ export default {
     const cashBlocked = computed(() => cashOpenWarning.value || registerOverPlan.value);
     // Varias cajas: el encabezado muestra cuál es esta computadora
     const registerName = ref("");
-    apiSvc
-      .getRegisters()
-      .then((d) => (registerName.value = registerLabel(d, registerStore.current())))
-      .catch(() => {});
+    function loadRegisterName() {
+      getRegistersCached(() => apiSvc.getRegisters())
+        .then((d) => (registerName.value = registerLabel(d, registerStore.current())))
+        .catch(() => {});
+    }
+    loadRegisterName();
+    // Cambio de caja sin recargar la página
+    watch(
+      () => pickerState.version,
+      () => {
+        registerOverPlan.value = false;
+        loadRegisterName();
+        loadCashSession();
+      }
+    );
     function noteSaleError(e) {
       if (apiErrorCode(e) === "register_over_plan") registerOverPlan.value = true;
     }
@@ -2648,6 +2659,7 @@ export default {
           await saveCachedCash(authStore.tenantId, data.session);
         } else {
           cashSession.value = null;
+          registerOverPlan.value = false; // caja cerrada: ya no hay nada que cortar
           await saveCachedCash(authStore.tenantId, null);
         }
       } catch (error) {
@@ -3046,6 +3058,12 @@ export default {
 
     const businessName = computed(() => venueStore.businessName || "Tienda");
     const lines = computed(() => store.platillosSeleccionados);
+    // Hay venta en curso: cambiar de caja con recarga la perdería (ver registerPicker.js)
+    watch(
+      () => lines.value.length,
+      (n) => setCartDirty(n > 0)
+    );
+    onUnmounted(() => setCartDirty(false));
     const itemCount = computed(() =>
       lines.value.reduce((s, p) => s + Number(p.quantity || 0), 0)
     );

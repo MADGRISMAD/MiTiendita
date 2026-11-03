@@ -8,9 +8,9 @@
         <p v-if="loading" class="rp-note">Cargando cajas…</p>
         <ul v-else class="rp-list">
           <li v-for="r in shown" :key="r.number">
-            <button type="button" class="rp-opt" :class="{ cur: r.number === current }" :disabled="Boolean(pickerState.blocked[r.number])" @click="choose(r.number)">
+            <button type="button" class="rp-opt" :class="{ cur: r.number === current }" :disabled="Boolean(lockText(r))" @click="choose(r.number)">
               <strong>{{ r.name || `Caja ${r.number}` }}</strong>
-              <span v-if="pickerState.blocked[r.number]" class="rp-state warn">{{ pickerState.blocked[r.number] }}</span>
+              <span v-if="lockText(r)" class="rp-state warn">{{ lockText(r) }}</span>
               <span v-else-if="r.openBy" class="rp-state warn">Abierta por {{ r.openBy }}</span>
               <span v-else class="rp-state">Libre</span>
             </button>
@@ -29,19 +29,24 @@ import { computed, onMounted, ref, watch } from "vue";
 import { apiService } from "../apiService";
 import { authStore } from "../authStore";
 import { registerStore } from "../registerStore";
-import { needsChoice, pickerState } from "../registerPicker";
+import { confirmDialog } from "../dialog";
+import { getRegistersCached, invalidateRegisters, isCartDirty, needsChoice, pickerState, registerLockText } from "../registerPicker";
 
 const registers = ref([]);
 const loading = ref(false);
 const error = ref("");
 const current = computed(() => registerStore.current());
+const fetchRegisters = () => getRegistersCached(() => apiService.getRegisters());
+// Abierta por otro (o marcada por el servidor como ocupada en otro equipo): no se puede elegir
+const lockText = (r) => pickerState.blocked[r.number] || registerLockText(r, registerStore.current(), registerStore.hasChoice());
 const shown = computed(() => registers.value.filter((r) => r.active !== false));
 
 async function load() {
   loading.value = true;
   error.value = "";
   try {
-    const data = await apiService.getRegisters();
+    invalidateRegisters(); // al abrirse por un error la lista debe estar al día
+    const data = await fetchRegisters();
     registers.value = Array.isArray(data?.registers) ? data.registers : [];
   } catch {
     error.value = "No se pudieron cargar las cajas.";
@@ -54,7 +59,7 @@ async function load() {
 async function checkFirstTime() {
   if (!authStore.token || !authStore.tenantId || registerStore.hasChoice() || pickerState.open) return;
   try {
-    const data = await apiService.getRegisters();
+    const data = await fetchRegisters();
     if (needsChoice(data, registerStore.hasChoice())) {
       registers.value = data.registers;
       pickerState.notice = "";
@@ -71,12 +76,17 @@ function close() {
   pickerState.open = false;
 }
 
-function choose(n) {
-  registerStore.set(n);
+async function choose(n) {
+  // Recargar perdería la venta en curso (el ticket actual no se guarda): se pregunta primero
+  if (isCartDirty() && !(await confirmDialog("Hay una venta en curso; al cambiar de caja se perderá.\n\n¿Continuar?", { confirmLabel: "Continuar", tone: "danger" }))) return;
+  const persisted = registerStore.set(n);
   pickerState.open = false;
   pickerState.blocked = {};
   pickerState.notice = "";
-  window.location.reload(); // las pantallas abiertas vuelven a cargar con la caja nueva
+  invalidateRegisters();
+  // Sin poder guardar la elección una recarga la olvidaría: las pantallas se refrescan solas
+  if (persisted) window.location.reload();
+  else pickerState.version += 1;
 }
 
 // Abierto por un error del servidor: se cargan las cajas para mostrarlas

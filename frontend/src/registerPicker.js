@@ -2,7 +2,44 @@
 import { reactive } from "vue";
 import { registerStore } from "./registerStore";
 
-export const pickerState = reactive({ open: false, notice: "", blocked: {}, forced: false });
+// `version` sube al cambiar de caja sin recargar la página: las pantallas abiertas lo observan para volver a cargar.
+export const pickerState = reactive({ open: false, notice: "", blocked: {}, forced: false, version: 0 });
+
+// Hay una venta en curso en pantalla (el ticket actual no se guarda): cambiar de caja recargando la perdería
+let cartDirty = false;
+export function setCartDirty(v) {
+  cartDirty = Boolean(v);
+}
+export function isCartDirty() {
+  return cartDirty;
+}
+
+// Una sola consulta de cajas compartida por quien la pida (selector, encabezados); `fetcher` trae los datos.
+let regCache = null;
+const REG_TTL = 15000;
+export function getRegistersCached(fetcher, now = Date.now()) {
+  if (regCache && now - regCache.at < REG_TTL) return regCache.promise;
+  const promise = Promise.resolve().then(fetcher);
+  regCache = { at: now, promise };
+  promise.catch(() => {
+    if (regCache && regCache.promise === promise) regCache = null;
+  });
+  return promise;
+}
+/** Olvida el resultado guardado (al guardar/liberar cajas o cambiar de caja). */
+export function invalidateRegisters() {
+  regCache = null;
+}
+
+/**
+ * Texto que deshabilita una caja en el selector: abierta por otra persona que no es la caja
+ * guardada en este navegador. '' si se puede elegir.
+ */
+export function registerLockText(r, current, hasChoice) {
+  if (!r?.openBy) return "";
+  if (hasChoice && r.number === current) return "";
+  return pickerNotice("register_in_use", { openedBy: r.openBy });
+}
 
 /** Aviso para el selector según el código de error del servidor; '' si el código no pide elegir caja. */
 export function pickerNotice(code, data = {}) {
@@ -35,6 +72,6 @@ export function noteRegisterError(data) {
     registerStore.clear();
   }
   pickerState.notice = code === "register_unknown" ? notice : "";
-  pickerState.forced = code === "register_unknown";
+  pickerState.forced = code === "register_unknown" || !registerStore.hasChoice();
   pickerState.open = true;
 }
