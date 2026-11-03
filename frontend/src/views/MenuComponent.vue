@@ -1808,7 +1808,7 @@ import CameraScanner from "../components/CameraScanner.vue";
 import PosIcon from "../components/PosIcon.js";
 import { ref, reactive, computed, onMounted, onUnmounted, watch, nextTick } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { apiService } from "../apiService";
+import { apiService, apiErrorMessage } from "../apiService";
 import { store } from "../store";
 import { venueStore, fetchVenueSettings } from "../venueStore";
 import { defaultPayMethod, onlyEnabled } from "../payMethods";
@@ -2650,7 +2650,7 @@ export default {
       } catch (e) {
         payError.value = isNetworkError(e)
           ? "Necesitas internet para abrir la caja la primera vez."
-          : e.response?.data || "No se pudo abrir la caja.";
+          : apiErrorMessage(e, "No se pudo abrir la caja.");
       } finally {
         cashBusy.value = false;
       }

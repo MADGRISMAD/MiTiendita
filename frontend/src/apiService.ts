@@ -37,6 +37,7 @@ export function appPublicOrigin() {
 
 import { isNetworkError } from './net';
 import { noteOffline, noteOnline } from './offlineFlags';
+import { registerHeaders } from './registerStore';
 
 // ── Caché corta de lecturas del panel (plataforma y socios) ──
 // Al cambiar de pestaña la pantalla aparece al instante con lo último leído, y dos pantallas que
@@ -68,6 +69,20 @@ function cachedGet<T = any>(url: string, params?: Record<string, unknown>, ttl =
   return pending;
 }
 
+/** Texto de error del servidor: `message` si el cuerpo es JSON, el texto plano si no, o `fallback`. */
+export function apiErrorMessage(err: any, fallback = ''): string {
+  const data = err?.response?.data;
+  if (data && typeof data === 'object' && typeof data.message === 'string' && data.message) return data.message;
+  if (typeof data === 'string' && data) return data;
+  return fallback;
+}
+
+/** `code` del error JSON del servidor (register_in_use, cash_closed…), o '' si no trae. */
+export function apiErrorCode(err: any): string {
+  const code = err?.response?.data?.code;
+  return typeof code === 'string' ? code : '';
+}
+
 axios.interceptors.request.use((config) => {
   const method = String(config.method || 'get').toLowerCase();
   if (method !== 'get' && PANEL_URL.test(String(config.url || ''))) GET_CACHE.clear();
@@ -76,6 +91,8 @@ axios.interceptors.request.use((config) => {
     config.headers = config.headers || {};
     (config.headers as Record<string, string>).Authorization = `Bearer ${token}`;
   }
+  config.headers = config.headers || {};
+  Object.assign(config.headers as Record<string, string>, registerHeaders());
   return config;
 });
 
@@ -429,6 +446,41 @@ export const apiService = {
   },
   getCashSessionById(id: string) {
     return axios.get(`/cash/session/${id}`).then((r) => r.data);
+  },
+
+  // ── Cajas (multicaja) y cortes entre cajeros ──
+  getRegisters() {
+    return axios.get('/registers').then((r) => r.data);
+  },
+  saveRegisters(count: number, names: string[]) {
+    return axios.put('/registers', { count, names }).then((r) => r.data);
+  },
+  releaseRegister(n: number) {
+    return axios.post(`/registers/${n}/release`).then((r) => r.data);
+  },
+  setPointShared(shared: boolean) {
+    return axios.put('/point/shared', { shared }).then((r) => r.data);
+  },
+  registerTerminal(terminalId: string, registerNumber?: number) {
+    return axios.post('/point/terminal', { terminalId, ...(registerNumber ? { registerNumber } : {}) }).then((r) => r.data);
+  },
+  cashCutExpected() {
+    return axios.get('/cash/cuts/expected').then((r) => r.data);
+  },
+  cashCutTeam() {
+    return axios.get('/cash/cuts/team').then((r) => r.data);
+  },
+  createCashCut(toUser: string, countedCash: number) {
+    return axios.post('/cash/cuts', { toUser, countedCash }).then((r) => r.data);
+  },
+  pendingCashCuts() {
+    return axios.get('/cash/cuts/pending').then((r) => r.data);
+  },
+  confirmCashCut(id: string, confirmedCash?: number) {
+    return axios.post(`/cash/cuts/${id}/confirm`, confirmedCash === undefined ? {} : { confirmedCash }).then((r) => r.data);
+  },
+  listCashCuts(params: { from?: string; to?: string; registerId?: string; user?: string; status?: string } = {}) {
+    return axios.get('/cash/cuts', { params }).then((r) => r.data);
   },
 
     // ── Terminal Mercado Pago (Point) ──
