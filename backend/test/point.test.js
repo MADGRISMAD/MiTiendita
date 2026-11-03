@@ -68,6 +68,25 @@ const fakeDb = {
 };
 require.cache[dbPath] = { id: dbPath, filename: dbPath, loaded: true, exports: fakeDb };
 
+/** Cajas en memoria que sustituyen a database/registers.db.js */
+store.registers = [];
+const registersPath = require.resolve('../database/registers.db');
+require.cache[registersPath] = {
+  id: registersPath,
+  filename: registersPath,
+  loaded: true,
+  exports: {
+    async ListRegisters() {
+      return store.registers.map((r) => ({ ...r }));
+    },
+    async SetRegisterTerminal(_t, number, terminalId, terminalLabel) {
+      const r = store.registers.find((x) => x.number === number);
+      if (r) Object.assign(r, { terminalId, terminalLabel });
+      return Boolean(r);
+    },
+  },
+};
+
 const svc = require('../services/mercadopago.point.service');
 const charges = require('../services/point.charges.service');
 
@@ -396,4 +415,87 @@ test('pago «aprobado» que no se sostiene, de otro monto o con la orden fallida
   const d = addCharge({ mpOrderId: 'APR4', amount: 40 });
   mp.orders.APR4 = { id: 'APR4', status: 'failed', transactions: { payments: [{ amount: '40.00', paid_amount: '40.00', status: 'approved' }] } };
   assert.equal((await charges.syncCharge('t1', d.id)).status, 'failed');
+});
+
+/* ───────────── MultiCaja: terminal por caja, compartida y candado por terminal ───────────── */
+const reg = (number, terminalId = null) => ({ number, name: `Caja ${number}`, terminalId, terminalLabel: terminalId, active: true });
+async function twoTerminals({ shared = false } = {}) {
+  store.charges.length = 0;
+  mp.orders = {};
+  mp.terminals = [{ id: 'PAX_A910__SN1', operating_mode: 'PDV' }, { id: 'PAX_B', operating_mode: 'PDV' }];
+  await ready('t1');
+  store.tenants.t1.point.sharedTerminal = shared;
+  store.registers = [reg(1), reg(2, 'PAX_B')];
+}
+const orderPosts = () => mp.calls.filter((c) => c.url === '/v1/orders' && c.method === 'POST');
+
+test('terminal por caja: el cobro de la caja 2 va a SU terminal y un pendiente en la caja 1 no lo bloquea', async () => {
+  await twoTerminals();
+  addCharge({ mpOrderId: 'ATT1', clientSaleId: 'C1', amount: 70, terminalId: 'PAX_A910__SN1', registerId: 1 });
+  mp.orders.ATT1 = { id: 'ATT1', status: 'at_terminal', transactions: { payments: [{ amount: '70.00' }] } };
+  mp.nextOrder = 'ORD-C2';
+  const r = await charges.startCharge({ tenantId: 't1', clientSaleId: 'C2', amount: 30, registerId: 2 });
+  assert.equal(r.status, 'pending');
+  assert.equal(orderPosts().pop().body.config.point.terminal_id, 'PAX_B');
+  const saved = store.charges.find((c) => c.clientSaleId === 'C2');
+  assert.equal(saved.terminalId, 'PAX_B');
+  assert.equal(saved.registerId, 2);
+  // la caja 1 sigue bloqueada por lo suyo
+  await assert.rejects(charges.startCharge({ tenantId: 't1', clientSaleId: 'C3', amount: 5, registerId: 1 }), (e) => e.code === 'terminal_busy');
+});
+
+test('terminal compartida: el cobro de la caja 2 espera mientras la caja 1 tiene uno pendiente, y sale por la terminal de la tienda', async () => {
+  await twoTerminals({ shared: true });
+  addCharge({ mpOrderId: 'ATT1', clientSaleId: 'C1', amount: 70, terminalId: 'PAX_A910__SN1', registerId: 1 });
+  mp.orders.ATT1 = { id: 'ATT1', status: 'at_terminal', transactions: { payments: [{ amount: '70.00' }] } };
+  await assert.rejects(charges.startCharge({ tenantId: 't1', clientSaleId: 'C2', amount: 30, registerId: 2 }), (e) => e.code === 'terminal_busy');
+  mp.orders.ATT1.status = 'processed';
+  mp.orders.ATT1.transactions.payments[0].paid_amount = '70.00';
+  mp.nextOrder = 'ORD-C2';
+  await charges.startCharge({ tenantId: 't1', clientSaleId: 'C2', amount: 30, registerId: 2 });
+  assert.equal(orderPosts().pop().body.config.point.terminal_id, 'PAX_A910__SN1', 'compartida: ignora la terminal propia de la caja');
+});
+
+test('caja sin terminal propia usa la de la tienda; status refleja la terminal de la caja', async () => {
+  await twoTerminals();
+  store.registers = [reg(1), reg(2)];
+  mp.nextOrder = 'ORD-C2';
+  await charges.startCharge({ tenantId: 't1', clientSaleId: 'C2', amount: 30, registerId: 2 });
+  assert.equal(orderPosts().pop().body.config.point.terminal_id, 'PAX_A910__SN1');
+  store.registers = [reg(1), reg(2, 'PAX_B')];
+  assert.equal((await charges.status('t1', 2)).terminalLabel, 'PAX_B');
+  assert.equal((await charges.status('t1', 1)).terminalLabel, 'PAX_A910__SN1');
+  assert.equal(svc.resolveTerminal({ point: { terminalId: 'T', sharedTerminal: true } }, { terminalId: 'R' }), 'T');
+  assert.equal(svc.resolveTerminal({ point: { terminalId: 'T' } }, { terminalId: 'R' }), 'R');
+  assert.equal(svc.resolveTerminal({ point: { terminalId: 'T' } }, undefined), 'T');
+});
+
+test('cobros viejos sin terminalId cuentan como de la terminal de la tienda', async () => {
+  await twoTerminals();
+  addCharge({ mpOrderId: 'OLD1', clientSaleId: 'VIEJA', amount: 70 });
+  mp.orders.OLD1 = { id: 'OLD1', status: 'at_terminal', transactions: { payments: [{ amount: '70.00' }] } };
+  mp.nextOrder = 'ORD-C2';
+  await charges.startCharge({ tenantId: 't1', clientSaleId: 'C2', amount: 30, registerId: 2 });
+  await assert.rejects(charges.startCharge({ tenantId: 't1', clientSaleId: 'C1', amount: 30, registerId: 1 }), (e) => e.code === 'terminal_busy');
+});
+
+test('registrar terminal en la caja 2 guarda solo su terminal; la caja 1 sigue en la tienda; el interruptor valida', async () => {
+  await twoTerminals();
+  store.registers = [reg(1), reg(2)];
+  await svc.registerTerminal('t1', 'PAX_B', 2);
+  assert.equal(store.registers[1].terminalId, 'PAX_B');
+  assert.equal(store.tenants.t1.point.terminalId, 'PAX_A910__SN1');
+  await assert.rejects(svc.registerTerminal('t1', 'PAX_B', 3), (e) => e.status === 404);
+  await assert.rejects(svc.registerTerminal('t1', 'PAX_B', 9), (e) => e.status === 400);
+  await svc.setSharedTerminal('t1', true);
+  assert.equal(store.tenants.t1.point.sharedTerminal, true);
+  await assert.rejects(svc.setSharedTerminal('t1', 'si'), (e) => e.status === 400);
+});
+
+test('cobros huérfanos de cualquier terminal siguen apareciendo', async () => {
+  await twoTerminals();
+  addCharge({ mpOrderId: 'P1', status: 'paid', amount: 20, terminalId: 'PAX_B', registerId: 2, paidAt: ago(10 * 60000), createdAt: ago(12 * 60000) });
+  const list = await charges.unconsumed('t1');
+  assert.equal(list.length, 1);
+  assert.equal(list[0].reason, 'no_sale');
 });

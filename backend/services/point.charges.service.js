@@ -19,10 +19,10 @@ const ORPHAN_WINDOW_MS = 7 * 24 * 3600 * 1000;
 const ORPHAN_MIN_AGE_MS = 3 * 60 * 1000; // un cobro recién aprobado todavía se está registrando como venta
 
 /** Estado para la UI (Configuración y diálogo de cobro). */
-async function status(tenantId) {
-  const tenant = await db.GetTenantById(tenantId);
+async function status(tenantId, registerId) {
+  const { tenant, terminalId, terminalLabel } = await svc.terminalOf(tenantId, registerId);
   const p = tenant?.point;
-  if (!p?.terminalId) {
+  if (!terminalId) {
     const connected = Boolean(p?.accessToken);
     return {
       configured: false,
@@ -32,8 +32,8 @@ async function status(tenantId) {
       message: connected ? 'Elige tu terminal para cobrar con tarjeta.' : 'Conecta tu cuenta de Mercado Pago.',
     };
   }
-  const r = await svc.preflight(tenantId);
-  return { configured: true, connected: true, terminalLabel: p.terminalLabel || p.terminalId, ...r };
+  const r = await svc.preflight(tenantId, registerId);
+  return { configured: true, connected: true, shared: Boolean(p.sharedTerminal), terminalLabel, ...r };
 }
 
 async function disconnect(tenantId) {
@@ -45,10 +45,13 @@ async function disconnect(tenantId) {
  * Mercado Pago solo deja cancelar por API un cobro que la terminal aún no muestra («created»); uno que ya está en pantalla
  * («at_terminal») solo se cancela en la terminal, y mientras siga ahí no recibe otro.
  */
-async function assertTerminalFree(tenantId, clientSaleId) {
+async function assertTerminalFree(tenantId, clientSaleId, terminalId) {
+  const tenant = await db.GetTenantById(tenantId);
   const recent = await db.ListPointChargesSince(tenantId, new Date(Date.now() - STALE_MS));
   for (const c of recent) {
     if (c.status !== 'pending' || c.clientSaleId === clientSaleId) continue;
+    // Solo cuenta lo pendiente en ESA terminal (los cobros viejos, sin terminal, eran de la terminal de la tienda)
+    if ((c.terminalId || tenant?.point?.terminalId) !== terminalId) continue;
     let now = await syncCharge(tenantId, c.id).catch(() => c);
     if (now.status === 'pending') now = await cancelCharge(tenantId, c.id).catch(() => now);
     if (now.status === 'pending') {
@@ -63,22 +66,22 @@ async function assertTerminalFree(tenantId, clientSaleId) {
 }
 
 /** Crea el cobro en la terminal. Idempotente por clientSaleId + monto mientras siga pendiente. */
-async function startCharge({ tenantId, clientSaleId, amount }) {
+async function startCharge({ tenantId, clientSaleId, amount, registerId }) {
   if (!clientSaleId) throw svc.httpError('Falta clientSaleId', 400);
   const value = Number(amount).toFixed(2);
   if (!(Number(value) > 0)) throw svc.httpError('Monto inválido', 400);
 
-  const check = await svc.preflight(tenantId);
+  const check = await svc.preflight(tenantId, registerId);
   if (!check.ok) throw svc.httpError(check.message, 409, check.code);
 
-  await assertTerminalFree(tenantId, String(clientSaleId));
+  const { terminalId } = await svc.terminalOf(tenantId, registerId);
+  await assertTerminalFree(tenantId, String(clientSaleId), terminalId);
 
   const prev = await db.GetPointChargeBySale(clientSaleId, tenantId);
   if (prev && prev.status === 'pending' && prev.amount === Number(value)) return { id: prev.id, status: 'pending' };
   if (prev && prev.status === 'paid' && !prev.consumedBy) return { id: prev.id, status: 'paid' };
   const attempt = (prev?.attempt || 0) + 1;
 
-  const tenant = await db.GetTenantById(tenantId);
   const idem = crypto.createHash('sha256').update(`${tenantId}:${clientSaleId}:${value}:${attempt}`).digest('hex');
 
   let mpOrder;
@@ -92,7 +95,7 @@ async function startCharge({ tenantId, clientSaleId, amount }) {
         description: `Venta ${String(clientSaleId).slice(-6).toUpperCase()}`,
         transactions: { payments: [{ amount: value }] },
         config: {
-          point: { terminal_id: tenant.point.terminalId },
+          point: { terminal_id: terminalId },
           payment_method: { default_type: 'debit_card' },
         },
       },
@@ -110,6 +113,8 @@ async function startCharge({ tenantId, clientSaleId, amount }) {
     amount: Number(value),
     mpOrderId: String(mpOrder.id),
     mpStatus: mpOrder.status,
+    terminalId,
+    registerId: registerId ?? null,
     status: 'pending',
     attempt,
     consumedBy: null,

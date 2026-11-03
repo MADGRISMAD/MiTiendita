@@ -49,4 +49,10 @@ async function saveRegisters(store, tenantId, plan, { count, names = [] }) {
   return listRegisters(store, tenantId, plan);
 }
 
-module.exports = { listRegisters, saveRegisters, isOverPlan };
+/** Liga una terminal a una caja (solo toca esos dos campos, sin reescribir las demás cajas). */
+async function setRegisterTerminal(store, tenantId, number, terminalId, terminalLabel) {
+  const found = await store.SetRegisterTerminal(tenantId, number, terminalId, terminalLabel);
+  if (!found) throw httpError(404, 'Esa caja no existe.');
+}
+
+module.exports = { listRegisters, saveRegisters, isOverPlan, setRegisterTerminal };

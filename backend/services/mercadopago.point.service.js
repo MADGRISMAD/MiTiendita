@@ -8,6 +8,8 @@
  */
 const crypto = require('crypto');
 const db = require('../database/point.db');
+const registersDb = require('../database/registers.db');
+const { setRegisterTerminal } = require('./registers.service');
 
 const MP_API = 'https://api.mercadopago.com';
 
@@ -163,7 +165,31 @@ async function listTerminals(tenantId) {
   return data?.data?.terminals || data?.terminals || [];
 }
 
-async function registerTerminal(tenantId, terminalId) {
+/**
+ * Terminal que cobra para una caja: con terminal compartida, la de la tienda; si no, la propia de la caja
+ * o (si no tiene) la de la tienda, que es la que siempre usó la Caja 1.
+ */
+function resolveTerminal(tenant, register) {
+  const p = tenant?.point;
+  if (p?.sharedTerminal) return p.terminalId || null;
+  return register?.terminalId || p?.terminalId || null;
+}
+
+/** Terminal (id y nombre) que le toca a la caja `registerId`; sin caja, la de la tienda. */
+async function terminalOf(tenantId, registerId) {
+  const tenant = await db.GetTenantById(tenantId);
+  const rows = registerId == null ? [] : await registersDb.ListRegisters(tenantId);
+  const register = rows.find((r) => r.number === Number(registerId));
+  const terminalId = resolveTerminal(tenant, register);
+  const own = !tenant?.point?.sharedTerminal && register?.terminalId;
+  const terminalLabel = (own ? register.terminalLabel : tenant?.point?.terminalLabel) || terminalId;
+  return { tenant, terminalId, terminalLabel };
+}
+
+/** Terminal de la tienda (Caja 1 / compartida) o, con `registerNumber` 2–4, la propia de esa caja. */
+async function registerTerminal(tenantId, terminalId, registerNumber) {
+  const number = registerNumber == null || registerNumber === '' ? 1 : Number(registerNumber);
+  if (!Number.isInteger(number) || number < 1 || number > 4) throw httpError('Caja inválida', 400);
   const terminals = await listTerminals(tenantId);
   const t = terminals.find((x) => x.id === terminalId);
   if (!t) throw httpError('Esa terminal no pertenece a tu cuenta de Mercado Pago', 404, 'terminal_not_found');
@@ -174,6 +200,10 @@ async function registerTerminal(tenantId, terminalId) {
     body: { terminals: [{ id: terminalId, operating_mode: 'PDV' }] },
   });
 
+  if (number > 1) {
+    await setRegisterTerminal(registersDb, tenantId, number, terminalId, t.external_pos_id || t.id);
+    return { terminalId, registerNumber: number };
+  }
   await db.UpdateTenant(tenantId, {
     'point.terminalId': terminalId,
     'point.terminalLabel': t.external_pos_id || t.id,
@@ -185,22 +215,29 @@ async function registerTerminal(tenantId, terminalId) {
   return { terminalId };
 }
 
+/** Interruptor «una terminal para todas las cajas». */
+async function setSharedTerminal(tenantId, shared) {
+  if (typeof shared !== 'boolean') throw httpError('Indica si la terminal es compartida (true o false).', 400);
+  await db.UpdateTenant(tenantId, { 'point.sharedTerminal': shared, updatedAt: new Date() });
+  return { shared };
+}
+
 /** ¿Se puede cobrar AHORA? Devuelve { ok, code, message }. */
-async function preflight(tenantId) {
-  const tenant = await db.GetTenantById(tenantId);
+async function preflight(tenantId, registerId) {
+  const { tenant, terminalId } = await terminalOf(tenantId, registerId);
   const p = tenant?.point;
   if (!p?.accessToken) return { ok: false, code: 'not_connected', message: 'Conecta tu cuenta de Mercado Pago para cobrar con terminal.' };
-  if (!p.terminalId) return { ok: false, code: 'no_terminal', message: 'Registra tu terminal de Mercado Pago para cobrar con tarjeta.' };
+  if (!terminalId) return { ok: false, code: 'no_terminal', message: 'Registra tu terminal de Mercado Pago para cobrar con tarjeta.' };
 
   try {
     const terminals = await listTerminals(tenantId);
-    const t = terminals.find((x) => x.id === p.terminalId);
+    const t = terminals.find((x) => x.id === terminalId);
     if (!t) {
       await db.UpdateTenant(tenantId, { 'point.status': 'disconnected', 'point.lastError': 'terminal_missing' });
       return { ok: false, code: 'terminal_missing', message: 'Tu terminal ya no aparece vinculada a tu cuenta. Vuelve a registrarla.' };
     }
     if (t.operating_mode && t.operating_mode !== 'PDV') {
-      await mp(tenantId, '/terminals/v1/setup', { method: 'PATCH', body: { terminals: [{ id: p.terminalId, operating_mode: 'PDV' }] } });
+      await mp(tenantId, '/terminals/v1/setup', { method: 'PATCH', body: { terminals: [{ id: terminalId, operating_mode: 'PDV' }] } });
     }
     await db.UpdateTenant(tenantId, { 'point.status': 'ready', 'point.lastCheckAt': new Date(), 'point.lastError': null });
     return { ok: true, code: 'ready', message: 'Terminal lista' };
@@ -234,5 +271,8 @@ module.exports = {
   handleOAuthCallback,
   listTerminals,
   registerTerminal,
+  setSharedTerminal,
+  resolveTerminal,
+  terminalOf,
   preflight,
 };

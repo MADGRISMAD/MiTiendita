@@ -49,18 +49,22 @@ router.get('/terminals', auth, adminOnly, async (req, res) => {
   try { res.json(await svc.listTerminals(req.tenantId)); } catch (e) { fail(res, e); }
 });
 router.post('/terminal', auth, adminOnly, adminLimit, async (req, res) => {
-  try { res.json(await svc.registerTerminal(req.tenantId, String(req.body?.terminalId || ''))); } catch (e) { fail(res, e); }
+  try { res.json(await svc.registerTerminal(req.tenantId, String(req.body?.terminalId || ''), req.body?.registerNumber)); } catch (e) { fail(res, e); }
+});
+router.put('/shared', auth, adminOnly, adminLimit, async (req, res) => {
+  try { res.json(await svc.setSharedTerminal(req.tenantId, req.body?.shared)); } catch (e) { fail(res, e); }
 });
 
 /* ───────────── Estado y cobros (admin y cajero) ───────────── */
-router.get('/status', auth, async (req, res) => {
-  try { res.json(await charges.status(req.tenantId)); } catch (e) { fail(res, e); }
+// Leer el estado nunca se bloquea por candado ni por plan (el cobro sí)
+router.get('/status', auth, attachRegister({ allowOverPlan: true }), async (req, res) => {
+  try { res.json(await charges.status(req.tenantId, req.registerId)); } catch (e) { fail(res, e); }
 });
 
 router.post('/charges', auth, attachRegister, startLimit, async (req, res) => {
   try {
     const { clientSaleId, amount } = req.body || {};
-    res.status(201).json(await charges.startCharge({ tenantId: req.tenantId, clientSaleId, amount }));
+    res.status(201).json(await charges.startCharge({ tenantId: req.tenantId, clientSaleId, amount, registerId: req.registerId }));
   } catch (e) { fail(res, e); }
 });
 

@@ -47,4 +47,13 @@ async function ReplaceRegisters(tenantId, rows) {
   await c.bulkWrite(ops, { ordered: true });
 }
 
-module.exports = { ListRegisters, ReplaceRegisters };
+/** Cambia solo la terminal de una caja (`$set` puntual). Devuelve false si la caja no existe. */
+async function SetRegisterTerminal(tenantId, number, terminalId, terminalLabel) {
+  const r = await (await col()).updateOne(
+    { tenantId: String(tenantId), number },
+    { $set: { terminalId, terminalLabel, updatedAt: new Date() } }
+  );
+  return r.matchedCount > 0;
+}
+
+module.exports = { ListRegisters, ReplaceRegisters, SetRegisterTerminal };
