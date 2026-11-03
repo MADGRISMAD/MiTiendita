@@ -140,3 +140,20 @@ test('Corte final sin cortes X: no se agrega lastSegment', async () => {
     assert.equal(closed.body.segmentDifference, undefined);
   } finally { await w.stop(); }
 });
+
+test('Corte final: si falla el cálculo del tramo, el cierre responde 200 sin lastSegment', async () => {
+  const w = await start({ users: USERS });
+  try {
+    await w.call('POST', '/api/cash/session/open', { openingFloat: 500 }, as('ana'));
+    await w.call('POST', '/api/cash/cuts', { toUser: 'beto', countedCash: 500 }, as('ana'));
+    const cutsDb = require('../database/cash-cuts.db');
+    const real = cutsDb.ordersBySession;
+    cutsDb.ordersBySession = async () => { throw new Error('boom'); };
+    try {
+      const closed = await w.call('POST', '/api/cash/session/close', { countedCash: 500 }, as('beto'));
+      assert.equal(closed.status, 200);
+      assert.equal(closed.body.session.status, 'closed');
+      assert.equal(closed.body.lastSegment, undefined);
+    } finally { cutsDb.ordersBySession = real; }
+  } finally { await w.stop(); }
+});

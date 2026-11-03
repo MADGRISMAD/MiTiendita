@@ -33,10 +33,12 @@ async function current(req, res) {
 /** Con Cortes X, el último cajero responde solo por su tramo: esperado desde el último corte y diferencia contra eso. */
 async function segmentInfo(tenantId, session, cuts, countedCash) {
   if (!cuts.length) return {};
-  const lastSegment = await expectedSince(cutsDb, { tenantId, session });
-  const out = { lastSegment };
-  if (countedCash != null) out.segmentDifference = Number((countedCash - lastSegment.expected).toFixed(2));
-  return out;
+  try {
+    const lastSegment = await expectedSince(cutsDb, { tenantId, session });
+    const out = { lastSegment };
+    if (countedCash != null) out.segmentDifference = Number((countedCash - lastSegment.expected).toFixed(2));
+    return out;
+  } catch (e) { console.error('[tramo]', e.message); return {}; } // el cierre ya se hizo: responde sin los campos de tramo
 }
 
 /** Para la pantalla de caja: el tramo del cajero si hay cortes; si algo falla aquí, la caja sigue funcionando sin él. */
