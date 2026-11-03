@@ -178,7 +178,7 @@ async function assign(r, terminalId) {
 }
 
 async function release(r) {
-  if (!(await confirmDialog(`¿Liberar la caja ${r.number}?\n\nQuien la tiene abierta dejará de usarla y la caja quedará libre.`, { confirmLabel: "Liberar", tone: "danger" }))) return;
+  if (!(await confirmDialog(`¿Liberar la caja ${r.number}?\n\nSe quitará el bloqueo de la caja (abierta por ${r.openBy || "otro usuario"}) para que otra computadora la use. La sesión sigue abierta y quien la retome deberá hacer el corte con conteo.`, { confirmLabel: "Liberar", tone: "danger" }))) return;
   busy.value = true;
   err.value = flash.value = "";
   try {
