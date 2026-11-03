@@ -87,12 +87,13 @@
           type="button"
           role="switch"
           class="adm-switch"
-          :aria-checked="Boolean(st.shared)"
+          :aria-checked="Boolean(st.configured && st.shared)"
           aria-label="Terminal compartida"
-          :disabled="busy"
+          :disabled="busy || !st.configured"
           @click="toggleShared"
         ></button>
       </div>
+      <p v-if="!st.configured" class="adm-hint">Elige una terminal primero</p>
     </section>
 
     <section class="adm-card pt-card">

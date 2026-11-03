@@ -19,6 +19,7 @@
     <template v-else>
       <section class="adm-card mc-card">
         <h3>Cuántas cajas tienes</h3>
+        <p v-if="store.shared" class="adm-hint">Con terminal compartida, todas las cajas usan la terminal de la tienda</p>
         <p class="adm-hint">Tu plan permite hasta {{ limit }} cajas. Cada computadora elige su caja al entrar a cobrar.</p>
         <div class="adm-choices">
           <button v-for="n in counts" :key="n" type="button" class="adm-choice" :aria-pressed="count === n" @click="setCount(n)">
@@ -38,12 +39,13 @@
         </label>
         <label class="adm-field">
           <span>Terminal de cobro</span>
-          <select class="adm-inp" :value="r.terminalId || ''" :disabled="busy || !terminals.length" @change="assign(r, $event.target.value)">
-            <option value="">{{ r.terminalId ? (r.terminalLabel || r.terminalId) + ' (actual)' : 'Sin terminal' }}</option>
+          <select class="adm-inp" :value="''" :disabled="busy || !terminals.length || r.number > savedCount" @change="assign(r, $event.target.value)">
+            <option value="">{{ termLabel(r) ? termLabel(r) + ' (actual)' : 'Sin terminal' }}</option>
             <option v-for="t in terminals" :key="t.id" :value="t.id">{{ t.id }}</option>
           </select>
         </label>
-        <p v-if="!terminals.length" class="adm-hint">Conecta tu cuenta de Mercado Pago en «Terminal de cobro» para elegir terminal.</p>
+        <p v-if="r.number > savedCount" class="adm-hint">Guarda las cajas primero</p>
+        <p v-else-if="!terminals.length" class="adm-hint">Conecta tu cuenta de Mercado Pago en «Terminal de cobro» para elegir terminal.</p>
         <div v-if="r.openBy" class="mc-acts">
           <button type="button" class="adm-btn danger-ghost" :disabled="busy" @click="release(r)">Liberar</button>
         </div>
@@ -58,7 +60,7 @@
 
 <script setup>
 import { computed, onMounted, ref } from "vue";
-import { confirmDialog } from "../dialog";
+import { alertDialog, confirmDialog } from "../dialog";
 import PosIcon from "./PosIcon.js";
 import { apiService, apiErrorMessage } from "../apiService";
 import { allowedCounts, multicajaMode } from "../multicajaPlan";
@@ -73,6 +75,15 @@ const rows = ref([]);
 const names = ref([]);
 const count = ref(1);
 const terminals = ref([]);
+const store = ref({}); // estado de la terminal de la tienda (la usa la Caja 1)
+const savedCount = ref(1);
+const serverRows = ref([]);
+
+// La Caja 1 guarda su terminal a nivel tienda; las demás, en su fila
+function termLabel(r) {
+  if (r.number === 1) return store.value.configured ? store.value.terminalLabel || "terminal de la tienda" : "";
+  return r.terminalId ? r.terminalLabel || r.terminalId : "";
+}
 
 const mode = computed(() => multicajaMode(plan.value, limit.value));
 const counts = computed(() => allowedCounts(limit.value));
@@ -83,6 +94,23 @@ function apply(data) {
   rows.value = data.registers || [];
   names.value = rows.value.map((r) => r.name || "");
   count.value = rows.value.length || 1;
+  savedCount.value = count.value;
+  serverRows.value = rows.value;
+}
+
+// Tras asignar o liberar: solo terminal y apertura; lo editado sin guardar se conserva
+function refresh(data) {
+  plan.value = data.plan;
+  limit.value = data.limit;
+  serverRows.value = data.registers || [];
+  for (const r of rows.value) {
+    const f = serverRows.value.find((x) => x.number === r.number);
+    if (f) Object.assign(r, { terminalId: f.terminalId, terminalLabel: f.terminalLabel, openBy: f.openBy, sessionId: f.sessionId });
+  }
+}
+
+async function loadStore() {
+  store.value = await apiService.pointStatus().catch(() => ({}));
 }
 
 // Cambiar la cantidad solo ajusta la lista en pantalla; se guarda con «Guardar cajas»
@@ -100,7 +128,10 @@ async function load() {
   err.value = "";
   try {
     apply(await apiService.getRegisters());
-    if (mode.value === "panel") terminals.value = await apiService.pointTerminals().catch(() => []);
+    if (mode.value === "panel") {
+      await loadStore();
+      terminals.value = await apiService.pointTerminals().catch(() => []);
+    }
   } catch (e) {
     err.value = apiErrorMessage(e, "No se pudieron leer las cajas.");
   } finally {
@@ -109,6 +140,11 @@ async function load() {
 }
 
 async function save() {
+  const open = serverRows.value.find((x) => x.number > count.value && x.openBy);
+  if (open) {
+    await alertDialog(`La Caja ${open.number} sigue abierta por ${open.openBy}. Haz su corte o libérala antes de reducir`);
+    return;
+  }
   busy.value = true;
   err.value = flash.value = "";
   try {
@@ -128,7 +164,8 @@ async function assign(r, terminalId) {
   try {
     // La caja 1 usa la terminal de la tienda (sin número)
     await apiService.registerTerminal(terminalId, r.number > 1 ? r.number : undefined);
-    apply(await apiService.getRegisters());
+    refresh(await apiService.getRegisters());
+    if (r.number === 1) await loadStore();
     flash.value = `Terminal asignada a la caja ${r.number}.`;
   } catch (e) {
     err.value = apiErrorMessage(e, "No se pudo asignar la terminal.");
@@ -143,7 +180,7 @@ async function release(r) {
   err.value = flash.value = "";
   try {
     await apiService.releaseRegister(r.number);
-    apply(await apiService.getRegisters());
+    refresh(await apiService.getRegisters());
     flash.value = `Caja ${r.number} liberada.`;
   } catch (e) {
     err.value = apiErrorMessage(e, "No se pudo liberar la caja.");
