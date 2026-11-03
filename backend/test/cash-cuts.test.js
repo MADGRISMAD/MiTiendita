@@ -22,7 +22,7 @@ function makeStore({ orders = [], abonos = [], users = ['ana', 'beto'] } = {}) {
   };
 }
 const sale = (total, at, user = 'ana') => ({ paymentStatus: 'paid', paymentMethod: 'cash', total, createdAt: new Date(at), user });
-const session = { id: 's1', registerId: 2, openingFloat: 500, cashRefunds: 0, openedAt: new Date('2026-01-01T08:00:00Z') };
+const session = { id: 's1', status: 'open', closedAt: null, registerId: 2, openingFloat: 500, cashRefunds: 0, openedAt: new Date('2026-01-01T08:00:00Z') };
 const T = (h) => `2026-01-01T${h}:00:00Z`;
 
 test('tramo 1: fondo + ventas, diferencia, y el tramo 2 arranca en lo contado', async () => {
@@ -104,4 +104,42 @@ test('segmentsOf agrupa por cajero', () => {
   const rows = svc.segmentsOf([sale(100, T('09:00'), 'ana'), sale(50, T('10:00'), 'beto'), sale(25, T('11:00'), 'ana')], []);
   assert.deepEqual(rows.find((r) => r.user === 'ana'), { user: 'ana', cash: 125, card: 0, total: 125, count: 2 });
   assert.equal(rows.find((r) => r.user === 'beto').cash, 50);
+});
+
+test('anulación en la misma sesión tras el corte baja el tramo siguiente', async () => {
+  const o = sale(100, T('09:00'));
+  const st = makeStore({ orders: [o] });
+  const c = await svc.createCut(st, { tenantId: 't1', session, fromUser: 'ana', toUser: 'beto', countedCash: 600 });
+  assert.equal(c.expectedCash, 600);
+  o.paymentStatus = 'refunded';
+  const e = await svc.expectedSince(st, { tenantId: 't1', session });
+  assert.equal(e.expected, 500);
+});
+
+test('devolución parcial en la misma sesión tras el corte baja el tramo siguiente', async () => {
+  const o = sale(100, T('09:00'));
+  const st = makeStore({ orders: [o] });
+  await svc.createCut(st, { tenantId: 't1', session, fromUser: 'ana', toUser: 'beto', countedCash: 600 });
+  o.total = 70;
+  const e = await svc.expectedSince(st, { tenantId: 't1', session });
+  assert.equal(e.expected, 570);
+});
+
+test('una venta con el mismo createdAt que el corte cuenta en un solo tramo', async () => {
+  const st = makeStore({ orders: [sale(100, T('09:00'))] });
+  const c = await svc.createCut(st, { tenantId: 't1', session, fromUser: 'ana', toUser: 'beto', countedCash: 600 });
+  st.orders.push(sale(40, c.createdAt));
+  const e = await svc.expectedSince(st, { tenantId: 't1', session });
+  assert.equal(e.cash, 40);
+  assert.equal(e.expected, 640);
+  assert.equal(c.expectedCash, 600);
+});
+
+test('createCut exige caja abierta y un monto numérico válido', async () => {
+  const st = makeStore();
+  const go = (extra) => svc.createCut(st, { tenantId: 't1', session, fromUser: 'ana', toUser: 'beto', countedCash: 10, ...extra });
+  await assert.rejects(go({ session: { ...session, status: 'closed' } }), (e) => e.status === 400 && e.code === 'cash_closed');
+  await assert.rejects(go({ session: { ...session, closedAt: new Date() } }), (e) => e.code === 'cash_closed');
+  for (const bad of ['  ', true, null, NaN, -5, 'abc', undefined]) await assert.rejects(go({ countedCash: bad }), { status: 400 });
+  assert.equal((await go({ countedCash: ' 12.5 ' })).countedCash, 12.5);
 });

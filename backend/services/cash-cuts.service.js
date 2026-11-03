@@ -15,37 +15,39 @@ const { paymentTotals } = require('./credit.service');
 
 const cents = (n) => Math.round(Number(n || 0) * 100);
 const money = (c) => c / 100;
-const after = (d, since) => !since || new Date(d).getTime() > new Date(since).getTime();
 
-/** Lo esperado en el cajón desde el último punto de partida (último Corte X, o la apertura). */
+/**
+ * Lo esperado en el cajón desde el último punto de partida (último Corte X, o la apertura).
+ * Se calcula con acumulados de TODA la sesión menos la instantánea guardada en el último corte, así una anulación
+ * o devolución posterior de una venta anterior al corte también baja el tramo (sin depender de fechas).
+ */
 async function expectedSince(store, { tenantId, session }) {
   const cuts = await store.cutsBySession(tenantId, session.id);
   const last = cuts[cuts.length - 1] || null;
   const baseline = last ? Number(last.countedCash) : Number(session.openingFloat || 0);
   const since = last ? new Date(last.createdAt) : new Date(session.openedAt || 0);
-  const lastCut = last ? last.createdAt : null;
 
-  const orders = (await store.ordersBySession(tenantId, session.id)).filter((o) => after(o.createdAt, lastCut));
-  const abonos = (await store.abonosBySession(tenantId, session.id)).filter((a) => after(a.createdAt, lastCut));
-  const cash = summarizeOrders(orders).cash;
-  const abonosCash = paymentTotals(abonos).cash;
-  const refunds = money(cents(session.cashRefunds) - cents(last ? last.refundsAtCut : 0));
+  const cashTotal = summarizeOrders(await store.ordersBySession(tenantId, session.id)).cash;
+  const abonosCashTotal = paymentTotals(await store.abonosBySession(tenantId, session.id)).cash;
+  const refundsTotal = Number(session.cashRefunds || 0);
+  const cash = money(cents(cashTotal) - cents(last ? last.cashSalesAtCut : 0));
+  const abonosCash = money(cents(abonosCashTotal) - cents(last ? last.abonosCashAtCut : 0));
+  const refunds = money(cents(refundsTotal) - cents(last ? last.refundsAtCut : 0));
   const expected = money(cents(baseline) + cents(cash) + cents(abonosCash) - cents(refunds));
-  return { baseline, since, cash, abonosCash, refunds, expected };
+  return { baseline, since, cash, abonosCash, refunds, expected, cashTotal, abonosCashTotal, refundsTotal };
 }
 
 async function createCut(store, { tenantId, session, fromUser, toUser, countedCash }) {
-  if (!session) throw httpError(400, 'Abre la caja antes de hacer un Corte X.');
-  const counted = Number(countedCash);
-  if (countedCash === '' || countedCash == null || !Number.isFinite(counted) || counted < 0) {
-    throw httpError(400, 'Indica el efectivo contado (0 o más).');
-  }
+  if (!session || session.status !== 'open' || session.closedAt) throw httpError(400, 'Abre la caja antes de hacer un Corte X.', 'cash_closed');
+  const numeric = typeof countedCash === 'number' || (typeof countedCash === 'string' && countedCash.trim() !== '');
+  const counted = numeric ? Number(countedCash) : NaN;
+  if (!Number.isFinite(counted) || counted < 0) throw httpError(400, 'Indica el efectivo contado (0 o más).');
   const to = String(toUser || '').trim();
   if (!to) throw httpError(400, 'Elige quién recibe la caja.');
   if (to === fromUser) throw httpError(400, 'No puedes entregarte la caja a ti mismo.');
   if (!(await store.findUser(tenantId, to))) throw httpError(400, 'Ese usuario no existe en tu tienda.');
 
-  const { expected } = await expectedSince(store, { tenantId, session });
+  const { expected, cashTotal, abonosCashTotal, refundsTotal } = await expectedSince(store, { tenantId, session });
   const countedCents = cents(counted);
   return store.insertCut({
     tenantId: String(tenantId),
@@ -56,7 +58,9 @@ async function createCut(store, { tenantId, session, fromUser, toUser, countedCa
     countedCash: money(countedCents),
     expectedCash: expected,
     difference: money(countedCents - cents(expected)),
-    refundsAtCut: Number(session.cashRefunds || 0),
+    refundsAtCut: refundsTotal,
+    cashSalesAtCut: cashTotal,
+    abonosCashAtCut: abonosCashTotal,
     status: 'pending',
     confirmedCash: null,
     confirmedAt: null,
