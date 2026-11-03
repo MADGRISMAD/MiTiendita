@@ -2423,7 +2423,7 @@ export default {
     const pointSignature = () =>
       `${payMethod.value}|${pointAmount.value}|${JSON.stringify(lines.value.map((l) => [l.id, l.quantity, l.price]))}`;
     const NO_SHOW_HINT =
-      "La terminal todavía no muestra el cobro. Si está en otra pantalla (Servicios, Ajustes o una confirmación anterior), regrésala a la pantalla de inicio.";
+      "La terminal todavía no muestra el cobro. Enciende su pantalla y, en «Inicia la operación desde el sistema de punto de venta», toca «Actualizar». Si está en otra pantalla (Servicios, Ajustes o una confirmación anterior), regrésala al inicio.";
     const ON_TERMINAL_HINT =
       "La terminal ya muestra el cobro: si quieres cancelarlo, hazlo desde la terminal. No repitas el cobro hasta que se resuelva.";
 
