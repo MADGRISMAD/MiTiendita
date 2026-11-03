@@ -50,7 +50,7 @@ async function abonosOf(tenantId, sessionId) {
 
 async function current(req, res) {
   try {
-    const session = await db.GetOpenCashSession(req.tenantId);
+    const session = await db.GetOpenCashSession(req.tenantId, req.registerId);
     if (!session) return res.status(200).json({ open: false, session: null });
     const orders = await db.GetOrdersByCashSession(session.id, req.tenantId);
     return res.status(200).json({
@@ -70,15 +70,28 @@ async function logCash(entry) {
   try { await db.CreateActivityLog(entry); } catch (e) { console.error('[bitácora]', e.message); }
 }
 
+/** La caja ya tiene una sesión abierta: 409 con quién la tiene. */
+function alreadyOpen(res, existing) {
+  const openedBy = existing?.openedBy || null;
+  return res.status(409).json({ code: 'register_open', openedBy, message: `Esta caja ya está abierta por ${openedBy || 'otro usuario'}.` });
+}
+
 async function open(req, res) {
   try {
-    const existing = await db.GetOpenCashSession(req.tenantId);
-    if (existing) {
-      return res.status(400).send('Ya hay una caja abierta');
+    const existing = await db.GetOpenCashSession(req.tenantId, req.registerId);
+    if (existing) return alreadyOpen(res, existing);
+    let session;
+    try {
+      session = await db.CreateCashSession({
+        ...normalizeCashSession(req.body || {}, req.tenantId, req.user.username, req.registerId),
+        // Candado por navegador: solo este navegador puede vender y cerrar la caja (ver register.middleware.js)
+        deviceId: req.deviceId || null,
+      });
+    } catch (err) {
+      // Otra apertura de la misma caja ganó al mismo tiempo (índice único de una sesión abierta por caja)
+      if (err.code === 11000) return alreadyOpen(res, await db.GetOpenCashSession(req.tenantId, req.registerId));
+      throw err;
     }
-    const session = await db.CreateCashSession(
-      normalizeCashSession(req.body || {}, req.tenantId, req.user.username)
-    );
     await logCash(saleAudit.cashOpenEntry({ tenantId: req.tenantId, user: req.user.username, session }));
     return res.status(201).json(session);
   } catch (err) {
@@ -89,7 +102,7 @@ async function open(req, res) {
 
 async function close(req, res) {
   try {
-    const session = await db.GetOpenCashSession(req.tenantId);
+    const session = await db.GetOpenCashSession(req.tenantId, req.registerId);
     if (!session) return res.status(400).send('No hay caja abierta');
 
     const orders = await db.GetOrdersByCashSession(session.id, req.tenantId);

@@ -5,6 +5,7 @@ const credit = require('../services/credit.service');
 const insights = require('../services/customer-insights.service');
 const { rateLimit } = require('../services/rate-limit.service');
 const { requireAuth, requireActiveSubscription, requireRoles } = require('../middleware/auth.middleware');
+const { attachRegister } = require('../middleware/register.middleware');
 
 // Listar clientes (con búsqueda opcional por query ?q=)
 router.get(
@@ -98,10 +99,10 @@ router.get('/:id/credit', ...staff, async (req, res) => {
   }
 });
 
-// Recibir un abono (entra a la caja abierta)
-router.post('/:id/payments', ...staff, paymentLimit, async (req, res) => {
+// Recibir un abono (entra a la caja abierta de esta computadora)
+router.post('/:id/payments', ...staff, attachRegister, paymentLimit, async (req, res) => {
   try {
-    const session = await db.GetOpenCashSession(req.tenantId);
+    const session = await db.GetOpenCashSession(req.tenantId, req.registerId);
     const result = await credit.registerPayment(creditDb, {
       tenantId: req.tenantId,
       customerId: req.params.id,

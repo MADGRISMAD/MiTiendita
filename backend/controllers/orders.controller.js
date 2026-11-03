@@ -164,7 +164,7 @@ async function settlePayment(req, existing, body, { requireCash = true, paidAt }
   }
   if (existing.paymentStatus === 'paid') return existing;
 
-  const session = await db.GetOpenCashSession(req.tenantId);
+  const session = await db.GetOpenCashSession(req.tenantId, req.registerId);
   if (requireCash && !session) {
     throw httpError(400, 'Debes abrir la caja antes de cobrar');
   }
@@ -492,7 +492,7 @@ async function returnItems(req, res) {
     // El efectivo sale del cajón: hace falta una caja abierta
     let session = null;
     if (split.cash > 0) {
-      session = await db.GetOpenCashSession(req.tenantId);
+      session = await db.GetOpenCashSession(req.tenantId, req.registerId);
       if (!session) return res.status(400).send('Abre la caja para devolver el dinero.');
     }
 
@@ -579,7 +579,7 @@ async function voidSale(req, res) {
       return res.status(200).json(updated);
     }
 
-    const session = await db.GetOpenCashSession(req.tenantId);
+    const session = await db.GetOpenCashSession(req.tenantId, req.registerId);
     if (!session) {
       return res.status(400).send('Abre la caja para devolver el dinero.');
     }

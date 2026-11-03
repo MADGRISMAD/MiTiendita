@@ -1,7 +1,9 @@
-function normalizeCashSession(body = {}, tenantId, openedBy) {
+function normalizeCashSession(body = {}, tenantId, openedBy, registerId = 1) {
   return {
     tenantId,
     status: 'open',
+    // Número de caja (MultiCaja); las sesiones viejas sin este campo son de la Caja 1
+    registerId: Number(registerId) || 1,
     openingFloat: Number(body.openingFloat || 0),
     // A cuántos pesos está el dólar en este turno (lo confirma quien abre la caja); null si no se manejan dólares
     usdRate: Number(body.usdRate) > 0 && Number(body.usdRate) <= 500 ? Number(Number(body.usdRate).toFixed(4)) : null,

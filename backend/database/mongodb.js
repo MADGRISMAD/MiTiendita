@@ -79,6 +79,11 @@ async function ensureIndexes() {
   ]) {
     await dbConnection.collection(col).createIndex(keys).catch(() => {});
   }
+  // Una sola sesión abierta por caja: de dos aperturas simultáneas solo una entra
+  await dbConnection
+    .collection('cash_sessions')
+    .createIndex({ tenantId: 1, registerId: 1 }, { unique: true, partialFilterExpression: { status: 'open' }, name: 'open_session_per_register' })
+    .catch((err) => console.error('[cajas] NO se pudo crear el índice de una sesión abierta por caja:', err.message));
   // Los trabajos de impresión no se guardan más de 3 días
   await dbConnection.collection('print_jobs').createIndex({ createdAt: 1 }, { expireAfterSeconds: 3 * 24 * 60 * 60 }).catch(() => {});
   // Códigos de verificación de correo del registro: se borran solos al vencer
@@ -959,8 +964,13 @@ async function ReleaseDailySummary(tenantId, dayKey) {
   await dbConnection.collection('settings').updateOne({ tenantId, lastDailySummary: dayKey }, { $unset: { lastDailySummary: '' } });
 }
 
-async function GetOpenCashSession(tenantId) {
-  return withId(await dbConnection.collection('cash_sessions').findOne({ tenantId, status: 'open' }));
+/** Sesión abierta de una caja. La Caja 1 también es la de las sesiones sin `registerId` (anteriores a MultiCaja). */
+async function GetOpenCashSession(tenantId, registerId = 1) {
+  const register = Number(registerId) === 1 ? { $in: [1, null] } : Number(registerId);
+  return withId(await dbConnection.collection('cash_sessions').findOne({ tenantId, status: 'open', registerId: register }));
+}
+async function ListOpenCashSessions(tenantId) {
+  return (await dbConnection.collection('cash_sessions').find({ tenantId, status: 'open' }).toArray()).map(withId);
 }
 async function GetCashSessionById(id, tenantId) {
   const filter = oidFilter(id, tenantId);
@@ -1703,7 +1713,7 @@ module.exports = {
   GetOrdersByDateRange, GetSalesReport,
   SaveSupportMail, FindSupportMailByMessageIds, ListSupportMail, ListSupportMailAll, ListSupportMailRaw, ListUnmatchedSupportMail, AssignUnassignedSupportMail,
   GetInvites, GetInviteByToken, CreateInvite, UpdateInvite, DeleteInvite,
-  GetOpenCashSession, GetCashSessionById, CreateCashSession, UpdateCashSession,
+  GetOpenCashSession, ListOpenCashSessions, GetCashSessionById, CreateCashSession, UpdateCashSession,
   aiMonthKey, GetAiUsage, ReserveAiUse, RefundAiUse, ListAiUsage, ListAiUsageAll,
   ListPlatformExpenses, ListPlatformExpensesAll, CreatePlatformExpense, DeletePlatformExpense,
   SavePlatformSnapshot, ListPlatformSnapshots,

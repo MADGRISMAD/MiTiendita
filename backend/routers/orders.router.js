@@ -2,6 +2,7 @@ const router = require('express').Router();
 const { hideCostsFromCashiers } = require('../middleware/cost-guard');
 const orders = require('../controllers/orders.controller');
 const { requireAuth, requireActiveSubscription, requireRoles } = require('../middleware/auth.middleware');
+const { attachRegister } = require('../middleware/register.middleware');
 
 // El cajero nunca recibe costos (ver middleware/cost-guard.js)
 router.use(hideCostsFromCashiers);
@@ -32,16 +33,17 @@ router.get(
 );
 router.post('/', requireAuth, requireActiveSubscription, requireRoles('admin', 'cashier'), orders.create);
 router.post('/removed-lines', requireAuth, requireActiveSubscription, requireRoles('admin', 'cashier'), orders.removedLines);
-router.post('/sale', requireAuth, requireActiveSubscription, requireRoles('admin', 'cashier'), orders.sale);
+// Cobrar, devolver y anular usan la caja de esta computadora (X-Register) con su candado por navegador
+router.post('/sale', requireAuth, requireActiveSubscription, requireRoles('admin', 'cashier'), attachRegister, orders.sale);
 router.put(
   '/:id/status',
   requireAuth, requireActiveSubscription,
   requireRoles('admin', 'cashier'),
   orders.updateStatus
 );
-router.put('/:id/pay', requireAuth, requireActiveSubscription, requireRoles('admin', 'cashier'), orders.pay);
-router.post('/:id/return', requireAuth, requireActiveSubscription, requireRoles('admin', 'cashier'), orders.returnItems);
-router.put('/:id/void', requireAuth, requireActiveSubscription, requireRoles('admin', 'cashier'), orders.voidSale);
+router.put('/:id/pay', requireAuth, requireActiveSubscription, requireRoles('admin', 'cashier'), attachRegister, orders.pay);
+router.post('/:id/return', requireAuth, requireActiveSubscription, requireRoles('admin', 'cashier'), attachRegister, orders.returnItems);
+router.put('/:id/void', requireAuth, requireActiveSubscription, requireRoles('admin', 'cashier'), attachRegister, orders.voidSale);
 router.put(
   '/:id/invoice',
   requireAuth, requireActiveSubscription,

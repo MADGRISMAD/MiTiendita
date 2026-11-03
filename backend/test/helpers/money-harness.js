@@ -14,16 +14,24 @@ const newId = () => String(nextId++).padStart(24, '0');
 const clone = (v) => (v == null ? v : structuredClone(v));
 
 // Los controladores guardan la referencia a la base al cargarse: el mundo es uno solo y se reinicia en el lugar.
-const w = { orders: new Map(), sessions: new Map(), log: [], foods: new Map(), settings: {} };
+const w = { orders: new Map(), sessions: new Map(), log: [], foods: new Map(), settings: {}, registers: [], customers: new Map(), entries: [] };
 
-function reset({ inventory = false, foods = [] } = {}) {
+/** `registers`: cajas configuradas (sin ninguna, solo existe la Caja 1); `customers`: clientes con saldo de fiado. */
+function reset({ inventory = false, foods = [], registers = [], customers = [] } = {}) {
   w.orders.clear();
   w.sessions.clear();
   w.log.length = 0;
   w.foods.clear();
   w.settings = { tenantId: T, inventoryEnabled: inventory, timezone: 'America/Tijuana' };
   for (const f of foods) w.foods.set(f.id, { stock: 0, ...f });
+  w.registers = registers.map((r) => ({ name: `Caja ${r.number}`, terminalId: null, terminalLabel: null, active: true, ...r }));
+  w.customers.clear();
+  for (const c of customers) w.customers.set(c.id, { balance: 0, creditLimit: 0, ...c });
+  w.entries.length = 0;
 }
+
+// Sesión abierta de una caja: la Caja 1 también es la de las sesiones viejas sin `registerId`
+const registerOf = (s) => s.registerId ?? 1;
 
 function createWorld() {
 
@@ -61,9 +69,18 @@ function createWorld() {
       o.returns = [...(o.returns || []), clone(entry)];
       return clone(o);
     },
-    async GetOpenCashSession() { return clone([...w.sessions.values()].find((s) => s.status === 'open')) || null; },
+    async GetOpenCashSession(_t, registerId = 1) {
+      return clone([...w.sessions.values()].find((s) => s.status === 'open' && registerOf(s) === registerId)) || null;
+    },
+    async ListOpenCashSessions() { return [...w.sessions.values()].filter((s) => s.status === 'open').map(clone); },
     async GetCashSessionById(id) { return clone(w.sessions.get(id)) || null; },
-    async CreateCashSession(data) { const s = { ...clone(data), id: newId() }; w.sessions.set(s.id, s); return clone(s); },
+    async CreateCashSession(data) {
+      // Igual que el índice único parcial {tenantId, registerId} con status 'open'
+      if (data.status === 'open' && [...w.sessions.values()].some((s) => s.status === 'open' && (s.registerId ?? null) === (data.registerId ?? null))) {
+        const e = new Error('dup'); e.code = 11000; throw e;
+      }
+      const s = { ...clone(data), id: newId() }; w.sessions.set(s.id, s); return clone(s);
+    },
     async UpdateCashSession(id, data) { const s = w.sessions.get(id); Object.assign(s, clone(data)); return clone(s); },
     async CreateActivityLog(entry) { w.log.push(clone(entry)); return entry; },
     async GetFoodById(id) { return clone(w.foods.get(id)) || null; },
@@ -72,8 +89,21 @@ function createWorld() {
     async ConsumeSaleLots() { return []; },
     async RestoreSaleStock(id, qty) { const f = w.foods.get(id); if (f) f.stock = Number((f.stock + qty).toFixed(3)); },
   };
-  const creditDb = { async paymentsBySession() { return []; }, async getCustomer() { return null; } };
-  return { db, creditDb };
+  const creditDb = {
+    async paymentsBySession(_t, sid) { return w.entries.filter((e) => e.type === 'payment' && e.cashSessionId === String(sid)).map(clone); },
+    async getCustomer(_t, id) { return clone(w.customers.get(id)) || null; },
+    async incBalance(_t, id, delta, { requireOwed = 0 } = {}) {
+      const c = w.customers.get(id);
+      if (!c || (requireOwed && c.balance + 0.0049 < requireOwed)) return null;
+      c.balance = Number((c.balance + delta).toFixed(2));
+      return clone(c);
+    },
+    async addEntry(entry) { const e = { ...clone(entry), id: newId() }; w.entries.push(e); return clone(e); },
+  };
+  const registersDb = { async ListRegisters() { return clone(w.registers); }, async ReplaceRegisters() {} };
+  // La sesión y la suscripción las pone el arnés (abajo); los routers reales solo revisan el rol
+  const auth = { requireAuth: (_q, _s, next) => next(), requireActiveSubscription: (_q, _s, next) => next(), requireRoles: () => (_q, _s, next) => next() };
+  return { db, creditDb, registersDb, auth };
 }
 
 let installed = null;
@@ -83,13 +113,25 @@ async function start(options) {
   reset(options);
   if (!installed) {
     const world = createWorld();
-    for (const [file, exports] of [['database/mongodb.js', world.db], ['database/credit.db.js', world.creditDb]]) {
+    for (const [file, exports] of [
+      ['database/mongodb.js', world.db], ['database/credit.db.js', world.creditDb],
+      ['database/registers.db.js', world.registersDb], ['middleware/auth.middleware.js', world.auth],
+    ]) {
       const full = path.join(__dirname, '../..', file);
       require.cache[full] = { id: full, filename: full, loaded: true, exports, children: [], paths: [] };
     }
-    installed = { orders: require('../../controllers/orders.controller'), cash: require('../../controllers/cash.controller') };
+    installed = {
+      orders: require('../../controllers/orders.controller'),
+      cash: require('../../controllers/cash.controller'),
+      attachRegister: require('../../middleware/register.middleware').attachRegister,
+      routers: {
+        cash: require('../../routers/cash.router'),
+        orders: require('../../routers/orders.router'),
+        customers: require('../../routers/customers.router'),
+      },
+    };
   }
-  const { orders, cash } = installed;
+  const { orders, cash, attachRegister, routers } = installed;
 
   const app = express();
   app.use(express.json());
@@ -100,11 +142,15 @@ async function start(options) {
     req.tenant = { plan: 'pro' };
     next();
   });
-  app.post('/orders/sale', orders.sale);
-  app.post('/orders/:id/return', orders.returnItems);
-  app.put('/orders/:id/void', orders.voidSale);
-  app.post('/cash/open', cash.open);
-  app.post('/cash/close', cash.close);
+  app.post('/orders/sale', attachRegister, orders.sale);
+  app.post('/orders/:id/return', attachRegister, orders.returnItems);
+  app.put('/orders/:id/void', attachRegister, orders.voidSale);
+  app.post('/cash/open', attachRegister, cash.open);
+  app.post('/cash/close', attachRegister, cash.close);
+  // Los routers reales (con su middleware de caja) bajo /api
+  app.use('/api/cash', routers.cash);
+  app.use('/api/orders', routers.orders);
+  app.use('/api/customers', routers.customers);
 
   const server = http.createServer(app);
   await new Promise((r) => server.listen(0, r));
