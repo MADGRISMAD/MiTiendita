@@ -118,6 +118,41 @@ function cashCloseEntry({ tenantId, user, session, now = new Date() }) {
   };
 }
 
+/** Corte X: una caja entregada a otro cajero (queda pendiente de su confirmación). */
+function cashCutEntry({ tenantId, user, cut, now = new Date() }) {
+  const diff = Number(cut?.difference || 0);
+  const tag = Math.abs(diff) < 0.005 ? 'cuadró' : diff < 0 ? `faltante de ${money(-diff)}` : `sobrante de ${money(diff)}`;
+  return {
+    tenantId: String(tenantId),
+    type: 'cash_cut',
+    message: `Corte X de la Caja ${cut?.registerId || 1} a ${cut?.toUser || ''}: ${tag}`,
+    meta: {
+      cutId: String(cut?.id || ''), sessionId: String(cut?.sessionId || ''), registerId: Number(cut?.registerId || 1),
+      toUser: cut?.toUser || '', expectedCash: Number(cut?.expectedCash || 0), countedCash: Number(cut?.countedCash || 0), difference: diff,
+    },
+    user: user || '',
+    createdAt: now,
+  };
+}
+
+/** Confirmación del Corte X; si quien recibe cuenta distinto queda en disputa (tipo aparte para que el dueño la vea). */
+function cashCutConfirmEntry({ tenantId, user, cut, now = new Date() }) {
+  const disputed = cut?.status === 'disputed';
+  return {
+    tenantId: String(tenantId),
+    type: disputed ? 'cash_cut_disputed' : 'cash_cut_confirmed',
+    message: disputed
+      ? `Corte X en disputa: ${cut?.fromUser || ''} entregó ${money(cut?.countedCash)} y ${user || ''} contó ${money(cut?.confirmedCash)}`
+      : `Corte X confirmado por ${user || ''}: ${money(cut?.countedCash)}`,
+    meta: {
+      cutId: String(cut?.id || ''), sessionId: String(cut?.sessionId || ''), registerId: Number(cut?.registerId || 1),
+      fromUser: cut?.fromUser || '', countedCash: Number(cut?.countedCash || 0), confirmedCash: Number(cut?.confirmedCash || 0),
+    },
+    user: user || '',
+    createdAt: now,
+  };
+}
+
 const DISCOUNT_ALERT_PERCENT = 20;
 
 /** Descuento grande en una venta (a partir de 20 %): queda para que el dueño lo revise. */
@@ -199,4 +234,4 @@ function menuEntry({ tenantId, user, kind, menu, from = null, productCount = 0, 
   return { ...base(tenantId, user, now), type: `category_${kind}`, message: text, meta: { menuId: String(menu?.id || from?.id || ''), name, productCount } };
 }
 
-module.exports = { foodCreatedEntry, foodChangeEntries, foodDeletedEntry, menuEntry, bigDiscountEntry, DISCOUNT_ALERT_PERCENT, sanitizeRemovedLines, removedLineEntry, voidEntry, priceChangeEntries, cashOpenEntry, cashCloseEntry, MAX_LINES };
+module.exports = { foodCreatedEntry, foodChangeEntries, foodDeletedEntry, menuEntry, bigDiscountEntry, DISCOUNT_ALERT_PERCENT, sanitizeRemovedLines, removedLineEntry, voidEntry, priceChangeEntries, cashOpenEntry, cashCloseEntry, cashCutEntry, cashCutConfirmEntry, MAX_LINES };

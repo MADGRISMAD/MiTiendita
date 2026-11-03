@@ -143,3 +143,8 @@ test('createCut exige caja abierta y un monto numérico válido', async () => {
   for (const bad of ['  ', true, null, NaN, -5, 'abc', undefined]) await assert.rejects(go({ countedCash: bad }), { status: 400 });
   assert.equal((await go({ countedCash: ' 12.5 ' })).countedCash, 12.5);
 });
+
+test('segmentsOf cuenta solo ventas cobradas (paid) en count y totales', () => {
+  const rows = svc.segmentsOf([sale(100, T('09:00'), 'ana'), { ...sale(40, T('10:00'), 'ana'), paymentStatus: 'refunded' }, { ...sale(30, T('11:00'), 'beto'), paymentStatus: 'pending' }], []);
+  assert.deepEqual(rows, [{ user: 'ana', cash: 100, card: 0, total: 100, count: 1 }]);
+});

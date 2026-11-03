@@ -4,6 +4,8 @@ const creditDb = require('../database/credit.db');
 const saleAudit = require('../services/sale-audit.service');
 const { paymentTotals } = require('../services/credit.service');
 const { summarizeOrders } = require('../services/cash-summary');
+const cutsDb = require('../database/cash-cuts.db');
+const { segmentsOf } = require('../services/cash-cuts.service');
 
 /** Abonos de clientes recibidos en esta caja (entran al corte como dinero cobrado). */
 async function abonosOf(tenantId, sessionId) {
@@ -99,7 +101,8 @@ async function close(req, res) {
     );
 
     await logCash(saleAudit.cashCloseEntry({ tenantId: req.tenantId, user: req.user.username, session: closed }));
-    return res.status(200).json({ session: closed, totals });
+    const cuts = await cutsDb.cutsBySession(req.tenantId, session.id);
+    return res.status(200).json({ session: closed, totals, segments: segmentsOf(orders, cuts), cuts });
   } catch (err) {
     console.error(err);
     return res.status(500).send(err.message || 'Error al cerrar caja');
@@ -111,10 +114,13 @@ async function getById(req, res) {
     const session = await db.GetCashSessionById(req.params.id, req.tenantId);
     if (!session) return res.status(404).send('Sesión no encontrada');
     const orders = await db.GetOrdersByCashSession(session.id, req.tenantId);
+    const cuts = await cutsDb.cutsBySession(req.tenantId, session.id);
     return res.status(200).json({
       session,
       totals: { ...summarizeOrders(orders), abonos: await abonosOf(req.tenantId, session.id) },
       orders,
+      segments: segmentsOf(orders, cuts),
+      cuts,
     });
   } catch (err) {
     console.error(err);

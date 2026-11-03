@@ -14,10 +14,10 @@ const newId = () => String(nextId++).padStart(24, '0');
 const clone = (v) => (v == null ? v : structuredClone(v));
 
 // Los controladores guardan la referencia a la base al cargarse: el mundo es uno solo y se reinicia en el lugar.
-const w = { orders: new Map(), sessions: new Map(), log: [], foods: new Map(), settings: {}, registers: [], customers: new Map(), entries: [] };
+const w = { orders: new Map(), sessions: new Map(), log: [], foods: new Map(), settings: {}, registers: [], customers: new Map(), entries: [], cuts: [], users: [] };
 
 /** `registers`: cajas configuradas (sin ninguna, solo existe la Caja 1); `customers`: clientes con saldo de fiado. */
-function reset({ inventory = false, foods = [], registers = [], customers = [] } = {}) {
+function reset({ inventory = false, foods = [], registers = [], customers = [], users = [] } = {}) {
   w.orders.clear();
   w.sessions.clear();
   w.log.length = 0;
@@ -28,6 +28,8 @@ function reset({ inventory = false, foods = [], registers = [], customers = [] }
   w.customers.clear();
   for (const c of customers) w.customers.set(c.id, { balance: 0, creditLimit: 0, ...c });
   w.entries.length = 0;
+  w.cuts.length = 0;
+  w.users = users;
 }
 
 // Sesión abierta de una caja: la Caja 1 también es la de las sesiones viejas sin `registerId`
@@ -83,6 +85,7 @@ function createWorld() {
     },
     async UpdateCashSession(id, data) { const s = w.sessions.get(id); Object.assign(s, clone(data)); return clone(s); },
     async CreateActivityLog(entry) { w.log.push(clone(entry)); return entry; },
+    async ListUsersByTenant() { return clone(w.users); },
     async GetFoodById(id) { return clone(w.foods.get(id)) || null; },
     async GetCustomerById() { return null; },
     async ReserveSaleStock(items, _t, opts) { return reserveSaleStock(foodsCollection, (id) => ({ _id: id }), items, opts); },
@@ -100,12 +103,30 @@ function createWorld() {
     },
     async addEntry(entry) { const e = { ...clone(entry), id: newId() }; w.entries.push(e); return clone(e); },
   };
+  // Cortes X en memoria (mismo contrato que database/cash-cuts.db.js)
+  const cutsDb = {
+    async insertCut(c) { const x = { ...clone(c), id: newId() }; w.cuts.push(x); return clone(x); },
+    async getCut(_t, id) { return clone(w.cuts.find((c) => c.id === id)) || null; },
+    async updateCut(_t, id, patch, from) {
+      const c = w.cuts.find((x) => x.id === id && (!from || x.status === from));
+      return c ? clone(Object.assign(c, clone(patch))) : null;
+    },
+    async cutsBySession(_t, sid) { return w.cuts.filter((c) => c.sessionId === String(sid)).map(clone); },
+    async pendingFor(_t, u) { return w.cuts.filter((c) => c.toUser === u && c.status === 'pending').map(clone); },
+    async listCuts(_t, f = {}) {
+      return w.cuts.filter((c) => (!f.status || c.status === f.status) && (f.registerId == null || c.registerId === f.registerId)
+        && (!f.user || c.fromUser === f.user || c.toUser === f.user) && (!f.from || c.createdAt >= f.from) && (!f.to || c.createdAt <= f.to)).map(clone);
+    },
+    async findUser(_t, u) { return clone(w.users.find((x) => x.username === u)) || null; },
+    async ordersBySession(_t, sid) { return [...w.orders.values()].filter((o) => o.cashSessionId === sid).map(clone); },
+    async abonosBySession(_t, sid) { return w.entries.filter((e) => e.type === 'payment' && e.cashSessionId === String(sid)).map(clone); },
+  };
   const registersDb = { async ListRegisters() { return clone(w.registers); }, async ReplaceRegisters(_t, rows) { w.registers = clone(rows); } };
   // La sesión y la suscripción las pone el arnés (abajo); los routers reales solo revisan el rol
   // Los roles solo se exigen si la prueba manda `x-role` (sin él, todo pasa como antes)
   const requireRoles = (...allowed) => (req, res, next) => (req.get('x-role') && !allowed.includes(req.user.role) ? res.status(403).send('Sin permiso para esta acción') : next());
   const auth = { requireAuth: (_q, _s, next) => next(), requireActiveSubscription: (_q, _s, next) => next(), requireRoles };
-  return { db, creditDb, registersDb, auth };
+  return { db, creditDb, registersDb, auth, cutsDb };
 }
 
 let installed = null;
@@ -117,7 +138,7 @@ async function start(options) {
     const world = createWorld();
     for (const [file, exports] of [
       ['database/mongodb.js', world.db], ['database/credit.db.js', world.creditDb],
-      ['database/registers.db.js', world.registersDb], ['middleware/auth.middleware.js', world.auth],
+      ['database/registers.db.js', world.registersDb], ['database/cash-cuts.db.js', world.cutsDb], ['middleware/auth.middleware.js', world.auth],
     ]) {
       const full = path.join(__dirname, '../..', file);
       require.cache[full] = { id: full, filename: full, loaded: true, exports, children: [], paths: [] };

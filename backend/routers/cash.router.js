@@ -3,7 +3,12 @@ const cash = require('../controllers/cash.controller');
 const { requireAuth, requireActiveSubscription, requireRoles } = require('../middleware/auth.middleware');
 const { attachRegister } = require('../middleware/register.middleware');
 
+const cuts = require('./cash-cuts.router');
+
 const cashRoles = requireRoles('admin', 'cashier');
+
+// Corte X: entrega de la caja entre cajeros sin cerrarla
+router.use('/cuts', cuts);
 
 // La sesión es la de la caja de esta computadora (X-Register); abrir y cerrar llevan el candado por navegador
 router.get('/session', requireAuth, requireActiveSubscription, cashRoles, attachRegister({ allowOverPlan: true }), cash.current);

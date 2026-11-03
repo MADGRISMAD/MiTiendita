@@ -294,6 +294,8 @@ async function settlePayment(req, existing, body, { requireCash = true, paidAt }
       paidAt: paidAt || new Date(),
       updatedAt: new Date(),
       cashSessionId: session?.id || null,
+      // Quién cobró: el desglose del corte (segments) agrupa por cajero
+      user: req.user?.username || '',
       tax: totals.tax,
       cardExtraIva,
       cardExtraTax: totals.cardExtraTax,

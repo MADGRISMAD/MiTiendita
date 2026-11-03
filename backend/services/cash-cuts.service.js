@@ -88,10 +88,11 @@ async function confirmCut(store, { tenantId, cutId, user, confirmedCash }) {
 const pendingFor = (store, tenantId, username) => store.pendingFor(tenantId, username);
 const listCuts = (store, tenantId, filters = {}) => store.listCuts(tenantId, filters);
 
-/** Ventas agrupadas por cajero (`order.user`). `cuts` se acepta por compatibilidad con el desglose del corte final. */
+/** Ventas cobradas agrupadas por cajero (`order.user`). `cuts` se acepta por compatibilidad con el desglose del corte final. */
 function segmentsOf(orders, cuts) { // eslint-disable-line no-unused-vars
   const by = new Map();
   for (const o of orders) {
+    if (o.paymentStatus !== 'paid') continue;
     const user = o.user || '';
     if (!by.has(user)) by.set(user, []);
     by.get(user).push(o);
