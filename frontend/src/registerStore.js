@@ -22,22 +22,24 @@ function valid(n) {
 
 export const registerStore = {
   current() {
+    if (memoryRegister !== null) return memoryRegister; // lo elegido en esta página manda aunque el almacenamiento falle al guardar
     try {
       const raw = localStorage.getItem(REG_KEY);
       if (raw === null || !/^\d+$/.test(raw)) return 1;
       const n = Number(raw);
       return valid(n) ? n : 1;
     } catch {
-      return memoryRegister || 1;
+      return 1;
     }
   },
   /** true si esta computadora ya eligió su caja (hay `mt_register` válido guardado). */
   hasChoice() {
+    if (memoryRegister !== null) return true;
     try {
       const raw = localStorage.getItem(REG_KEY);
       return raw !== null && /^\d+$/.test(raw) && valid(Number(raw));
     } catch {
-      return memoryRegister !== null;
+      return false;
     }
   },
   /** Guarda la caja. true si quedó guardada en el almacenamiento (si no, solo vale en esta página). */

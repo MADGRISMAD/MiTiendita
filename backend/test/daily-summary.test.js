@@ -23,6 +23,14 @@ test('resumen: totales por método, ticket promedio, fiado, anulaciones y utilid
   assert.equal(s.hadActivity, true);
 });
 
+test('resumen: con varias cajas suma los cortes del día y un faltante no se oculta', () => {
+  const s = buildSummary({ sessions: [
+    { closedAt: '2026-10-14T22:00:00Z', difference: -30, countedCash: 470 },
+    { closedAt: '2026-10-14T23:00:00Z', difference: 0, countedCash: 800 },
+  ] });
+  assert.deepEqual(s.cash, { difference: -30, counted: 1270 });
+});
+
 test('resumen: día sin movimiento y sin costos conocidos', () => {
   const s = buildSummary({});
   assert.equal(s.hadActivity, false);

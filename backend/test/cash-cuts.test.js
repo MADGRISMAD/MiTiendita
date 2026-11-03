@@ -93,11 +93,28 @@ test('confirmar: solo el receptor; igual -> confirmed; distinto -> disputed', as
   assert.equal((await svc.pendingFor(st, 't1', 'beto')).length, 0);
 });
 
-test('el punto de partida es lo contado aunque esté en disputa', async () => {
+test('en disputa el punto de partida del siguiente tramo es lo que dijo el receptor', async () => {
+  const st = makeStore({ orders: [sale(500, T('09:00'))] });
+  const c = await svc.createCut(st, { tenantId: 't1', session, fromUser: 'ana', toUser: 'beto', countedCash: 1000 });
+  await svc.confirmCut(st, { tenantId: 't1', cutId: c.id, user: 'beto', confirmedCash: 950 });
+  assert.equal((await svc.expectedSince(st, { tenantId: 't1', session })).baseline, 950);
+  st.orders.push(sale(100, new Date(Date.now() + 5000)));
+  assert.equal((await svc.expectedSince(st, { tenantId: 't1', session })).expected, 1050);
+});
+
+test('pendiente o confirmado: el punto de partida sigue siendo lo contado', async () => {
   const st = makeStore();
   const c = await svc.createCut(st, { tenantId: 't1', session, fromUser: 'ana', toUser: 'beto', countedCash: 500 });
-  await svc.confirmCut(st, { tenantId: 't1', cutId: c.id, user: 'beto', confirmedCash: 400 });
   assert.equal((await svc.expectedSince(st, { tenantId: 't1', session })).baseline, 500);
+  await svc.confirmCut(st, { tenantId: 't1', cutId: c.id, user: 'beto' });
+  assert.equal((await svc.expectedSince(st, { tenantId: 't1', session })).baseline, 500);
+});
+
+test('no se puede entregar la caja a un usuario desactivado', async () => {
+  const st = makeStore();
+  const find = st.findUser;
+  st.findUser = async (t, u) => { const r = await find(t, u); return r && u === 'beto' ? { ...r, disabled: true } : r; };
+  await assert.rejects(svc.createCut(st, { tenantId: 't1', session, fromUser: 'ana', toUser: 'beto', countedCash: 500 }), { status: 400, message: /desactivado/ });
 });
 
 test('segmentsOf agrupa por cajero', () => {

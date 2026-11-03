@@ -513,3 +513,20 @@ test('terminal compartida: el cobro vivo (created) de la caja 1 NO se cancela de
   assert.ok(!mp.calls.some((c) => c.url === '/v1/orders/CRE9/cancel'), 'no se cancela el cobro de otra caja');
   assert.equal(store.charges.find((c) => c.clientSaleId === 'C1').status, 'pending');
 });
+
+test('huérfanos por caja: cada caja ve solo los suyos (sin caja cuenta como la 1) y no puede cancelar el de otra', async () => {
+  await twoTerminals();
+  const old = ago(60 * 60000);
+  addCharge({ mpOrderId: 'R0', status: 'paid', amount: 10, paidAt: old }); // anterior a MultiCaja: caja 1
+  addCharge({ mpOrderId: 'R1', status: 'paid', amount: 20, registerId: 1, paidAt: old });
+  addCharge({ mpOrderId: 'R2', status: 'paid', amount: 30, registerId: 2, paidAt: old });
+  assert.deepEqual((await charges.unconsumed('t1', { registerId: 1 })).map((c) => c.amount).sort((a, b) => a - b), [10, 20]);
+  assert.deepEqual((await charges.unconsumed('t1', { registerId: 2 })).map((c) => c.amount), [30]);
+  assert.equal((await charges.unconsumed('t1')).length, 3);
+  const other = addCharge({ mpOrderId: 'R3', status: 'paid', amount: 40, registerId: 2, paidAt: old });
+  await assert.rejects(charges.cancelCharge('t1', other.id, { registerId: 1 }), (e) => e.status === 403);
+  const legacy = addCharge({ mpOrderId: 'R4', status: 'paid', amount: 50, paidAt: old });
+  await assert.rejects(charges.cancelCharge('t1', legacy.id, { registerId: 2 }), (e) => e.status === 403);
+  mp.orders.R3 = { id: 'R3', status: 'processed', transactions: { payments: [{ amount: '40.00', status: 'processed' }] } };
+  assert.equal((await charges.cancelCharge('t1', other.id, { registerId: 2 })).status, 'paid');
+});

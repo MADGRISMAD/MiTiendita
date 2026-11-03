@@ -84,6 +84,7 @@ function createWorld() {
       const s = { ...clone(data), id: newId() }; w.sessions.set(s.id, s); return clone(s);
     },
     async UpdateCashSession(id, data) { const s = w.sessions.get(id); Object.assign(s, clone(data)); return clone(s); },
+    async ReleaseCashSession(id) { const s = w.sessions.get(id); if (!s || s.status !== 'open') return null; delete s.deviceId; return clone(s); },
     async CreateActivityLog(entry) { w.log.push(clone(entry)); return entry; },
     async ListUsersByTenant() { return clone(w.users); },
     async GetFoodById(id) { return clone(w.foods.get(id)) || null; },

@@ -94,3 +94,49 @@ test('el cierre y el detalle traen segments (una fila por cajero) y cuts', async
     assert.equal(closed.body.segments.reduce((a, s) => a + s.total, 0), 120);
   } finally { await w.stop(); }
 });
+
+test('Corte X: el historial ignora filtros que no son texto simple o número entero', async () => {
+  const w = await start({ users: USERS });
+  try {
+    await w.call('POST', '/api/cash/session/open', { openingFloat: 500 }, as('ana'));
+    await w.call('POST', '/api/cash/cuts', { toUser: 'beto', countedCash: 500 }, as('ana'));
+    const hist = await w.call('GET', '/api/cash/cuts?status[$ne]=x&user[$ne]=x&registerId=abc', null, as('dueno', 'admin'));
+    assert.equal(hist.status, 200);
+    assert.equal(hist.body.length, 1);
+    const none = await w.call('GET', '/api/cash/cuts?registerId=7', null, as('dueno', 'admin'));
+    assert.equal(none.body.length, 0);
+  } finally { await w.stop(); }
+});
+
+test('Corte final: con cortes X la diferencia se juzga por el tramo del último cajero', async () => {
+  const w = await start({ users: USERS });
+  try {
+    const open = await w.call('POST', '/api/cash/session/open', { openingFloat: 500 }, as('ana'));
+    await w.call('POST', '/api/orders/sale', saleBody([COKE]), as('ana'));
+    // Ana entrega con 50 de menos (esperado 600)
+    assert.equal((await w.call('POST', '/api/cash/cuts', { toUser: 'beto', countedCash: 550 }, as('ana'))).status, 201);
+    await w.call('POST', '/api/orders/sale', saleBody([COKE]), as('beto'));
+    const cur = await w.call('GET', '/api/cash/session', null, as('beto'));
+    assert.equal(cur.body.lastSegment.expected, 650);
+    const closed = await w.call('POST', '/api/cash/session/close', { countedCash: 650 }, as('beto'));
+    assert.equal(closed.status, 200);
+    assert.equal(closed.body.session.difference, -50);
+    assert.equal(closed.body.lastSegment.baseline, 550);
+    assert.equal(closed.body.lastSegment.expected, 650);
+    assert.equal(closed.body.segmentDifference, 0);
+    const got = await w.call('GET', `/api/cash/session/${open.body.id}`, null, as('dueno', 'admin'));
+    assert.equal(got.body.lastSegment.expected, 650);
+    assert.equal(got.body.segmentDifference, 0);
+  } finally { await w.stop(); }
+});
+
+test('Corte final sin cortes X: no se agrega lastSegment', async () => {
+  const w = await start({ users: USERS });
+  try {
+    await w.call('POST', '/api/cash/session/open', { openingFloat: 500 }, as('ana'));
+    const closed = await w.call('POST', '/api/cash/session/close', { countedCash: 500 }, as('ana'));
+    assert.equal(closed.status, 200);
+    assert.equal(closed.body.lastSegment, undefined);
+    assert.equal(closed.body.segmentDifference, undefined);
+  } finally { await w.stop(); }
+});

@@ -175,10 +175,11 @@ async function syncCharge(tenantId, chargeId) {
   return { ...charge, mpStatus: s };
 }
 
-/** Cancela en la terminal. Si ya se pagó justo en ese momento, devuelve 'paid'. */
-async function cancelCharge(tenantId, chargeId) {
+/** Cancela en la terminal. Si ya se pagó justo en ese momento, devuelve 'paid'. Con `registerId`, solo cancela cobros de esa caja. */
+async function cancelCharge(tenantId, chargeId, { registerId } = {}) {
   const charge = await db.GetPointCharge(chargeId, tenantId);
   if (!charge) throw svc.httpError('Cobro no encontrado', 404);
+  if (registerId != null && (charge.registerId ?? 1) !== registerId) throw svc.httpError('Ese cobro es de otra caja.', 403, 'charge_other_register');
   if (charge.status === 'pending') {
     try {
       await svc.mp(tenantId, `/v1/orders/${charge.mpOrderId}/cancel`, { method: 'POST' });
@@ -251,8 +252,10 @@ async function releaseCharge(tenantId, chargeId, clientSaleId) {
  *  - lost_sale: se usó en una venta que ya no existe;
  *  - review: aprobado por otro monto, o Mercado Pago pide confirmar en la terminal.
  */
-async function unconsumed(tenantId, { minAgeMs = ORPHAN_MIN_AGE_MS } = {}) {
-  const rows = await db.ListPointChargesSince(tenantId, new Date(Date.now() - ORPHAN_WINDOW_MS));
+async function unconsumed(tenantId, { minAgeMs = ORPHAN_MIN_AGE_MS, registerId } = {}) {
+  let rows = await db.ListPointChargesSince(tenantId, new Date(Date.now() - ORPHAN_WINDOW_MS));
+  // Cada caja ve solo los cobros que hizo ella (los viejos, sin caja, eran de la caja 1)
+  if (registerId != null) rows = rows.filter((c) => (c.registerId ?? 1) === registerId);
   let refreshed = 0;
   const fresh = await Promise.all(
     rows.map(async (c) => {

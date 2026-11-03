@@ -5,7 +5,7 @@ const saleAudit = require('../services/sale-audit.service');
 const { paymentTotals } = require('../services/credit.service');
 const { summarizeOrders } = require('../services/cash-summary');
 const cutsDb = require('../database/cash-cuts.db');
-const { segmentsOf } = require('../services/cash-cuts.service');
+const { segmentsOf, expectedSince } = require('../services/cash-cuts.service');
 
 /** Abonos de clientes recibidos en esta caja (entran al corte como dinero cobrado). */
 async function abonosOf(tenantId, sessionId) {
@@ -18,6 +18,7 @@ async function current(req, res) {
     if (!session) return res.status(200).json({ open: false, session: null });
     const orders = await db.GetOrdersByCashSession(session.id, req.tenantId);
     return res.status(200).json({
+      ...(await currentSegment(req.tenantId, session)),
       open: true,
       session,
       totals: { ...summarizeOrders(orders), abonos: await abonosOf(req.tenantId, session.id) },
@@ -27,6 +28,20 @@ async function current(req, res) {
     console.error(err);
     return res.status(500).send(err.message || 'Error al obtener sesión de caja');
   }
+}
+
+/** Con Cortes X, el último cajero responde solo por su tramo: esperado desde el último corte y diferencia contra eso. */
+async function segmentInfo(tenantId, session, cuts, countedCash) {
+  if (!cuts.length) return {};
+  const lastSegment = await expectedSince(cutsDb, { tenantId, session });
+  const out = { lastSegment };
+  if (countedCash != null) out.segmentDifference = Number((countedCash - lastSegment.expected).toFixed(2));
+  return out;
+}
+
+/** Para la pantalla de caja: el tramo del cajero si hay cortes; si algo falla aquí, la caja sigue funcionando sin él. */
+async function currentSegment(tenantId, session) {
+  try { return await segmentInfo(tenantId, session, await cutsDb.cutsBySession(tenantId, session.id), null); } catch (e) { console.error('[tramo]', e.message); return {}; }
 }
 
 /** Bitácora: nunca debe tumbar la apertura ni el corte. */
@@ -102,7 +117,7 @@ async function close(req, res) {
 
     await logCash(saleAudit.cashCloseEntry({ tenantId: req.tenantId, user: req.user.username, session: closed }));
     const cuts = await cutsDb.cutsBySession(req.tenantId, session.id);
-    return res.status(200).json({ session: closed, totals, segments: segmentsOf(orders, cuts), cuts });
+    return res.status(200).json({ session: closed, totals, segments: segmentsOf(orders, cuts), cuts, ...(await segmentInfo(req.tenantId, session, cuts, countedCash)) });
   } catch (err) {
     console.error(err);
     return res.status(500).send(err.message || 'Error al cerrar caja');
@@ -121,6 +136,7 @@ async function getById(req, res) {
       orders,
       segments: segmentsOf(orders, cuts),
       cuts,
+      ...(await segmentInfo(req.tenantId, session, cuts, Number.isFinite(Number(session.countedCash)) && session.countedCash != null ? Number(session.countedCash) : null)),
     });
   } catch (err) {
     console.error(err);

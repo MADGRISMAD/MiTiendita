@@ -57,9 +57,9 @@ async function pendingFor(tenantId, username) {
 async function listCuts(tenantId, { from, to, registerId, user, status } = {}) {
   const q = { tenantId: String(tenantId) };
   if (from || to) q.createdAt = { ...(from ? { $gte: from } : {}), ...(to ? { $lte: to } : {}) };
-  if (registerId != null) q.registerId = Number(registerId);
-  if (user) q.$or = [{ fromUser: user }, { toUser: user }];
-  if (status) q.status = status;
+  if (Number.isInteger(registerId)) q.registerId = registerId;
+  if (typeof user === 'string' && user) q.$or = [{ fromUser: user }, { toUser: user }];
+  if (typeof status === 'string' && status) q.status = status;
   const rows = await (await col()).find(q).sort({ createdAt: -1 }).toArray();
   return rows.map(out);
 }

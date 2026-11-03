@@ -9,6 +9,16 @@ export function cutLabel(diff) {
   return d === 0 ? "cuadra" : d > 0 ? "sobra" : "falta";
 }
 
+/**
+ * Contra qué se juzga el corte final. Sin Cortes X es la sesión completa; con cortes, solo el tramo del último cajero
+ * (`lastSegment` viene del servidor). Devuelve lo esperado del tramo y la diferencia que decide el aviso de «no cuadra».
+ */
+export function closeBasis(counted, sessionExpected, lastSegment) {
+  const hasSegment = Boolean(lastSegment) && Number.isFinite(Number(lastSegment.expected));
+  const expected = hasSegment ? Number(lastSegment.expected) : Number(sessionExpected);
+  return { hasSegment, expected, difference: cutDifference(counted, expected) };
+}
+
 /** Mensaje que bloquea la entrega según la cola sin conexión (filas con `status`), o '' si no hay bloqueo. */
 export function syncBlockMessage(rows) {
   if (!rows || !rows.length) return "";

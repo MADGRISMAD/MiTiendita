@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cutDifference, cutLabel, syncBlockMessage } from "../cutX";
+import { closeBasis, cutDifference, cutLabel, syncBlockMessage } from "../cutX";
 
 describe("cutX", () => {
   it("la diferencia es contado menos esperado", () => {
@@ -27,5 +27,15 @@ describe("syncBlockMessage", () => {
   });
   it("solo con error pide revisar o soporte", () => {
     expect(syncBlockMessage([{ status: "failed" }])).toContain("error de sincronización");
+  });
+});
+
+describe("closeBasis", () => {
+  it("sin cortes se juzga contra la sesión completa", () => {
+    expect(closeBasis(590, 600, null)).toEqual({ hasSegment: false, expected: 600, difference: -10 });
+  });
+  it("con cortes se juzga solo el tramo del último cajero", () => {
+    // La sesión espera 700 (hubo 50 de faltante antes), pero el tramo espera 650 y el cajero contó 650
+    expect(closeBasis(650, 700, { baseline: 550, expected: 650 })).toEqual({ hasSegment: true, expected: 650, difference: 0 });
   });
 });

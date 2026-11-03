@@ -35,7 +35,10 @@ function buildSummary({ orders = [], sessions = [], lowStock = [] }) {
       }
     }
   }
-  const lastCut = sessions.slice().sort((a, b) => new Date(b.closedAt) - new Date(a.closedAt))[0];
+  // Con varias cajas se suman TODOS los cortes del día, así un faltante en una no queda tapado por otra
+  const cash = sessions.length
+    ? { difference: round2(sessions.reduce((a, c) => a + (Number(c.difference) || 0), 0)), counted: round2(sessions.reduce((a, c) => a + (Number(c.countedCash) || 0), 0)) }
+    : null;
   return {
     count: paid.length,
     total: round2(total),
@@ -44,7 +47,7 @@ function buildSummary({ orders = [], sessions = [], lowStock = [] }) {
     byMethod: Object.fromEntries(Object.entries(byMethod).map(([k, v]) => [k, round2(v)])),
     credit: round2(credit),
     voids: { count: voided.length, total: round2(voided.reduce((a, o) => a + (Number(o.total) || 0), 0)) },
-    cash: lastCut ? { difference: round2(lastCut.difference), counted: round2(lastCut.countedCash) } : null,
+    cash,
     lowStock: lowStock
       .slice()
       .sort((a, b) => (Number(a.stock) || 0) - (Number(b.stock) || 0))

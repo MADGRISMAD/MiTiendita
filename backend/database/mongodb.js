@@ -1116,6 +1116,14 @@ async function UpdateCashSession(id, data, tenantId) {
   return GetCashSessionById(id, tenantId);
 }
 
+/** Quita el candado de equipo (`deviceId`) de una sesión ABIERTA; no la cierra. Devuelve la sesión o null si ya no estaba abierta. */
+async function ReleaseCashSession(id, tenantId) {
+  const filter = oidFilter(id, tenantId);
+  if (!filter) return null;
+  const r = await dbConnection.collection('cash_sessions').updateOne({ ...filter, status: 'open' }, { $unset: { deviceId: '' }, $set: { updatedAt: new Date() } });
+  return r.matchedCount ? GetCashSessionById(id, tenantId) : null;
+}
+
 function mailAssignee(value) {
   const email = String(value || '').trim().toLowerCase();
   return email.includes('@') ? email : '';
@@ -1713,7 +1721,7 @@ module.exports = {
   GetOrdersByDateRange, GetSalesReport,
   SaveSupportMail, FindSupportMailByMessageIds, ListSupportMail, ListSupportMailAll, ListSupportMailRaw, ListUnmatchedSupportMail, AssignUnassignedSupportMail,
   GetInvites, GetInviteByToken, CreateInvite, UpdateInvite, DeleteInvite,
-  GetOpenCashSession, ListOpenCashSessions, GetCashSessionById, CreateCashSession, UpdateCashSession,
+  GetOpenCashSession, ListOpenCashSessions, GetCashSessionById, CreateCashSession, UpdateCashSession, ReleaseCashSession,
   aiMonthKey, GetAiUsage, ReserveAiUse, RefundAiUse, ListAiUsage, ListAiUsageAll,
   ListPlatformExpenses, ListPlatformExpensesAll, CreatePlatformExpense, DeletePlatformExpense,
   SavePlatformSnapshot, ListPlatformSnapshots,

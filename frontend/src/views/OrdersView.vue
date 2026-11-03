@@ -344,6 +344,7 @@
               <div v-if="abonos.cash"><dt>Abonos en efectivo</dt><dd>+ {{ money(abonos.cash) }}</dd></div>
               <div v-if="Number(session?.cashRefunds)"><dt>Devoluciones en efectivo</dt><dd>− {{ money(session.cashRefunds) }}</dd></div>
               <div class="sum-total"><dt>Debe haber</dt><dd>{{ money(expectedCash) }}</dd></div>
+              <div v-if="basis.hasSegment" class="sum-info"><dt>Tu tramo: esperado {{ money(basis.expected) }}</dt><dd>diferencia {{ money(basis.difference) }}</dd></div>
               <div class="sum-info"><dt>Tarjeta · transferencia · otro</dt><dd>{{ money(totals.card) }} · {{ money(totals.transfer) }} · {{ money(totals.other) }}</dd></div>
             </dl>
 
@@ -540,6 +541,7 @@ import { directPrinting, printReceiptDirect, printerStore } from "../thermalPrin
 import { printRoute } from "../printRoute";
 import CashLimitDialog from "../components/CashLimitDialog.vue";
 import { isBlocking, postponeCut, shiftStatus } from "../cashShift";
+import { closeBasis } from "../cutX";
 import { hasRole } from "../authStore";
 import { newClientSaleId } from "../net";
 import { cartTotals } from "../tax";
@@ -570,6 +572,7 @@ let clock = null;
 const cashOpen = ref(false);
 const session = ref(null);
 const sessionOrders = ref([]);
+const lastSegment = ref(null);
 const totals = ref({ cash: 0, card: 0, transfer: 0, other: 0, credit: 0, total: 0, abonos: { cash: 0, card: 0, transfer: 0, total: 0, count: 0 } });
 const abonos = computed(() => ({ cash: 0, card: 0, transfer: 0, total: 0, count: 0, ...(totals.value.abonos || {}) }));
 const openingFloat = ref("");
@@ -734,7 +737,9 @@ const counted = computed(() => {
   if (countMode.value === "total") return round2(Number(countedCash.value) || 0);
   return round2(DENOMS.reduce((sum, d) => sum + d * (Number(denoms[d]) || 0), 0));
 });
-const difference = computed(() => round2(counted.value - expectedCash.value));
+// Con Cortes X el último cajero responde por su tramo, no por el total de la sesión
+const basis = computed(() => closeBasis(counted.value, expectedCash.value, lastSegment.value));
+const difference = computed(() => basis.value.difference);
 const diffTone = computed(() => (difference.value === 0 ? "ok" : difference.value > 0 ? "over" : "short"));
 const diffLabel = computed(() => (difference.value === 0 ? "Cuadra" : difference.value > 0 ? "Sobran" : "Faltan"));
 
@@ -904,6 +909,7 @@ async function loadCash() {
     cashOpen.value = Boolean(data.open);
     session.value = data.session || null;
     sessionOrders.value = Array.isArray(data.orders) ? data.orders : [];
+    lastSegment.value = data.lastSegment || null;
     totals.value = data.totals || { cash: 0, card: 0, transfer: 0, other: 0, credit: 0, total: 0, abonos: {} };
   } catch (e) {
     cashErr.value = isNetworkError(e)
@@ -1082,7 +1088,7 @@ async function closeCash() {
   try {
     const res = await apiService.closeCashSession(counted.value, String(closeNotes.value || "").trim());
     showClose.value = false;
-    const diff = Number(res.session?.difference || 0);
+    const diff = Number(res.segmentDifference ?? res.session?.difference ?? 0);
     cashMsg.value = diff === 0 ? "Turno cerrado. El corte cuadró." : `Turno cerrado. Diferencia: ${money(diff)}.`;
     closedId = res.session?.id || "";
     await load();

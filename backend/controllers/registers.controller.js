@@ -27,6 +27,15 @@ async function list(req, res) {
 
 async function save(req, res) {
   try {
+    // No se puede quitar una caja con la sesión abierta: quedaría huérfana (primero su corte)
+    const count = Number(req.body?.count);
+    if (Number.isInteger(count) && count >= 1) {
+      const stranded = (await db.ListOpenCashSessions(req.tenantId)).find((s) => (s.registerId ?? 1) > count);
+      if (stranded) {
+        const n = stranded.registerId ?? 1;
+        return res.status(409).json({ code: 'register_open', message: `La Caja ${n} sigue abierta por ${stranded.openedBy || 'otro usuario'}. Haz su corte antes de reducir.` });
+      }
+    }
     try {
       await saveRegisters(registersDb, req.tenantId, req.tenant?.plan, req.body || {});
     } catch (err) {
@@ -41,17 +50,14 @@ async function save(req, res) {
   }
 }
 
-/** El dueño libera una caja que se quedó abierta en otro equipo: se cierra sin corte de efectivo. */
+/** El dueño libera una caja que se quedó abierta en otro equipo: solo quita el candado, la sesión sigue abierta y el siguiente equipo hace el corte contado. */
 async function release(req, res) {
   try {
     const number = Number(req.params.number);
     const session = (await db.ListOpenCashSessions(req.tenantId)).find((s) => (s.registerId ?? 1) === number);
     if (!session) return res.status(404).send('Esa caja no está abierta');
-    const closed = await db.UpdateCashSession(
-      session.id,
-      { status: 'closed', closedAt: new Date(), closedBy: req.user.username, notes: 'Liberada por el dueño', updatedAt: new Date() },
-      req.tenantId
-    );
+    const unlocked = await db.ReleaseCashSession(session.id, req.tenantId);
+    if (!unlocked) return res.status(404).send('Esa caja no está abierta');
     try {
       await db.CreateActivityLog({
         tenantId: String(req.tenantId),
@@ -62,7 +68,7 @@ async function release(req, res) {
         createdAt: new Date(),
       });
     } catch (e) { console.error('[bitácora]', e.message); }
-    return res.status(200).json({ session: closed });
+    return res.status(200).json({ session: unlocked });
   } catch (err) {
     console.error(err);
     return res.status(500).send(err.message || 'Error al liberar la caja');

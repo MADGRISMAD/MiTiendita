@@ -70,10 +70,11 @@ router.post('/:id/confirm', ...base, cashRoles, async (req, res) => {
 router.get('/', ...base, requireRoles('admin'), async (req, res) => {
   try {
     const date = (v) => { const d = v ? new Date(v) : null; return d && !Number.isNaN(d.getTime()) ? d : null; };
-    const { registerId, user, status } = req.query;
+    const str = (v) => (typeof v === 'string' && v.trim() ? v.trim() : null);
+    const reg = Number(req.query.registerId);
     return res.json(await svc.listCuts(cutsDb, req.tenantId, {
       from: date(req.query.from), to: date(req.query.to),
-      registerId: registerId ? Number(registerId) : null, user: user || null, status: status || null,
+      registerId: Number.isInteger(reg) && reg > 0 ? reg : null, user: str(req.query.user), status: str(req.query.status),
     }));
   } catch (err) { return fail(res, err); }
 });

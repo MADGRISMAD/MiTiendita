@@ -24,7 +24,9 @@ const money = (c) => c / 100;
 async function expectedSince(store, { tenantId, session }) {
   const cuts = await store.cutsBySession(tenantId, session.id);
   const last = cuts[cuts.length - 1] || null;
-  const baseline = last ? Number(last.countedCash) : Number(session.openingFloat || 0);
+  // En disputa manda lo que dice el receptor: el faltante se queda con quien entregó, no con quien recibió (spec §7.6)
+  const disputedCash = last && last.status === 'disputed' && last.confirmedCash != null && last.confirmedCash !== '' ? Number(last.confirmedCash) : null;
+  const baseline = last ? (Number.isFinite(disputedCash) ? disputedCash : Number(last.countedCash)) : Number(session.openingFloat || 0);
   const since = last ? new Date(last.createdAt) : new Date(session.openedAt || 0);
 
   const cashTotal = summarizeOrders(await store.ordersBySession(tenantId, session.id)).cash;
@@ -45,7 +47,9 @@ async function createCut(store, { tenantId, session, fromUser, toUser, countedCa
   const to = String(toUser || '').trim();
   if (!to) throw httpError(400, 'Elige quién recibe la caja.');
   if (to === fromUser) throw httpError(400, 'No puedes entregarte la caja a ti mismo.');
-  if (!(await store.findUser(tenantId, to))) throw httpError(400, 'Ese usuario no existe en tu tienda.');
+  const receiver = await store.findUser(tenantId, to);
+  if (!receiver) throw httpError(400, 'Ese usuario no existe en tu tienda.');
+  if (receiver.disabled) throw httpError(400, 'Ese usuario está desactivado; elige a otra persona.');
 
   const { expected, cashTotal, abonosCashTotal, refundsTotal } = await expectedSince(store, { tenantId, session });
   const countedCents = cents(counted);

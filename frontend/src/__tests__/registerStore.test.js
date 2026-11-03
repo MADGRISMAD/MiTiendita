@@ -52,6 +52,23 @@ describe("caja de esta computadora", () => {
   });
 });
 
+describe("guardar falla pero leer funciona", () => {
+  it("la elección de esta página manda aunque setItem lance", () => {
+    const real = globalThis.localStorage.setItem;
+    globalThis.localStorage.setItem = () => {
+      throw new Error("lleno");
+    };
+    try {
+      expect(registerStore.hasChoice()).toBe(false);
+      expect(registerStore.set(3)).toBe(false);
+      expect(registerStore.current()).toBe(3);
+      expect(registerStore.hasChoice()).toBe(true);
+    } finally {
+      globalThis.localStorage.setItem = real;
+    }
+  });
+});
+
 describe("id de computadora", () => {
   it("se genera una vez y se conserva", () => {
     const a = registerStore.deviceId();

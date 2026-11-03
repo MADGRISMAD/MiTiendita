@@ -13,7 +13,7 @@ const stub = (file, exports) => {
   require.cache[full] = { id: full, filename: full, loaded: true, exports, children: [], paths: [] };
 };
 
-const calls = { startCharge: [], status: [], shared: [] };
+const calls = { startCharge: [], status: [], shared: [], unconsumed: [], cancel: [] };
 let sessions = [];
 stub('database/mongodb.js', {
   async GetOpenCashSession(_t, registerId = 1) { return sessions.find((s) => (s.registerId ?? 1) === registerId) || null; },
@@ -29,6 +29,8 @@ stub('middleware/auth.middleware.js', {
 });
 stub('services/point.charges.service.js', {
   async startCharge(args) { calls.startCharge.push(args); return { id: 'c1', status: 'pending' }; },
+  async unconsumed(_t, opts) { calls.unconsumed.push(opts.registerId); return []; },
+  async cancelCharge(_t, id, opts) { calls.cancel.push([id, opts.registerId]); return { status: 'failed', mpStatus: 'canceled' }; },
   async status(tenantId, registerId) { calls.status.push(registerId); return { ok: true }; },
 });
 stub('services/mercadopago.point.service.js', {
@@ -94,5 +96,16 @@ test('PUT /point/shared: el cajero recibe 403 y el dueño lo guarda', async () =
     const r = await w.call('PUT', '/point/shared', { shared: true }, { 'x-role': 'admin' });
     assert.equal(r.status, 200);
     assert.deepEqual(calls.shared, [true]);
+  } finally { await w.stop(); }
+});
+
+test('GET /point/unconsumed y POST cancel pasan la caja del encabezado al servicio', async () => {
+  sessions = [];
+  const w = await start();
+  try {
+    assert.equal((await w.call('GET', '/point/unconsumed', null, { 'x-register': '1', 'x-device': 'A' })).status, 200);
+    assert.equal((await w.call('POST', '/point/charges/c9/cancel', null, { 'x-register': '1', 'x-device': 'A' })).status, 200);
+    assert.deepEqual(calls.unconsumed.at(-1), 1);
+    assert.deepEqual(calls.cancel.at(-1), ['c9', 1]);
   } finally { await w.stop(); }
 });
