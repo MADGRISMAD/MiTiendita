@@ -1,4 +1,4 @@
-const { planLimits, getPlan } = require('./plans.catalog');
+const { planLimits, getPlan, registerLimitOf } = require('./plans.catalog');
 const db = require('../database/mongodb');
 
 const PLAN_NAMES = { basic: 'Básico', growth: 'Crecimiento', pro: 'Pro', perpetual: 'Perpetua' };
@@ -9,6 +9,7 @@ function limitError(kind, used, max, plan) {
   const messages = {
     users: `El plan ${name} incluye ${max} usuario(s). Pasa a ${next} para invitar a más.`,
     products: `El plan ${name} admite ${max} productos. Pasa a ${next} para ampliar el catálogo.`,
+    registers: `El plan ${name} incluye ${max} caja(s). Pasa a ${next} para usar más.`,
   };
   const err = new Error(messages[kind] || 'Límite del plan alcanzado');
   err.status = 403;
@@ -56,6 +57,11 @@ async function assertProductRoom(tenantId, planId, extra = 1) {
   }
 }
 
+function assertRegisterCount(planId, count) {
+  const max = registerLimitOf(planId);
+  if (count > max) throw limitError('registers', count, max, planId);
+}
+
 function sendLimit(res, err) {
   if (err?.payload?.code === 'PLAN_LIMIT') {
     return res.status(403).json(err.payload);
@@ -71,6 +77,7 @@ module.exports = {
   usageFor,
   assertUserRoom,
   assertProductRoom,
+  assertRegisterCount,
   sendLimit,
   planName,
 };

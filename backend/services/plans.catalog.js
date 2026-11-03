@@ -32,10 +32,10 @@ const AI_QUOTAS = {
 
 /** null = ilimitado */
 const PLAN_LIMITS = {
-  basic: { users: 2, products: 250, branches: 1 },
-  growth: { users: 6, products: 1500, branches: 1 },
-  pro: { users: 20, products: null, branches: 5 },
-  perpetual: { users: 20, products: null, branches: 1 },
+  basic: { users: 2, products: 250, branches: 1, registers: 1 },
+  growth: { users: 6, products: 1500, branches: 1, registers: 2 },
+  pro: { users: 20, products: null, branches: 5, registers: 4 },
+  perpetual: { users: 20, products: null, branches: 1, registers: 1 },
 };
 
 const PLAN_CATALOG = {
@@ -171,6 +171,10 @@ function branchLimitOf(planId) {
   return planLimits(planId).branches || 1;
 }
 
+function registerLimitOf(planId) {
+  return planLimits(planId).registers || 1;
+}
+
 function formatCap(n) {
   return n == null ? 'Ilimitado' : String(n);
 }
@@ -220,6 +224,7 @@ module.exports = {
   hasAiFeatures,
   planLimits,
   branchLimitOf,
+  registerLimitOf,
   planPrice,
   planLabel,
   formatAiQuota,
