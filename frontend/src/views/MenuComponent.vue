@@ -2,7 +2,12 @@
   <AppShell>
     <div class="pos" :class="{ manage: mode === 'manage' }">
       <!-- Aviso de caja abierta mucho tiempo -->
-      <div v-if="shiftInfo.state === 'blocked'" class="cash-warning-banner" role="alert">
+      <div v-if="registerOverPlan" class="cash-warning-banner" role="alert">
+        <PosIcon name="alert" :size="18" />
+        <span>{{ OVER_PLAN_MSG }}</span>
+        <router-link to="/orders?corte=1">Ir al corte de caja</router-link>
+      </div>
+      <div v-else-if="shiftInfo.state === 'blocked'" class="cash-warning-banner" role="alert">
         <PosIcon name="alert" :size="18" />
         <span>La caja lleva abierta {{ shiftInfo.postponed && shiftInfo.hours < 15 ? 'más de lo acordado' : 'más de 15 horas' }}. Las ventas y el escaneo están bloqueados hasta que hagas el corte.</span>
         <router-link to="/orders?corte=1">Ir al corte de caja</router-link>
@@ -274,7 +279,7 @@
               <div class="ticket-title">
                 <h2>Venta actual</h2>
                 <p>
-                  {{ lines.length ? `${formatQty(itemCount)} ${itemCount === 1 ? 'artículo' : 'artículos'}` : 'Ticket vacío' }}
+                  <template v-if="registerName">{{ registerName }} · </template>{{ lines.length ? `${formatQty(itemCount)} ${itemCount === 1 ? 'artículo' : 'artículos'}` : 'Ticket vacío' }}
                 </p>
               </div>
               <button
@@ -367,7 +372,9 @@
                 <p>
                   {{
                     cashBlocked
-                      ? 'Haz el corte de caja para seguir cobrando.'
+                      ? registerOverPlan
+                        ? OVER_PLAN_MSG
+                        : 'Haz el corte de caja para seguir cobrando.'
                       : compactPos
                         ? 'Toca un producto o búscalo por nombre.'
                         : 'Escanea un código o toca un producto para agregarlo.'
@@ -1808,7 +1815,9 @@ import CameraScanner from "../components/CameraScanner.vue";
 import PosIcon from "../components/PosIcon.js";
 import { ref, reactive, computed, onMounted, onUnmounted, watch, nextTick } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { apiService, apiErrorMessage } from "../apiService";
+import { apiService, apiErrorMessage, apiErrorCode } from "../apiService";
+import { registerStore } from "../registerStore";
+import { registerLabel } from "../registerPicker";
 import { store } from "../store";
 import { venueStore, fetchVenueSettings } from "../venueStore";
 import { defaultPayMethod, onlyEnabled } from "../payMethods";
@@ -2599,7 +2608,19 @@ export default {
     const cashBusy = ref(false);
     const lastTicketId = ref("");
     const lastTicketOffline = ref(false);
-    const cashBlocked = computed(() => cashOpenWarning.value);
+    // Plan sin esta caja: solo se permite el corte (el servidor contesta register_over_plan en las rutas de venta)
+    const OVER_PLAN_MSG = "Tu plan ya no incluye esta caja. Haz su corte para cerrarla.";
+    const registerOverPlan = ref(false);
+    const cashBlocked = computed(() => cashOpenWarning.value || registerOverPlan.value);
+    // Varias cajas: el encabezado muestra cuál es esta computadora
+    const registerName = ref("");
+    apiSvc
+      .getRegisters()
+      .then((d) => (registerName.value = registerLabel(d, registerStore.current())))
+      .catch(() => {});
+    function noteSaleError(e) {
+      if (apiErrorCode(e) === "register_over_plan") registerOverPlan.value = true;
+    }
     const BLOCK_MSG = "Caja abierta más de 12 horas. Realiza el corte de caja para continuar.";
 
     // Enfoca el campo correcto del modal de pago
@@ -2651,6 +2672,7 @@ export default {
         payError.value = isNetworkError(e)
           ? "Necesitas internet para abrir la caja la primera vez."
           : apiErrorMessage(e, "No se pudo abrir la caja.");
+        noteSaleError(e);
       } finally {
         cashBusy.value = false;
       }
@@ -3270,7 +3292,7 @@ export default {
         return { tone: "err", text: `No se imprimió el ticket: ${printIssue.value}` };
       }
       if (cashBlocked.value) {
-        return { tone: "err", text: "Caja bloqueada: haz el corte de caja para seguir vendiendo." };
+        return { tone: "err", text: registerOverPlan.value ? OVER_PLAN_MSG : "Caja bloqueada: haz el corte de caja para seguir vendiendo." };
       }
       if (scanError.value) return { tone: "err", text: scanError.value };
       if (scanning.value) return { tone: "busy", text: "Buscando…" };
@@ -4492,7 +4514,8 @@ export default {
               ? e.message
               : isNetworkError(e)
                 ? "Sin internet: no se pudo enviar el cobro a la terminal."
-                : e.response?.data?.message || e.message || "No se pudo cobrar en la terminal.";
+                : apiErrorMessage(e, e.message || "No se pudo cobrar en la terminal.");
+            noteSaleError(e);
             return; // el finally de abajo libera `sending`
           }
         }
@@ -4543,11 +4566,8 @@ export default {
         if (!offline) flushOfflineSales();
         if (payload.paymentMethod === "credit") loadCreditCustomers();
       } catch (error) {
-        payError.value =
-          (typeof error.response?.data === "string" && error.response.data) ||
-          error.response?.data?.message ||
-          error.message ||
-          "Error al registrar la venta.";
+        payError.value = apiErrorMessage(error, error.message || "Error al registrar la venta.");
+        noteSaleError(error);
       } finally {
         sending.value = false;
         point.phase = "idle";
@@ -5470,6 +5490,9 @@ export default {
       goCut,
       postponeShift,
       cashBlocked,
+      registerOverPlan,
+      registerName,
+      OVER_PLAN_MSG,
       openingFloat,
       cashBusy,
       openCashFromPay,

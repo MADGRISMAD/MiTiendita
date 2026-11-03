@@ -72,3 +72,23 @@ describe("cabeceras", () => {
     expect(registerHeaders()).toEqual({ "X-Register": "3", "X-Device": registerStore.deviceId() });
   });
 });
+
+describe("hasChoice", () => {
+  it("es falso sin dato o con dato inválido", () => {
+    expect(registerStore.hasChoice()).toBe(false);
+    store.set("mt_register", "abc");
+    expect(registerStore.hasChoice()).toBe(false);
+    store.set("mt_register", "99");
+    expect(registerStore.hasChoice()).toBe(false);
+  });
+  it("es verdadero tras elegir y falso tras limpiar", () => {
+    registerStore.set(2);
+    expect(registerStore.hasChoice()).toBe(true);
+    registerStore.clear();
+    expect(registerStore.hasChoice()).toBe(false);
+  });
+  it("sin almacenamiento es falso", () => {
+    broken = true;
+    expect(registerStore.hasChoice()).toBe(false);
+  });
+});

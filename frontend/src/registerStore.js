@@ -30,6 +30,15 @@ export const registerStore = {
       return 1;
     }
   },
+  /** true si esta computadora ya eligió su caja (hay `mt_register` válido guardado). */
+  hasChoice() {
+    try {
+      const raw = localStorage.getItem(REG_KEY);
+      return raw !== null && /^\d+$/.test(raw) && valid(Number(raw));
+    } catch {
+      return false;
+    }
+  },
   set(n) {
     try {
       if (valid(Number(n))) localStorage.setItem(REG_KEY, String(Number(n)));

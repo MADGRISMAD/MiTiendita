@@ -38,6 +38,7 @@ export function appPublicOrigin() {
 import { isNetworkError } from './net';
 import { noteOffline, noteOnline } from './offlineFlags';
 import { registerHeaders } from './registerStore';
+import { noteRegisterError } from './registerPicker';
 
 // ── Caché corta de lecturas del panel (plataforma y socios) ──
 // Al cambiar de pestaña la pantalla aparece al instante con lo último leído, y dos pantallas que
@@ -160,6 +161,7 @@ axios.interceptors.response.use(
       return Promise.reject(error);
     }
     if (status === 401 && !isAuthCall) endSessionAndGoToLogin();
+    if (status === 409) noteRegisterError(error.response?.data);
     if (status === 403 && error.response?.data?.code === 'MFA_SETUP_REQUIRED') endSessionAndGoToLogin();
     if (
       status === 403 &&

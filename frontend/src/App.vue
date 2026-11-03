@@ -2,15 +2,17 @@
   <router-view></router-view>
   <BrandLoader />
   <AppDialogHost />
+  <RegisterPickerDialog />
 </template>
 
 <script>
 import BrandLoader from './components/BrandLoader.vue'
 import AppDialogHost from './components/AppDialogHost.vue'
+import RegisterPickerDialog from './components/RegisterPickerDialog.vue'
 
 export default {
   name: 'App',
-  components: { BrandLoader, AppDialogHost }
+  components: { BrandLoader, AppDialogHost, RegisterPickerDialog }
 }
 </script>
 

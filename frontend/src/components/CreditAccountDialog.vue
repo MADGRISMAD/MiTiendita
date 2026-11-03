@@ -99,7 +99,7 @@
 <script setup>
 import { computed, onMounted, ref } from "vue";
 import PosIcon from "./PosIcon.js";
-import { apiService } from "../apiService";
+import { apiService, apiErrorMessage } from "../apiService";
 import { money } from "../textUtils";
 import { venueStore } from "../venueStore";
 import { defaultPayMethod, onlyEnabled } from "../payMethods";
@@ -130,7 +130,7 @@ const method = ref(defaultPayMethod(ALL_METHODS, venueStore.disabledPayMethods))
 const note = ref("");
 
 const when = (v) => (v ? new Date(v).toLocaleString("es-MX", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "");
-const msgOf = (e, fallback) => e?.response?.data?.message || (typeof e?.response?.data === "string" ? e.response.data : "") || fallback;
+const msgOf = apiErrorMessage;
 const labelOf = (e) => (e.type === "charge" ? "Venta fiada" : e.type === "void" ? "Venta anulada" : `Abono en ${({ cash: "efectivo", card: "tarjeta", transfer: "transferencia" })[e.method] || "otro medio"}`);
 
 const reminderLink = computed(() => {
