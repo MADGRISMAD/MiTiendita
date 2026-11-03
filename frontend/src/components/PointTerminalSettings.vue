@@ -76,6 +76,25 @@
       <p class="adm-hint">Al vincularla, la terminal pasa a modo punto de venta (PDV): solo recibe cobros desde este sistema.</p>
     </section>
 
+    <!-- Terminal compartida (solo dueño) -->
+    <section v-if="isAdmin && st?.connected" class="adm-card pt-card">
+      <div class="pt-switch">
+        <div>
+          <h3>Terminal compartida</h3>
+          <p class="adm-hint">Todas las cajas cobran con la misma terminal. Mientras una caja cobra, las demás esperan.</p>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          class="adm-switch"
+          :aria-checked="Boolean(st.shared)"
+          aria-label="Terminal compartida"
+          :disabled="busy"
+          @click="toggleShared"
+        ></button>
+      </div>
+    </section>
+
     <section class="adm-card pt-card">
       <h3>Cómo funciona</h3>
       <ol class="pt-steps">
@@ -92,7 +111,8 @@ import { confirmDialog } from "../dialog";
 import { computed, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import PosIcon from "./PosIcon.js";
-import { apiService } from "../apiService";
+import { apiService, apiErrorMessage } from "../apiService";
+import { authStore } from "../authStore";
 
 const route = useRoute();
 const router = useRouter();
@@ -103,6 +123,7 @@ const busy = ref(false);
 const err = ref("");
 const flash = ref("");
 
+const isAdmin = computed(() => authStore.role === "admin");
 const needsReconnect = computed(() => ["token_revoked", "not_connected", "unauthorized"].includes(st.value?.code));
 
 function msgOf(e, fallback) {
@@ -179,6 +200,21 @@ async function unlink() {
   }
 }
 
+async function toggleShared() {
+  const next = !st.value.shared;
+  if (next && !(await confirmDialog("No se podrán enviar cobros simultáneos: si una caja está cobrando, las demás esperarán", { confirmLabel: "Activar" }))) return;
+  busy.value = true;
+  err.value = "";
+  try {
+    await apiService.setPointShared(next);
+    st.value = { ...st.value, shared: next };
+  } catch (e) {
+    err.value = apiErrorMessage(e, "No se pudo guardar el cambio.");
+  } finally {
+    busy.value = false;
+  }
+}
+
 onMounted(async () => {
   const mp = String(route.query.mp || "");
   const detail = String(route.query.detail || "");
@@ -229,5 +265,6 @@ onMounted(async () => {
 .pt-list span { display: grid; min-width: 0; }
 .pt-list strong { overflow: hidden; text-overflow: ellipsis; font-size: 0.9rem; }
 .pt-list small { font-size: 0.78rem; color: var(--timber-muted); }
+.pt-switch { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.9rem; }
 .pt-steps { margin: 0; padding-left: 1.2rem; display: grid; gap: 0.3rem; font-size: 0.9rem; color: var(--timber-muted); }
 </style>

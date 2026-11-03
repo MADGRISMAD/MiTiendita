@@ -8,7 +8,7 @@
             <h1>Configuración</h1>
             <p>{{ venueStore.businessName || 'Tu tienda' }}</p>
           </header>
-          <div v-for="g in NAV" :key="g.title" class="cfg-group">
+          <div v-for="g in visibleNav" :key="g.title" class="cfg-group">
             <h2>{{ g.title }}</h2>
             <template v-for="item in g.items" :key="item.id">
               <router-link v-if="item.to" :to="item.to" class="cfg-item">
@@ -444,6 +444,11 @@
             <PointTerminalSettings />
           </template>
 
+          <!-- ======= MultiCaja (solo dueño) ======= -->
+          <template v-else-if="section === 'multicaja'">
+            <MultiCajaPanel />
+          </template>
+
           <!-- ======= Impresora ======= -->
           <template v-else-if="section === 'impresora'">
             <section class="adm-card cfg-card">
@@ -845,6 +850,7 @@ import PosIcon from "../components/PosIcon.js";
 import TicketHeader from "../components/TicketHeader.vue";
 import WhatsAppHelp from "../components/WhatsAppHelp.vue";
 import PointTerminalSettings from "../components/PointTerminalSettings.vue";
+import MultiCajaPanel from "../components/MultiCajaPanel.vue";
 import { MIN_PASSWORD, passwordProblem } from "../passwordPolicy";
 import { apiService, logoutSession } from "../apiService";
 import { currentVenueSettings, fetchVenueSettings, saveVenueSettings, venueStore } from "../venueStore";
@@ -933,6 +939,7 @@ const SECTIONS = {
   ventas: { label: "Ventas e IVA", icon: "percent", desc: "IVA y comisión por tarjeta", lead: "El impuesto de tus ventas y la comisión al pagar con tarjeta.", tone: "good" },
   inventario: { label: "Inventario", icon: "box", desc: "Existencias y costo de compras", lead: "Cómo se mueven tus existencias y tus costos.", tone: "warn" },
   terminal: { label: "Terminal de cobro", icon: "card", desc: "Vincula tu terminal Mercado Pago", lead: "Cobra con tarjeta directo en tu terminal.", tone: "good" },
+  multicaja: { label: "MultiCaja", icon: "store", desc: "Varias cajas a la vez", lead: "Cobra en varias cajas al mismo tiempo.", tone: "info" },
   bascula: { label: "Báscula", icon: "hash", desc: "Pesar a granel y agregar solo", lead: "La báscula de esta caja.", tone: "good" },
   impresora: { label: "Impresora", icon: "printer", desc: "Ticket directo en térmica y cajón", lead: "Cómo sale el ticket en esta caja.", tone: "info" },
   apariencia: { label: "Apariencia", icon: "sun", desc: "Tema claro u oscuro", lead: "Cómo se ve la app en este dispositivo.", tone: "" },
@@ -940,7 +947,7 @@ const SECTIONS = {
   soporte: { label: "Soporte", icon: "chat", desc: "Escríbenos y ve las respuestas", lead: "Estamos para ayudarte.", tone: "info" },
 };
 const NAV = [
-  { title: "Tu tienda", items: ["negocio", "ventas", "inventario", "terminal"].map((id) => ({ id, ...SECTIONS[id] })) },
+  { title: "Tu tienda", items: ["negocio", "ventas", "inventario", "terminal", "multicaja"].map((id) => ({ id, ...SECTIONS[id] })) },
   {
     title: "Equipo y plan",
     items: [
@@ -950,6 +957,10 @@ const NAV = [
   },
   { title: "Esta app", items: ["impresora", "bascula", "apariencia", "cuenta", "soporte"].map((id) => ({ id, ...SECTIONS[id] })) },
 ];
+// MultiCaja es solo del dueño (el servidor también lo valida)
+const OWNER_ONLY = new Set(["multicaja"]);
+const isAdmin = computed(() => authStore.role === "admin");
+const visibleNav = computed(() => NAV.map((g) => ({ ...g, items: g.items.filter((i) => isAdmin.value || !OWNER_ONLY.has(i.id)) })));
 const KINDS = [
   { id: "abarrotes", label: "Abarrotes", hint: "Minisúper, tiendita" },
   { id: "convenience", label: "Conveniencia", hint: "Abierta hasta tarde" },
@@ -987,7 +998,7 @@ function onMq(e) {
 }
 const section = computed(() => {
   const s = String(route.query.s || "");
-  if (SECTIONS[s]) return s;
+  if (SECTIONS[s] && (isAdmin.value || !OWNER_ONLY.has(s))) return s;
   return wide.value ? "negocio" : "";
 });
 // Mientras se ve la sección Báscula, conecta (si ya hay permiso) y muestra el peso en vivo
