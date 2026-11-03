@@ -38,6 +38,7 @@ En Ajustes, categoría **Tu tienda**:
 - **Una sesión abierta por caja**, no por tienda. Abrir una caja ya abierta se rechaza con el nombre de quien la tiene.
 - Los llamadores de la sesión abierta (`orders.controller`, `credit.service`, `returns.service`, `settings.controller`, `customers.router`, `credit.db`) reciben el `registerId` de la computadora que hace la petición. Ventas, abonos y devoluciones en efectivo se atribuyen a la sesión de **esa** caja.
 - **Cada computadora recuerda su caja** (se elige una vez; se guarda en el navegador y el servidor la valida contra la lista de cajas activas).
+- **Candado por navegador:** al abrir una caja se guarda el identificador del navegador que la abrió. Otro navegador (incógnito, otra PC) no puede vender ni cerrar esa caja mientras esté abierta: recibe «Abierta por X en otro equipo». Solo puede verla.
 - Si una PC se daña, el dueño puede **liberar o cerrar** esa caja desde otro equipo.
 - Compartido por toda la tienda: inventario, catálogo, clientes y fiado. Por caja: fondo, cajón, impresora, corte.
 - **Compatibilidad:** las tiendas actuales quedan con una caja «Caja 1»; las sesiones existentes sin `registerId` se tratan como de Caja 1, sin migración manual.
