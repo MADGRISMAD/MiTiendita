@@ -53,6 +53,18 @@ const fakeDb = {
     const c = store.charges.find((x) => x.id === id && x.tenantId === String(tenantId) && !x.consumedBy);
     return c ? out(Object.assign(c, { consumedBy: sale })) : null;
   },
+  async ListPointChargesSince(tenantId, since) {
+    return store.charges
+      .filter((c) => c.tenantId === String(tenantId) && ['pending', 'paid', 'review'].includes(c.status) && new Date(c.createdAt) >= since)
+      .map(out);
+  },
+  async ReleasePointCharge(id, tenantId, sale) {
+    const c = store.charges.find((x) => x.id === id && x.tenantId === String(tenantId) && x.consumedBy === sale);
+    if (c) c.consumedBy = null;
+  },
+  async FindPaidSaleIds(_tenantId, ids) {
+    return ids.filter((i) => (store.sales || []).includes(i));
+  },
 };
 require.cache[dbPath] = { id: dbPath, filename: dbPath, loaded: true, exports: fakeDb };
 
@@ -88,6 +100,7 @@ global.fetch = async (url, opts = {}) => {
     if (!order) return reply(404, { message: 'not found' });
     if (m[2]) {
       if (order.status === 'processed') return reply(409, { message: 'already paid' });
+      if (order.status === 'at_terminal') return reply(409, { message: 'cannot_cancel_order: la terminal ya muestra el cobro' });
       order.status = 'canceled';
     }
     return reply(200, order);
@@ -175,8 +188,10 @@ test('cobro: se crea en la terminal, es idempotente y al pagarse queda listo par
   await charges.consumeCharge('t1', a.id, { clientSaleId: 'sale-0001', total: 125.5 });
   // reintento de la MISMA venta (venta offline reenviada): vale
   await charges.consumeCharge('t1', a.id, { clientSaleId: 'sale-0001', total: 125.5 });
-  // otra venta con el mismo cobro: no
+  // otra venta con el mismo cobro: no (mientras la primera venta exista)
+  store.sales = ['sale-0001'];
   await assert.rejects(charges.consumeCharge('t1', a.id, { clientSaleId: 'sale-0002', total: 125.5 }), (e) => e.code === 'charge_used');
+  store.sales = [];
   // otra tienda no puede usar el cobro
   await assert.rejects(charges.consumeCharge('t2', a.id, { clientSaleId: 'sale-0003', total: 125.5 }), (e) => e.code === 'charge_not_found');
 });
@@ -256,4 +271,90 @@ test('desvincular borra la conexión', async () => {
   await ready('t1');
   await charges.disconnect('t1');
   assert.equal(store.tenants.t1.point, undefined);
+});
+
+
+const ago = (ms) => new Date(Date.now() - ms);
+const addCharge = (extra) => {
+  const c = { id: `c${store.charges.length + 1}`, tenantId: 't1', clientSaleId: `S${store.charges.length + 1}`, amount: 50, status: 'pending', consumedBy: null, createdAt: new Date(), ...extra };
+  store.charges.push(c);
+  return c;
+};
+
+test('terminal ocupada: un cobro anterior que la terminal ya muestra bloquea el siguiente y dice qué hacer', async () => {
+  store.charges.length = 0;
+  mp.orders = {};
+  await ready('t1');
+  addCharge({ mpOrderId: 'ATT1', clientSaleId: 'VIEJA', amount: 120.5, createdAt: ago(4 * 60000) });
+  mp.orders.ATT1 = { id: 'ATT1', status: 'at_terminal', transactions: { payments: [{ amount: '120.50' }] } };
+  await assert.rejects(
+    charges.startCharge({ tenantId: 't1', clientSaleId: 'NUEVA', amount: 80 }),
+    (e) => e.code === 'terminal_busy' && /120\.50/.test(e.message) && /Servicios|Ajustes/.test(e.message)
+  );
+  assert.equal(store.charges.find((c) => c.clientSaleId === 'NUEVA'), undefined, 'no se manda un cobro nuevo mientras la terminal siga ocupada');
+});
+
+test('terminal ocupada: un cobro anterior que aún no llega a la pantalla se cancela solo y el nuevo sí sale', async () => {
+  store.charges.length = 0;
+  mp.orders = {};
+  mp.nextOrder = 'ORD_NEW';
+  await ready('t1');
+  addCharge({ mpOrderId: 'CRE1', clientSaleId: 'VIEJA', createdAt: ago(2 * 60000) });
+  mp.orders.CRE1 = { id: 'CRE1', status: 'created', transactions: { payments: [{ amount: '50.00' }] } };
+  const started = await charges.startCharge({ tenantId: 't1', clientSaleId: 'NUEVA', amount: 80 });
+  assert.equal(started.status, 'pending');
+  assert.equal(store.charges.find((c) => c.clientSaleId === 'VIEJA').status, 'failed');
+});
+
+test('«action_required» de Mercado Pago queda en revisión (no se da por pagado ni por fallido)', async () => {
+  store.charges.length = 0;
+  mp.orders = {};
+  await ready('t1');
+  const c = addCharge({ mpOrderId: 'ACT1', amount: 70 });
+  mp.orders.ACT1 = { id: 'ACT1', status: 'action_required', transactions: { payments: [{ amount: '70.00' }] } };
+  const r = await charges.syncCharge('t1', c.id);
+  assert.equal(r.status, 'review');
+  assert.equal(r.reviewReason, 'action_required');
+});
+
+test('cobros aprobados sin venta: nunca usados, usados en una venta que ya no existe, y los que sí tienen venta no salen', async () => {
+  store.charges.length = 0;
+  store.sales = ['VENTA_OK'];
+  const old = ago(60 * 60000);
+  addCharge({ clientSaleId: 'A', status: 'paid', amount: 10, paidAt: old, mpOrderId: 'o1' });
+  addCharge({ clientSaleId: 'B', status: 'paid', amount: 20, paidAt: old, consumedBy: 'VENTA_PERDIDA', mpOrderId: 'o2' });
+  addCharge({ clientSaleId: 'C', status: 'paid', amount: 30, paidAt: old, consumedBy: 'VENTA_OK', mpOrderId: 'o3' });
+  addCharge({ clientSaleId: 'D', status: 'paid', amount: 40, paidAt: old, refundedAt: new Date(), mpOrderId: 'o4' });
+  addCharge({ clientSaleId: 'E', status: 'paid', amount: 50, paidAt: new Date(), mpOrderId: 'o5' }); // recién aprobado: todavía se está registrando
+  addCharge({ clientSaleId: 'F', status: 'review', amount: 60, paidAt: old, reviewReason: 'amount', mpOrderId: 'o6' });
+  const list = await charges.unconsumed('t1');
+  assert.deepEqual(list.map((c) => [c.amount, c.reason]).sort((a, b) => a[0] - b[0]), [[10, 'no_sale'], [20, 'lost_sale'], [60, 'review']]);
+  store.sales = [];
+});
+
+test('si la venta no se guarda, el cobro se libera y el reintento con la misma venta lo reutiliza (no cobra dos veces)', async () => {
+  store.charges.length = 0;
+  mp.orders = {};
+  await ready('t1');
+  const c = addCharge({ clientSaleId: 'VENTA1', status: 'paid', amount: 90, mpOrderId: 'o9' });
+  await charges.consumeCharge('t1', c.id, { clientSaleId: 'VENTA1', total: 90 });
+  assert.equal(store.charges[0].consumedBy, 'VENTA1');
+  await charges.releaseCharge('t1', c.id, 'VENTA1');
+  assert.equal(store.charges[0].consumedBy, null);
+  const posts = () => mp.calls.filter((x) => x.url === '/v1/orders' && x.method === 'POST').length;
+  const before = posts();
+  const again = await charges.startCharge({ tenantId: 't1', clientSaleId: 'VENTA1', amount: 90 });
+  assert.deepEqual(again, { id: c.id, status: 'paid' });
+  assert.equal(posts(), before, 'no se creó otra orden en la terminal');
+});
+
+test('un cobro usado por una venta que ya no existe se puede usar en una venta nueva; si la venta existe, sigue bloqueado', async () => {
+  store.charges.length = 0;
+  store.sales = ['VENTA_REAL'];
+  const huerfano = addCharge({ clientSaleId: 'X1', status: 'paid', amount: 70, consumedBy: 'VENTA_BORRADA', mpOrderId: 'oa' });
+  const claimed = await charges.consumeCharge('t1', huerfano.id, { clientSaleId: 'VENTA_NUEVA', total: 70 });
+  assert.equal(claimed.consumedBy, 'VENTA_NUEVA');
+  const usado = addCharge({ clientSaleId: 'X2', status: 'paid', amount: 70, consumedBy: 'VENTA_REAL', mpOrderId: 'ob' });
+  await assert.rejects(charges.consumeCharge('t1', usado.id, { clientSaleId: 'OTRA', total: 70 }), (e) => e.code === 'charge_used');
+  store.sales = [];
 });

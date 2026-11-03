@@ -9,6 +9,7 @@ const {
 } = require('../models/tenant.model');
 const db = require('../database/mongodb');
 const sessions = require('../services/session.service');
+const { shouldTouch } = require('../utils/last-seen');
 
 /**
  * Valida el access token y que siga vigente: misma versión de sesión (se invalida al cambiar
@@ -69,6 +70,9 @@ async function requireAuth(req, res, next) {
     console.error('[auth] no se pudo validar la sesión:', err.message);
     return res.status(503).send('No se pudo validar tu sesión. Intenta de nuevo.');
   }
+
+  // Anota la actividad (como mucho cada 5 min): así «última vez que entraron» también cuenta a quien tiene la sesión abierta
+  if (shouldTouch(payload.userId)) Promise.resolve().then(() => db.TouchUserLastSeen(payload.userId)).catch(() => {});
 
   req.user = {
     username: payload.userId,

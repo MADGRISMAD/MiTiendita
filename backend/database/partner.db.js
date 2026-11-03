@@ -5,6 +5,7 @@
 const mongo = require('./mongodb');
 const { oid } = require('./ids');
 const { PARTNER_ROLES } = require('../models/tenant.model');
+const { lastActive } = require('../utils/last-seen');
 
 
 async function col(name) {
@@ -22,7 +23,7 @@ function publicUser(u) {
     cellphone: u.cellphone || '',
     role: u.role,
     disabled: Boolean(u.disabled),
-    lastLoginAt: u.lastLoginAt || null,
+    lastLoginAt: lastActive(u),
     mfaEnabled: Boolean(u.mfaEnabled),
     createdAt: u.createdAt || null,
   };

@@ -66,14 +66,27 @@ router.post('/charges', auth, startLimit, async (req, res) => {
 router.get('/charges/:id', auth, pollLimit, async (req, res) => {
   try {
     const c = await charges.syncCharge(req.tenantId, req.params.id);
-    res.json({ status: outcome(c), mpStatus: c.mpStatus });
+    res.json({ status: outcome(c), mpStatus: c.mpStatus, reason: c.reviewReason || '' });
   } catch (e) { fail(res, e); }
 });
 
 router.post('/charges/:id/cancel', auth, startLimit, async (req, res) => {
   try {
     const c = await charges.cancelCharge(req.tenantId, req.params.id);
-    res.json({ status: outcome(c) });
+    // «pending» después de cancelar = la terminal ya muestra el cobro y solo se cancela desde la terminal
+    res.json({ status: outcome(c), mpStatus: c.mpStatus });
+  } catch (e) { fail(res, e); }
+});
+
+/* Cobros aprobados en Mercado Pago que no quedaron como venta en MiTiendita */
+router.get('/unconsumed', auth, pollLimit, async (req, res) => {
+  try { res.json(await charges.unconsumed(req.tenantId)); } catch (e) { fail(res, e); }
+});
+
+router.post('/charges/:id/refund', auth, adminOnly, adminLimit, async (req, res) => {
+  try {
+    const c = await charges.refundCharge(req.tenantId, req.params.id);
+    res.json({ ok: true, refundedAt: c.refundedAt });
   } catch (e) { fail(res, e); }
 });
 

@@ -456,6 +456,13 @@ export const apiService = {
   pointCancelCharge(id: string) {
     return axios.post(`/point/charges/${id}/cancel`, {}, { timeout: 20000 }).then((r) => r.data);
   },
+  /** Cobros que Mercado Pago aprobó pero que no quedaron como venta. */
+  pointUnconsumed() {
+    return axios.get('/point/unconsumed', { timeout: 30000 }).then((r) => r.data);
+  },
+  pointRefundCharge(id: string) {
+    return axios.post(`/point/charges/${id}/refund`, {}, { timeout: 30000 }).then((r) => r.data);
+  },
 
   getBillingPlans() {
     return axios.get('/billing/plans').then((r) => r.data);

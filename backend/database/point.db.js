@@ -93,7 +93,37 @@ async function ClaimPointCharge(id, tenantId, clientSaleId) {
   return out(unwrap(r));
 }
 
+/** Cobros recientes de la tienda que siguen abiertos o aprobados (pendientes, pagados o en revisión). */
+async function ListPointChargesSince(tenantId, since) {
+  const rows = await (await charges())
+    .find({ tenantId: String(tenantId), status: { $in: ['pending', 'paid', 'review'] }, createdAt: { $gte: since } })
+    .sort({ createdAt: -1 })
+    .limit(200)
+    .toArray();
+  return rows.map(out);
+}
+/** Libera un cobro usado por una venta que no llegó a guardarse, para que el reintento lo reutilice. */
+async function ReleasePointCharge(id, tenantId, clientSaleId) {
+  if (!oid(id)) return;
+  await (await charges()).updateOne(
+    { _id: oid(id), tenantId: String(tenantId), consumedBy: String(clientSaleId) },
+    { $set: { consumedBy: null, updatedAt: new Date() }, $unset: { consumedAt: '' } }
+  );
+}
+/** De estos clientSaleId, los que sí tienen una venta cobrada. */
+async function FindPaidSaleIds(tenantId, clientSaleIds) {
+  if (!clientSaleIds.length) return [];
+  const rows = await (await database())
+    .collection('orders')
+    .find({ tenantId: String(tenantId), clientSaleId: { $in: clientSaleIds.map(String) }, paymentStatus: 'paid' }, { projection: { clientSaleId: 1 } })
+    .toArray();
+  return rows.map((r) => String(r.clientSaleId));
+}
+
 module.exports = {
+  ListPointChargesSince,
+  ReleasePointCharge,
+  FindPaidSaleIds,
   GetTenantById,
   UpdateTenant,
   ClearTenantPoint,

@@ -8,6 +8,11 @@ const svc = require('./mercadopago.point.service');
 
 const PAID = new Set(['processed']);
 const FAILED = new Set(['failed', 'canceled', 'cancelled', 'expired']);
+// Mercado Pago no resuelve este estado solo: hay que confirmar en la terminal si el pago se hizo
+const NEEDS_REVIEW = new Set(['action_required']);
+const STALE_MS = 30 * 60 * 1000; // un cobro pendiente más viejo que esto ya venció (MP lo expira a los 15 min)
+const ORPHAN_WINDOW_MS = 7 * 24 * 3600 * 1000;
+const ORPHAN_MIN_AGE_MS = 3 * 60 * 1000; // un cobro recién aprobado todavía se está registrando como venta
 
 /** Estado para la UI (Configuración y diálogo de cobro). */
 async function status(tenantId) {
@@ -31,6 +36,28 @@ async function disconnect(tenantId) {
   await db.ClearTenantPoint(tenantId);
 }
 
+/**
+ * Antes de mandar un cobro nuevo: si la terminal sigue con el cobro de un intento anterior, se resuelve o se avisa.
+ * Mercado Pago solo deja cancelar por API un cobro que la terminal aún no muestra («created»); uno que ya está en pantalla
+ * («at_terminal») solo se cancela en la terminal, y mientras siga ahí no recibe otro.
+ */
+async function assertTerminalFree(tenantId, clientSaleId) {
+  const recent = await db.ListPointChargesSince(tenantId, new Date(Date.now() - STALE_MS));
+  for (const c of recent) {
+    if (c.status !== 'pending' || c.clientSaleId === clientSaleId) continue;
+    let now = await syncCharge(tenantId, c.id).catch(() => c);
+    if (now.status === 'pending') now = await cancelCharge(tenantId, c.id).catch(() => now);
+    if (now.status === 'pending') {
+      const mins = Math.max(1, Math.round((Date.now() - new Date(c.createdAt).getTime()) / 60000));
+      throw svc.httpError(
+        `La terminal sigue mostrando un cobro anterior de $${Number(c.amount).toFixed(2)} (de hace ${mins} min). Termínalo o cancélalo en la terminal (sal de Servicios, Ajustes o de la confirmación) y vuelve a intentar.`,
+        409,
+        'terminal_busy'
+      );
+    }
+  }
+}
+
 /** Crea el cobro en la terminal. Idempotente por clientSaleId + monto mientras siga pendiente. */
 async function startCharge({ tenantId, clientSaleId, amount }) {
   if (!clientSaleId) throw svc.httpError('Falta clientSaleId', 400);
@@ -39,6 +66,8 @@ async function startCharge({ tenantId, clientSaleId, amount }) {
 
   const check = await svc.preflight(tenantId);
   if (!check.ok) throw svc.httpError(check.message, 409, check.code);
+
+  await assertTerminalFree(tenantId, String(clientSaleId));
 
   const prev = await db.GetPointChargeBySale(clientSaleId, tenantId);
   if (prev && prev.status === 'pending' && prev.amount === Number(value)) return { id: prev.id, status: 'pending' };
@@ -65,7 +94,7 @@ async function startCharge({ tenantId, clientSaleId, amount }) {
       },
     });
   } catch (err) {
-    if (/already has an order|en espera/i.test(err.message)) {
+    if (/already has an order|already_queued|queued|en espera|ocupad|busy/i.test(err.message)) {
       throw svc.httpError('La terminal tiene un cobro pendiente. Termínalo o cancélalo en la terminal.', 409, 'terminal_busy');
     }
     throw err;
@@ -101,12 +130,16 @@ async function syncCharge(tenantId, chargeId) {
     const mismatch = Math.abs(paid - charge.amount) > 0.01;
     return db.UpdatePointCharge(chargeId, {
       status: mismatch ? 'review' : 'paid',
+      reviewReason: mismatch ? 'amount' : null,
       mpStatus: s,
       mpPaymentId: payment?.id || null,
       paidAmount: paid,
       paidAt: new Date(),
       updatedAt: new Date(),
     }, tenantId);
+  }
+  if (NEEDS_REVIEW.has(s)) {
+    return db.UpdatePointCharge(chargeId, { status: 'review', reviewReason: 'action_required', mpStatus: s, updatedAt: new Date() }, tenantId);
   }
   if (FAILED.has(s)) {
     return db.UpdatePointCharge(chargeId, { status: 'failed', mpStatus: s, updatedAt: new Date() }, tenantId);
@@ -142,6 +175,14 @@ async function consumeCharge(tenantId, chargeId, { clientSaleId, total }) {
   if (Math.abs(Number(total) - charge.amount) > 0.01) {
     throw svc.httpError('El total de la venta no coincide con lo cobrado en la terminal', 409, 'amount_mismatch');
   }
+  // Usado por una venta que ya no existe (se borró al fallar el registro): vuelve a quedar libre
+  if (charge.consumedBy && charge.consumedBy !== String(clientSaleId)) {
+    const sold = await db.FindPaidSaleIds(tenantId, [String(charge.consumedBy)]);
+    if (!sold.length) {
+      await db.ReleasePointCharge(chargeId, tenantId, charge.consumedBy);
+      charge = (await db.GetPointCharge(chargeId, tenantId)) || charge;
+    }
+  }
   if (charge.consumedBy === String(clientSaleId)) return charge;
   const claimed = await db.ClaimPointCharge(chargeId, tenantId, String(clientSaleId));
   if (!claimed) throw svc.httpError('Este cobro ya se usó en otra venta', 409, 'charge_used');
@@ -172,10 +213,49 @@ async function refundCharge(tenantId, chargeId) {
   return db.UpdatePointCharge(chargeId, { refundedAt: new Date(), updatedAt: new Date() }, tenantId);
 }
 
+/** Libera un cobro cuya venta no llegó a guardarse (para reutilizarlo en el reintento y no cobrar dos veces). */
+async function releaseCharge(tenantId, chargeId, clientSaleId) {
+  await db.ReleasePointCharge(chargeId, tenantId, String(clientSaleId));
+}
+
+/**
+ * Cobros que Mercado Pago aprobó pero que no tienen una venta en MiTiendita (los últimos 7 días):
+ *  - no_sale: aprobado y nunca se usó en una venta;
+ *  - lost_sale: se usó en una venta que ya no existe;
+ *  - review: aprobado por otro monto, o Mercado Pago pide confirmar en la terminal.
+ */
+async function unconsumed(tenantId, { minAgeMs = ORPHAN_MIN_AGE_MS } = {}) {
+  const rows = await db.ListPointChargesSince(tenantId, new Date(Date.now() - ORPHAN_WINDOW_MS));
+  let refreshed = 0;
+  const fresh = await Promise.all(
+    rows.map(async (c) => {
+      // Un pendiente puede haberse aprobado después (el cliente pagó con la pantalla ya cerrada o recargada)
+      if (c.status === 'pending' && refreshed++ < 5) return syncCharge(tenantId, c.id).catch(() => c);
+      return c;
+    })
+  );
+  const open = fresh.filter((c) => (c.status === 'paid' || c.status === 'review') && !c.refundedAt);
+  const used = open.filter((c) => c.consumedBy).map((c) => String(c.consumedBy));
+  const sold = new Set(used.length ? await db.FindPaidSaleIds(tenantId, used) : []);
+  return open
+    .filter((c) => !c.consumedBy || !sold.has(String(c.consumedBy)))
+    .filter((c) => Date.now() - new Date(c.paidAt || c.updatedAt || c.createdAt).getTime() >= minAgeMs)
+    .map((c) => ({
+      id: c.id,
+      amount: Number(c.amount),
+      paidAmount: c.paidAmount == null ? null : Number(c.paidAmount),
+      status: c.status,
+      reason: c.status === 'review' ? 'review' : c.consumedBy ? 'lost_sale' : 'no_sale',
+      reviewReason: c.reviewReason || '',
+      createdAt: c.createdAt,
+      paidAt: c.paidAt || null,
+    }));
+}
+
 /** Webhook: solo refresca el cobro (el POS ya espera por polling). */
 async function onWebhook(mpOrderId) {
   const charge = await db.GetPointChargeByMpOrderId(String(mpOrderId));
   if (charge) await syncCharge(charge.tenantId, charge.id);
 }
 
-module.exports = { status, disconnect, startCharge, syncCharge, cancelCharge, consumeCharge, refundCharge, onWebhook };
+module.exports = { status, disconnect, startCharge, syncCharge, cancelCharge, consumeCharge, releaseCharge, refundCharge, unconsumed, onWebhook };

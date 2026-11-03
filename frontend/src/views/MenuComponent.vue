@@ -23,6 +23,12 @@
         @close="limitDismissed = true"
       />
 
+      <div v-if="pointOrphans > 0" class="cash-warning-banner" role="alert">
+        <PosIcon name="alert" :size="18" />
+        <span>Hay {{ pointOrphans }} {{ pointOrphans === 1 ? 'cobro' : 'cobros' }} con tarjeta aprobado{{ pointOrphans === 1 ? '' : 's' }} en Mercado Pago que no quedó{{ pointOrphans === 1 ? '' : 'aron' }} como venta.</span>
+        <router-link to="/orders">Revisar en Caja</router-link>
+      </div>
+
       <!-- ═══════════ MODO VENTA ═══════════ -->
       <template v-if="mode === 'pos'">
         <div class="sale">
@@ -1346,6 +1352,7 @@
                 <template v-if="['starting', 'waiting', 'cancelling'].includes(point.phase)">
                   <strong>{{ point.phase === 'cancelling' ? 'Cancelando…' : 'Pasa o inserta la tarjeta en la terminal' }}</strong>
                   <span>Cobrando {{ money(pointAmount) }}. No cierres esta ventana.</span>
+                  <span v-if="point.hint" class="point-hint">{{ point.hint }}</span>
                   <button type="button" class="btn" :disabled="point.phase === 'cancelling'" @click="cancelPointCharge">
                     Cancelar cobro
                   </button>
@@ -2370,6 +2377,7 @@ export default {
       phase: "idle", // idle | starting | waiting | cancelling | approved
       chargeId: "",
       cancelRequested: false,
+      hint: "", // aviso mientras se espera la terminal
       useManual: false, // el cajero eligió cobrar a mano esta vez
     });
     const pointActive = computed(
@@ -2410,15 +2418,55 @@ export default {
       }
     });
 
+    // El intento de cobro en curso: si se reintenta la MISMA venta se reutiliza el mismo cobro (así no se cobra dos veces)
+    let pointAttempt = null; // { clientSaleId, signature }
+    const pointSignature = () =>
+      `${payMethod.value}|${pointAmount.value}|${JSON.stringify(lines.value.map((l) => [l.id, l.quantity, l.price]))}`;
+    const NO_SHOW_HINT =
+      "La terminal todavía no muestra el cobro. Si está en otra pantalla (Servicios, Ajustes o una confirmación anterior), regrésala a la pantalla de inicio.";
+    const ON_TERMINAL_HINT =
+      "La terminal ya muestra el cobro: si quieres cancelarlo, hazlo desde la terminal. No repitas el cobro hasta que se resuelva.";
+
     /** Manda el cobro a la terminal y espera la aprobación. Devuelve el id del cobro aprobado. */
     async function runPointCharge(clientSaleId, amount) {
       point.cancelRequested = false;
+      point.hint = "";
       point.phase = "starting";
       const started = await apiSvc.pointStartCharge({ clientSaleId, amount });
       point.chargeId = started.id;
       point.phase = "waiting";
-      const deadline = Date.now() + 4 * 60 * 1000;
-      while (Date.now() < deadline) {
+      const startedAt = Date.now();
+      let deadline = startedAt + 4 * 60 * 1000;
+      let extended = false;
+      for (;;) {
+        if (Date.now() > deadline) {
+          // Se acabó el tiempo: se intenta cancelar. Si el cliente alcanzó a pagar, la venta SÍ se registra.
+          let res = null;
+          try {
+            res = await apiSvc.pointCancelCharge(started.id);
+          } catch {
+            /* se decide con lo que se sepa */
+          }
+          if (res?.status === "paid") {
+            point.phase = "approved";
+            return started.id;
+          }
+          if (res?.status === "pending" && !extended) {
+            // La terminal ya muestra el cobro y desde aquí no se puede cancelar: se espera un poco más por si el cliente termina de pagar
+            extended = true;
+            deadline = Date.now() + 90 * 1000;
+            point.hint = ON_TERMINAL_HINT;
+            continue;
+          }
+          throw Object.assign(
+            new Error(
+              res?.status === "pending"
+                ? "La terminal sigue mostrando el cobro. Cancélalo desde la terminal. Si el cliente ya pagó, aparecerá en Caja, en «Cobros con tarjeta sin venta»."
+                : "Se agotó el tiempo de espera en la terminal. Si el cliente ya pagó, aparecerá en Caja, en «Cobros con tarjeta sin venta»; no repitas el cobro sin revisarlo."
+            ),
+            { final: true }
+          );
+        }
         try {
           const s = await apiSvc.pointChargeStatus(started.id);
           if (s.status === "paid") {
@@ -2430,37 +2478,47 @@ export default {
           }
           if (s.status === "review") {
             throw Object.assign(
-              new Error("El cobro se aprobó por un monto distinto al de la venta. Revísalo en Mercado Pago antes de repetirlo."),
+              new Error(
+                s.reason === "action_required"
+                  ? "Mercado Pago pide confirmar este pago en la terminal. Revisa la terminal: si el cliente ya pagó, el cobro aparecerá en Caja, en «Cobros con tarjeta sin venta»."
+                  : "El cobro se aprobó por un monto distinto al de la venta. Revísalo en Mercado Pago antes de repetirlo."
+              ),
               { final: true }
             );
           }
+          if (s.mpStatus === "created" && Date.now() - startedAt > 12000) point.hint = NO_SHOW_HINT;
+          else if (s.mpStatus === "at_terminal") point.hint = "";
         } catch (e) {
           if (e.final) throw e;
-          if (!isNetworkError(e)) throw e; // errores de red momentáneos: se sigue intentando
+          // Un error definitivo (4xx) corta la espera; red, 5xx o límite de peticiones son momentáneos y la terminal puede seguir cobrando
+          const st = e.response?.status;
+          if (st && st >= 400 && st < 500 && st !== 429 && st !== 408) throw e;
         }
         if (point.cancelRequested) throw Object.assign(new Error("Cobro cancelado."), { final: true });
         await sleep(2000);
       }
-      try {
-        await apiSvc.pointCancelCharge(started.id);
-      } catch {
-        /* se revisa abajo */
-      }
-      throw Object.assign(
-        new Error("Se agotó el tiempo de espera en la terminal. Si el cliente ya pagó, revisa en Mercado Pago antes de repetir el cobro."),
-        { final: true }
-      );
     }
 
     async function cancelPointCharge() {
       if (!["starting", "waiting"].includes(point.phase)) return;
-      point.cancelRequested = true;
+      if (point.phase === "starting" || !point.chargeId) {
+        point.cancelRequested = true;
+        return;
+      }
       point.phase = "cancelling";
+      let res = null;
       try {
-        await apiSvc.pointCancelCharge(point.chargeId);
+        res = await apiSvc.pointCancelCharge(point.chargeId);
       } catch {
         /* el ciclo de espera revisa el estado final */
       }
+      if (res?.status === "pending") {
+        // Mercado Pago solo cancela desde aquí un cobro que la terminal todavía no muestra
+        point.hint = ON_TERMINAL_HINT;
+        point.phase = "waiting";
+        return;
+      }
+      point.cancelRequested = true;
       // Si en ese instante el cliente alcanzó a pagar, el ciclo lo detecta como «paid» y la venta SÍ se registra
       if (point.phase === "cancelling") point.phase = "waiting";
     }
@@ -2512,6 +2570,16 @@ export default {
     // Aviso de caja abierta mucho tiempo
     const cashSession = ref(null);
     // Más de 12 h con la caja abierta: alerta para hacer el corte ahora o posponerlo una sola vez (máximo 15 h en total)
+    // Cobros que Mercado Pago aprobó y no quedaron como venta: se avisa para revisarlos en Caja
+    const pointOrphans = ref(0);
+    async function loadPointOrphans() {
+      try {
+        const list = await apiSvc.pointUnconsumed();
+        pointOrphans.value = Array.isArray(list) ? list.length : 0;
+      } catch {
+        /* sin terminal o sin internet: no hay aviso */
+      }
+    }
     const shiftNow = ref(Date.now());
     const limitDismissed = ref(false);
     const shiftInfo = computed(() => shiftStatus(cashSession.value, shiftNow.value));
@@ -4368,7 +4436,10 @@ export default {
 
       sending.value = true;
       msg.value = "";
-      const clientSaleId = newClientSaleId();
+      // Si se reintenta la misma venta con terminal, se conserva el id: el cobro que ya salió se reutiliza en vez de cobrar otra vez
+      const sameAttempt = pointActive.value && pointAttempt && pointAttempt.signature === pointSignature();
+      const clientSaleId = sameAttempt ? pointAttempt.clientSaleId : newClientSaleId();
+      pointAttempt = pointActive.value ? { clientSaleId, signature: pointSignature() } : null;
       const items = lines.value.map((p) => ({
         foodId: p.isMisc ? null : p.id,
         name: p.name,
@@ -4468,6 +4539,7 @@ export default {
           offline,
           cashSale
         );
+        pointAttempt = null;
         if (!offline) flushOfflineSales();
         if (payload.paymentMethod === "credit") loadCreditCustomers();
       } catch (error) {
@@ -4480,6 +4552,8 @@ export default {
         sending.value = false;
         point.phase = "idle";
         point.chargeId = "";
+        point.hint = "";
+        loadPointOrphans();
       }
     }
 
@@ -5026,6 +5100,7 @@ export default {
 
     let shiftTimer = null;
     onMounted(async () => {
+      loadPointOrphans();
       shiftTimer = setInterval(() => (shiftNow.value = Date.now()), 30000);
       window.addEventListener("online", flushPendingCodes);
       flushPendingCodes();
@@ -5406,6 +5481,7 @@ export default {
       pointBlocked,
       loadPointStatus,
       cancelPointCharge,
+      pointOrphans,
     };
   },
 };
@@ -6405,6 +6481,7 @@ html[data-theme="dark"] .avatar {
   font-weight: 700;
   text-align: center;
 }
+.point-hint { font-weight: 700; color: var(--timber-warning); }
 .cash-warning-banner svg { color: var(--timber-warning); flex-shrink: 0; }
 .cash-warning-banner a {
   color: var(--timber-warning);

@@ -1,3 +1,4 @@
+const { lastActive } = require('../utils/last-seen');
 require('dotenv').config();
 const { codeVariants } = require('../utils/barcode');
 const { blockedByPlan } = require('../services/branch-plan');
@@ -267,7 +268,7 @@ async function ListUsersByTenant(tenantId) {
     role: normalizeRoleValue(user.role),
     disabled: Boolean(user.disabled),
     disabledAt: user.disabledAt || null,
-    lastLoginAt: user.lastLoginAt || null,
+    lastLoginAt: lastActive(user),
     mfaEnabled: Boolean(user.mfaEnabled),
   }));
 }
@@ -292,7 +293,7 @@ async function ListUsersByTenants(tenantIds) {
       role: normalizeRoleValue(user.role),
       disabled: Boolean(user.disabled),
       disabledAt: user.disabledAt || null,
-      lastLoginAt: user.lastLoginAt || null,
+      lastLoginAt: lastActive(user),
       mfaEnabled: Boolean(user.mfaEnabled),
     });
   }
@@ -374,6 +375,11 @@ async function ClearLoginFailures(id) {
     .collection('users')
     .updateOne({ _id: new ObjectId(String(id)) }, { $set: { failedLogins: 0, lockedUntil: null, lastLoginAt: new Date() } });
 }
+/** Anota que el usuario está usando la app (sin iniciar sesión de nuevo). */
+async function TouchUserLastSeen(id) {
+  if (!ObjectId.isValid(String(id))) return;
+  await dbConnection.collection('users').updateOne({ _id: new ObjectId(String(id)) }, { $set: { lastSeenAt: new Date() } });
+}
 async function FindUserById(id) {
   if (!ObjectId.isValid(String(id))) return null;
   return dbConnection.collection('users').findOne({ _id: new ObjectId(String(id)) });
@@ -443,7 +449,7 @@ async function ListPlatformUsers() {
     cellphone: user.cellphone || '',
     role: user.role || 'platform_admin',
     createdAt: user.createdAt || null,
-    lastLoginAt: user.lastLoginAt || null,
+    lastLoginAt: lastActive(user),
     mfaEnabled: Boolean(user.mfaEnabled),
   }));
 }
@@ -1694,7 +1700,7 @@ module.exports = {
   GetMenus, GetMenuById, CreateMenu, UpdateMenu, DeleteMenu,
   GetFoods, CountPlanFoods, CreateFoods, DeleteUnpricedCatalogFoods, DeleteEmptyCatalogMenus, ListSettingsNeedingCatalog, CountPaidOrders, CountCashSessions, GetFoodById, GetFoodByBarcode, CreateFood, UpdateFood, ReserveSaleStock, ConsumeSaleLots, RestoreSaleStock, IncrementFoodStock, DeleteFood, DeleteFoodsByIds, DeleteAllFoods, GetLowStockFoods, SearchFoods,
   AdjustFoodStock, CreateBillingEvent, ListBillingEvents, getCollection, ListUsersByTenants, GetSettingsMany, appState,
-  RecordLoginFailure, ClearLoginFailures, FindUserById, BumpUserTokenVersion, CountActiveAdmins, FindUserInTenant,
+  RecordLoginFailure, ClearLoginFailures, TouchUserLastSeen, FindUserById, BumpUserTokenVersion, CountActiveAdmins, FindUserInTenant,
   CreateSession, FindSessionByHash, RevokeSession, RevokeUserSessions,
   GetOrders, GetOrderById, GetOrderByInvoiceToken, GetOrderByClientSaleId, CreateOrder, UpdateOrder, DeleteOrder, GetOrdersByCashSession,
   GetOrdersByDateRange, GetSalesReport,

@@ -330,6 +330,12 @@ async function settlePayment(req, existing, body, { requireCash = true, paidAt }
         .undoCharge(creditDb, { tenantId: req.tenantId, customerId: creditInfo.customerId, orderId: String(existing.id), amount: creditInfo.creditAmount })
         .catch((e) => console.error('[fiado] no se pudo deshacer el cargo:', e.message));
     }
+    // El cobro de la terminal ya se marcó como usado, pero la venta no se guardó: se libera para que el reintento lo reutilice
+    if (pointChargeId) {
+      await pointCharges
+        .releaseCharge(req.tenantId, pointChargeId, existing.clientSaleId || String(existing.id))
+        .catch((e) => console.error('[terminal] no se pudo liberar el cobro:', e.message));
+    }
     throw err;
   }
 }

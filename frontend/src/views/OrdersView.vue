@@ -93,6 +93,29 @@
         <button type="button" class="btn sm" @click="printIssue = ''">Cerrar</button>
       </div>
 
+      <!-- Cobros aprobados en Mercado Pago que no quedaron como venta -->
+      <section v-if="orphans.length" class="banner err orphan-card" role="alert">
+        <div class="orphan-head">
+          <PosIcon name="alert" :size="18" />
+          <div>
+            <strong>Cobros con tarjeta sin venta</strong>
+            <p>Mercado Pago aprobó {{ orphans.length === 1 ? 'este cobro' : 'estos cobros' }}, pero no quedó registrado como venta en MiTiendita.<template v-if="offlineStore.pending > 0"> Hay ventas de este dispositivo por subir: si una de ellas es de este cobro, se acomodará sola al subirse.</template></p>
+          </div>
+        </div>
+        <ul class="orphan-list">
+          <li v-for="c in orphans" :key="c.id">
+            <div class="orphan-info">
+              <strong>{{ money(c.paidAmount != null && c.reason === 'review' ? c.paidAmount : c.amount) }}</strong>
+              <small>{{ when(c.paidAt || c.createdAt) }} · {{ orphanReason(c) }}</small>
+            </div>
+            <div class="orphan-acts">
+              <button v-if="c.reason !== 'review'" type="button" class="btn sm" :disabled="orphanBusy === c.id" @click="registerOrphan(c)">Registrar como venta</button>
+              <button v-if="canRefundOrphans" type="button" class="btn sm" :disabled="orphanBusy === c.id" @click="refundOrphan(c)">Devolver el dinero</button>
+            </div>
+          </li>
+        </ul>
+      </section>
+
       <!-- Caja cerrada -->
       <section v-if="loaded && !cashOpen" class="open-card">
         <span class="open-ico"><PosIcon name="cash" :size="28" /></span>
@@ -515,6 +538,9 @@ import { directPrinting, printReceiptDirect, printerStore } from "../thermalPrin
 import { printRoute } from "../printRoute";
 import CashLimitDialog from "../components/CashLimitDialog.vue";
 import { isBlocking, postponeCut, shiftStatus } from "../cashShift";
+import { hasRole } from "../authStore";
+import { newClientSaleId } from "../net";
+import { cartTotals } from "../tax";
 import { useRoute } from "vue-router";
 import { confirmDialog } from "../dialog";
 import NoticeDialog from "../components/NoticeDialog.vue";
@@ -1130,8 +1156,86 @@ function onKey(e) {
   else if (voidOrder.value && !voidBusy.value) voidOrder.value = null;
 }
 
+// ---------- Cobros con tarjeta sin venta ----------
+const orphans = ref([]);
+const orphanBusy = ref("");
+const canRefundOrphans = hasRole("admin");
+const orphanReason = (c) =>
+  c.reason === "lost_sale"
+    ? "aprobado; la venta no se guardó"
+    : c.reason === "review"
+      ? c.reviewReason === "action_required"
+        ? "Mercado Pago pide confirmar el pago en la terminal"
+        : `aprobado por ${money(c.paidAmount)} (distinto al de la venta)`
+      : "aprobado, sin venta registrada";
+async function loadOrphans() {
+  try {
+    const list = await apiService.pointUnconsumed();
+    orphans.value = Array.isArray(list) ? list : [];
+  } catch {
+    orphans.value = [];
+  }
+}
+/** Guarda una venta con ese cobro (sin detalle de productos) para que el dinero quede en el corte y en los reportes. */
+async function registerOrphan(c) {
+  if (orphanBusy.value) return;
+  const ok = await confirmDialog(`¿Registrar este cobro como venta?\n\nSe guarda una venta de ${money(c.amount)} pagada con tarjeta, sin detalle de productos. Ajusta las existencias a mano si hace falta.`, { confirmLabel: "Registrar venta", cancelLabel: "Volver" });
+  if (!ok) return;
+  orphanBusy.value = c.id;
+  cashErr.value = "";
+  try {
+    const taxRate = rateOf(venueStore.taxRate);
+    const items = [{ foodId: null, name: "Cobro con tarjeta (sin detalle)", price: c.amount, quantity: 1, saleUnit: "pieza", priceIncludesTax: true }];
+    const t = cartTotals(items, { discountPercent: 0, taxRate });
+    await apiService.syncSale({
+      clientSaleId: newClientSaleId(),
+      tableId: null,
+      tableName: "Mostrador",
+      modality: "retail",
+      status: "pending",
+      discountPercent: 0,
+      taxRate,
+      items,
+      paymentMethod: "card",
+      pointChargeId: c.id,
+      cardExtraIva: false,
+      cardExtraTax: 0,
+      soldAt: new Date(c.paidAt || c.createdAt).toISOString(),
+      subtotal: Number(t.subtotal || 0),
+      subtotalNet: Number(t.subtotalNet || 0),
+      discountAmount: 0,
+      tax: Number(t.tax || 0),
+      total: c.amount,
+      change: 0,
+    });
+    cashMsg.value = `Cobro de ${money(c.amount)} registrado como venta.`;
+    await Promise.all([load(), loadOrphans()]);
+  } catch (e) {
+    cashErr.value = errText(e, "No se pudo registrar el cobro como venta.");
+  } finally {
+    orphanBusy.value = "";
+  }
+}
+async function refundOrphan(c) {
+  if (orphanBusy.value) return;
+  const ok = await confirmDialog(`¿Devolver ${money(c.amount)} al cliente?\n\nSe hace un reembolso total en Mercado Pago de este cobro. No se puede deshacer.`, { confirmLabel: "Devolver el dinero", cancelLabel: "Volver", tone: "danger" });
+  if (!ok) return;
+  orphanBusy.value = c.id;
+  cashErr.value = "";
+  try {
+    await apiService.pointRefundCharge(c.id);
+    cashMsg.value = `Se devolvieron ${money(c.amount)} en Mercado Pago.`;
+    await loadOrphans();
+  } catch (e) {
+    cashErr.value = errText(e, "Mercado Pago no pudo devolver el dinero.");
+  } finally {
+    orphanBusy.value = "";
+  }
+}
+
 const route = useRoute();
 onMounted(() => {
+  loadOrphans();
   // Llegó desde la alerta de «más de 12 horas» de la caja: abre directo el corte
   load()
     .then(() => {
@@ -1207,6 +1311,15 @@ onUnmounted(() => {
 .banner.warn svg { color: var(--timber-warning); }
 .banner.ok { background: var(--timber-success-soft); color: var(--timber-success); }
 .banner.err { background: var(--timber-danger-soft); color: var(--timber-danger); }
+.orphan-card { display: grid; gap: 0.6rem; align-items: stretch; }
+.orphan-head { display: flex; gap: 0.5rem; align-items: flex-start; }
+.orphan-head p { margin: 0.15rem 0 0; font-weight: 600; }
+.orphan-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.4rem; }
+.orphan-list li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem; padding: 0.5rem 0.6rem; border-radius: 0.7rem; background: color-mix(in srgb, var(--timber-panel) 70%, transparent); }
+.orphan-info { display: grid; min-width: 0; }
+.orphan-info small { font-weight: 600; }
+.orphan-acts { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.orphan-acts .btn { color: var(--timber-ink); }
 .print-issue { flex-wrap: wrap; }
 .print-issue span { flex: 1 1 14rem; min-width: 0; font-weight: 600; }
 .print-issue strong { font-weight: 800; }
