@@ -8,3 +8,12 @@ export function cutLabel(diff) {
   const d = Math.round(Number(diff) * 100);
   return d === 0 ? "cuadra" : d > 0 ? "sobra" : "falta";
 }
+
+/** Mensaje que bloquea la entrega según la cola sin conexión (filas con `status`), o '' si no hay bloqueo. */
+export function syncBlockMessage(rows) {
+  if (!rows || !rows.length) return "";
+  if (rows.every((r) => r.status === "failed")) {
+    return "Hay ventas con error de sincronización; revísalas o pide ayuda a soporte antes de entregar la caja";
+  }
+  return "Hay ventas sin sincronizar; espera a que se envíen antes de entregar la caja";
+}

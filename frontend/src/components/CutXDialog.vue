@@ -10,9 +10,10 @@
       <p class="adm-hint">Abre la caja para hacer un Corte X</p>
     </section>
 
-    <section v-else-if="unsynced > 0" class="adm-card cx-card">
+    <section v-else-if="blockMsg" class="adm-card cx-card">
       <h3>Ventas pendientes</h3>
-      <p class="adm-hint">Hay ventas sin sincronizar; espera a que se envíen antes de entregar la caja</p>
+      <p class="adm-hint">{{ blockMsg }}</p>
+      <div class="cx-acts"><button type="button" class="adm-btn" :disabled="busy" @click="recheck">Reintentar</button></div>
     </section>
 
     <section v-else-if="!sent" class="adm-card cx-card">
@@ -47,7 +48,8 @@ import PosIcon from "./PosIcon.js";
 import { apiService, apiErrorMessage } from "../apiService";
 import { authStore } from "../authStore";
 import { listUnsynced } from "../offlineDb";
-import { cutDifference, cutLabel } from "../cutX";
+import { money } from "../textUtils";
+import { cutDifference, cutLabel, syncBlockMessage } from "../cutX";
 
 const loading = ref(true);
 const busy = ref(false);
@@ -55,30 +57,34 @@ const err = ref("");
 const flash = ref("");
 const sent = ref(false);
 const closed = ref(false);
-const unsynced = ref(0);
+const blockMsg = ref("");
 const data = ref({ expected: 0 });
 const team = ref([]);
 const counted = ref("");
 const toUser = ref("");
 
-const money = (n) => `$${(Number(n) || 0).toFixed(2)}`;
 const hasCount = computed(() => counted.value !== "" && Number.isFinite(Number(counted.value)) && Number(counted.value) >= 0);
 const diff = computed(() => cutDifference(counted.value, data.value.expected));
 const label = computed(() => cutLabel(diff.value));
 
 // Ventas hechas sin conexión que aún no llegan al servidor: se atribuirían a quien recibe
-async function countUnsynced() {
+// Si no se puede leer la cola, se bloquea (no se sabe si hay ventas sin enviar)
+async function syncCheck() {
   try {
-    return (await listUnsynced(authStore.tenantId)).length;
+    return syncBlockMessage(await listUnsynced(authStore.tenantId));
   } catch {
-    return 0;
+    return "No se pudo revisar las ventas sin conexión; intenta de nuevo";
   }
+}
+
+async function recheck() {
+  blockMsg.value = await syncCheck();
 }
 
 async function load() {
   err.value = "";
   try {
-    unsynced.value = await countUnsynced();
+    blockMsg.value = await syncCheck();
     data.value = await apiService.cashCutExpected();
     team.value = await apiService.cashCutTeam();
   } catch (e) {
@@ -94,8 +100,8 @@ async function send() {
   err.value = "";
   try {
     // Se revisa otra vez: pudo quedar una venta pendiente mientras se contaba
-    unsynced.value = await countUnsynced();
-    if (unsynced.value > 0) return;
+    blockMsg.value = await syncCheck();
+    if (blockMsg.value) return;
     await apiService.createCashCut(toUser.value, Number(counted.value));
     const who = team.value.find((m) => m.username === toUser.value);
     flash.value = `Caja entregada a ${who?.name || toUser.value}. Falta que confirme el efectivo.`;

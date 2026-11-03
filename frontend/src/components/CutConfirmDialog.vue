@@ -4,12 +4,14 @@
 // Al entrar (y al volver a la pestaña): si alguien te entregó una caja, confirma el efectivo.
 // No bloquea la venta: si algo falla, se ignora y se vuelve a intentar después.
 import { onBeforeUnmount, onMounted, watch } from "vue";
-import { apiService } from "../apiService";
-import { authStore } from "../authStore";
+import { apiService, apiErrorMessage } from "../apiService";
+import { authStore, hasRole } from "../authStore";
+import { money } from "../textUtils";
 import { alertDialog, confirmDialog, promptDialog } from "../dialog";
 
 let busy = false;
-const money = (n) => `$${(Number(n) || 0).toFixed(2)}`;
+// Cortes ya mostrados en esta sesión: no se repiten hasta recargar (siguen pendientes en el servidor)
+const shown = new Set();
 
 async function review(cut) {
   const ok = await confirmDialog(
@@ -32,13 +34,26 @@ async function review(cut) {
 }
 
 async function check() {
-  if (busy || !authStore.token || !authStore.tenantId) return;
+  if (busy || !authStore.token || !authStore.tenantId || !hasRole("admin", "cashier")) return;
   busy = true;
   try {
-    const list = await apiService.pendingCashCuts();
-    for (const cut of Array.isArray(list) ? list : []) await review(cut);
-  } catch {
-    /* sin conexión o sin permiso: no estorba al cobrar */
+    let list = [];
+    try {
+      list = await apiService.pendingCashCuts();
+    } catch {
+      return; // sin conexión o sin permiso: no estorba al cobrar
+    }
+    for (const cut of Array.isArray(list) ? list : []) {
+      if (shown.has(cut.id)) continue;
+      shown.add(cut.id);
+      try {
+        await review(cut);
+      } catch (e) {
+        shown.delete(cut.id); // un fallo sí se puede reintentar
+        await alertDialog(apiErrorMessage(e, "No se pudo confirmar la caja."));
+        break;
+      }
+    }
   } finally {
     busy = false;
   }
