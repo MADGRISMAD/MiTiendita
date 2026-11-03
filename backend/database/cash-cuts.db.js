@@ -21,7 +21,8 @@ async function col() {
 }
 
 async function insertCut(cut) {
-  const { id, ...doc } = cut;
+  const doc = { ...cut };
+  delete doc.id;
   const r = await (await col()).insertOne({ ...doc, tenantId: String(cut.tenantId) });
   return { ...cut, id: String(r.insertedId) };
 }
