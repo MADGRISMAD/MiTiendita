@@ -480,6 +480,17 @@ async function removedLines(req, res) {
   }
 }
 
+/**
+ * La venta es de OTRA caja que sigue abierta: su efectivo debe devolverse desde esa caja; si no, el corte de esa caja
+ * esperaría menos dinero del que tiene (sobrante falso) y el de esta caja descontaría el mismo efectivo.
+ */
+async function saleRegisterOpen(order, session, tenantId) {
+  if (!order.cashSessionId || String(order.cashSessionId) === String(session.id)) return false;
+  const original = await db.GetCashSessionById(order.cashSessionId, tenantId);
+  return original?.status === 'open';
+}
+const SALE_REGISTER_OPEN = { code: 'sale_register_open', message: 'Esta venta es de otra caja que sigue abierta; hazlo desde esa caja.' };
+
 /** Devolución parcial: el cliente regresa algunos productos de un ticket cobrado. */
 async function returnItems(req, res) {
   try {
@@ -494,6 +505,7 @@ async function returnItems(req, res) {
     if (split.cash > 0) {
       session = await db.GetOpenCashSession(req.tenantId, req.registerId);
       if (!session) return res.status(400).send('Abre la caja para devolver el dinero.');
+      if (await saleRegisterOpen(order, session, req.tenantId)) return res.status(409).json(SALE_REGISTER_OPEN);
     }
 
     const done = returnsSvc.returnedByIndex(order);
@@ -582,6 +594,12 @@ async function voidSale(req, res) {
     const session = await db.GetOpenCashSession(req.tenantId, req.registerId);
     if (!session) {
       return res.status(400).send('Abre la caja para devolver el dinero.');
+    }
+    // Si hay efectivo de por medio, la venta debe anularse desde su caja mientras esa siga abierta
+    const voidMethod = existing.paymentMethod || 'cash';
+    const movesCash = voidMethod === 'cash' || voidMethod === 'split' || (voidMethod === 'credit' && Number(existing.downPayment || 0) > 0);
+    if (movesCash && (await saleRegisterOpen(existing, session, req.tenantId))) {
+      return res.status(409).json(SALE_REGISTER_OPEN);
     }
 
     // Cobro con terminal: primero se devuelve el dinero en Mercado Pago; si MP lo rechaza no se toca nada

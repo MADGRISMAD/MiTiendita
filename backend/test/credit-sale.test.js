@@ -13,6 +13,8 @@ const dbStub = {
   async CreateOrder(o) { const row = { ...o, id: `o${orders.length + 1}`, paymentStatus: 'pending' }; orders.push(row); return row; },
   async DeleteOrder(id) { orders.splice(orders.findIndex((o) => o.id === id), 1); },
   async GetOpenCashSession() { return session; },
+  // Las ventas de otro turno son de una caja ya cerrada
+  async GetCashSessionById(id) { return id === session.id ? session : { id, status: 'closed' }; },
   async UpdateCashSession(_id, patch) { Object.assign(session, patch); },
   async GetSettings() { return { inventoryEnabled: true }; },
   async GetFoodById() { return { cost: 5 }; },

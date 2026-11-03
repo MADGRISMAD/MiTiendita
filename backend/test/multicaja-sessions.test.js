@@ -176,3 +176,59 @@ test('devolución y anulación en efectivo de un turno cerrado: las descuenta la
     assert.equal((await close(w, two, 260)).body.session.expectedCash, 260, '300 − 20 − 20');
   } finally { await w.stop(); }
 });
+
+test('devolver o anular efectivo de una venta de otra caja que sigue abierta: 409 y nada cambia', async () => {
+  const w = await start({ registers: TWO });
+  try {
+    const one = pc(1, 'A');
+    const two = pc(2, 'B');
+    await open(w, one, 500);
+    await open(w, two, 300);
+    const a = (await sell(w, one, [{ ...COKE, quantity: 2 }])).body; // 40
+    const ret = await w.call('POST', `/api/orders/${a.id}/return`, { lines: [{ index: 0, quantity: 1 }] }, two);
+    assert.equal(ret.status, 409);
+    assert.equal(ret.body.code, 'sale_register_open');
+    const voided = await w.call('PUT', `/api/orders/${a.id}/void`, { reason: 'error' }, two);
+    assert.equal(voided.status, 409);
+    assert.equal(voided.body.code, 'sale_register_open');
+    const order = w.w.orders.get(a.id);
+    assert.equal(order.total, 40);
+    assert.equal(order.paymentStatus, 'paid');
+    const c1 = (await close(w, one, 540)).body.session;
+    const c2 = (await close(w, two, 300)).body.session;
+    assert.equal(c1.difference, 0);
+    assert.equal(c2.difference, 0);
+  } finally { await w.stop(); }
+});
+
+test('reintento de una venta ya cobrada desde otro navegador: 200 idempotente (no se pierde al sincronizar)', async () => {
+  const w = await start();
+  try {
+    await open(w, pc(1, 'A'));
+    const body = saleBody([{ ...COKE, quantity: 1 }]);
+    const first = await w.call('POST', '/api/orders/sale', body, pc(1, 'A'));
+    assert.equal(first.status, 200);
+    const retry = await w.call('POST', '/api/orders/sale', body, pc(1, 'B'));
+    assert.equal(retry.status, 200);
+    assert.equal(retry.body.id, first.body.id);
+    assert.equal(w.w.orders.size, 1);
+    const other = await w.call('POST', '/api/orders/sale', saleBody([{ ...COKE, quantity: 1 }]), pc(1, 'B'));
+    assert.equal(other.status, 409, 'una venta nueva desde otro navegador sigue bloqueada');
+  } finally { await w.stop(); }
+});
+
+test('apertura simultánea que pasa los chequeos previos: el índice único deja entrar solo una', async () => {
+  const w = await start({ registers: TWO });
+  const db = require('../database/mongodb');
+  const real = db.GetOpenCashSession;
+  let calls = 0;
+  // Las 4 primeras consultas (candado + chequeo previo de cada petición) no ven ninguna sesión abierta
+  db.GetOpenCashSession = async (...args) => (++calls <= 4 ? null : real(...args));
+  try {
+    const rs = await Promise.all([open(w, pc(2, 'A')), open(w, pc(2, 'A'))]);
+    assert.deepEqual(rs.map((r) => r.status).sort(), [201, 409]);
+    assert.equal(calls, 5, 'la que perdió volvió a consultar tras el error de índice');
+    assert.equal(rs.find((r) => r.status === 409).body.openedBy, 'caja1');
+    assert.equal([...w.w.sessions.values()].filter((s) => s.status === 'open').length, 1);
+  } finally { db.GetOpenCashSession = real; await w.stop(); }
+});
