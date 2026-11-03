@@ -6,6 +6,7 @@ const express = require('express');
 const svc = require('../services/mercadopago.point.service');
 const charges = require('../services/point.charges.service');
 const { requireAuth, requireActiveSubscription, requireRoles } = require('../middleware/auth.middleware');
+const { attachRegister } = require('../middleware/register.middleware');
 const { rateLimit } = require('../services/rate-limit.service');
 
 /* ───────────── Middleware ───────────── */
@@ -56,7 +57,7 @@ router.get('/status', auth, async (req, res) => {
   try { res.json(await charges.status(req.tenantId)); } catch (e) { fail(res, e); }
 });
 
-router.post('/charges', auth, startLimit, async (req, res) => {
+router.post('/charges', auth, attachRegister, startLimit, async (req, res) => {
   try {
     const { clientSaleId, amount } = req.body || {};
     res.status(201).json(await charges.startCharge({ tenantId: req.tenantId, clientSaleId, amount }));

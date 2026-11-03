@@ -232,3 +232,37 @@ test('apertura simultánea que pasa los chequeos previos: el índice único deja
     assert.equal([...w.w.sessions.values()].filter((s) => s.status === 'open').length, 1);
   } finally { db.GetOpenCashSession = real; await w.stop(); }
 });
+
+test('caja fuera del plan con sesión abierta: no vende ni cobra, sí hace el corte y luego desaparece', async () => {
+  const THREE = [{ number: 1 }, { number: 2 }, { number: 3 }];
+  const w = await start({ registers: THREE, customers: [CUSTOMER] });
+  try {
+    const one = pc(1, 'A');
+    const three = pc(3, 'C');
+    assert.equal((await open(w, three, 200)).status, 201);
+    const sold = (await sell(w, three)).body;
+    const down = { ...three, 'x-plan': 'basic' };
+    const blocked = [
+      await sell(w, down),
+      await w.call('PUT', `/api/orders/${sold.id}/pay`, { method: 'cash' }, down),
+      await w.call('POST', `/api/orders/${sold.id}/return`, { lines: [{ index: 0, quantity: 1 }] }, down),
+      await w.call('PUT', `/api/orders/${sold.id}/void`, { reason: 'error' }, down),
+      await w.call('POST', '/api/customers/c1/payments', { amount: 10, method: 'cash' }, down),
+    ];
+    for (const r of blocked) {
+      assert.equal(r.status, 403);
+      assert.equal(r.body.code, 'register_over_plan');
+      assert.equal(r.body.message, 'Tu plan ya no incluye esta caja. Haz su corte para cerrarla.');
+    }
+    assert.equal((await w.call('GET', '/api/cash/session', null, down)).body.open, true);
+    const listed = await w.call('GET', '/api/registers', null, { ...one, 'x-plan': 'basic' });
+    assert.deepEqual(listed.body.registers.map((r) => r.number), [1]);
+    assert.equal((await close(w, down, 220)).status, 200);
+    // ya cerrada y fuera del plan: no existe más
+    assert.equal((await w.call('GET', '/api/cash/session', null, down)).status, 409);
+    assert.equal((await sell(w, down)).body.code, 'register_unknown');
+    // la caja 1 sigue vendiendo
+    assert.equal((await open(w, { ...one, 'x-plan': 'basic' })).status, 201);
+    assert.equal((await sell(w, { ...one, 'x-plan': 'basic' })).status, 200);
+  } finally { await w.stop(); }
+});

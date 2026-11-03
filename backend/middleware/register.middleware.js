@@ -9,11 +9,15 @@
  *   navegador; las sesiones sin `deviceId` (anteriores a MultiCaja) no se bloquean. El reintento de una venta ya
  *   cobrada sí pasa (ver isPaidSaleRetry).
  *
+ * - Caja por encima del plan (se bajó de plan) que aún tiene sesión abierta: no vende ni cobra (403
+ *   `register_over_plan`, ver blockOverPlan) pero sí puede hacer su corte (`attachRegister({ allowOverPlan: true })`).
+ *
  * Va después de `requireActiveSubscription` (usa `req.tenant.plan`).
  */
 const db = require('../database/mongodb');
 const registersDb = require('../database/registers.db');
 const { listRegisters } = require('../services/registers.service');
+const { registerLimitOf } = require('../services/plans.catalog');
 
 /**
  * Reintento de una venta ya cobrada (p. ej. una venta sin conexión que se sincroniza): `POST /orders/sale` la
@@ -27,14 +31,31 @@ async function isPaidSaleRetry(req) {
   return order?.paymentStatus === 'paid';
 }
 
-async function attachRegister(req, res, next) {
+/** Caja por encima del plan: no puede vender, cobrar, abonar, devolver ni anular; solo hacer su corte. */
+function blockOverPlan(req, res, next) {
+  if (req.registerId > registerLimitOf(req.tenant?.plan)) {
+    return res.status(403).json({ code: 'register_over_plan', message: 'Tu plan ya no incluye esta caja. Haz su corte para cerrarla.' });
+  }
+  return next();
+}
+
+/** Uso: `attachRegister` directo, o `attachRegister({ allowOverPlan: true })` para las rutas del corte. */
+function attachRegister(arg, res, next) {
+  if (!res) return (req, rs, nx) => handle(req, rs, nx, arg || {});
+  return handle(arg, res, next, {});
+}
+
+async function handle(req, res, next, { allowOverPlan = false }) {
   try {
     const raw = req.get('x-register');
     const number = raw == null || raw === '' ? 1 : Number(raw);
     req.deviceId = String(req.get('x-device') || '').trim().slice(0, 64) || null;
 
     const registers = await listRegisters(registersDb, req.tenantId, req.tenant?.plan);
-    if (!registers.some((r) => r.number === number)) {
+    const known = registers.some((r) => r.number === number);
+    // Una caja fuera del plan con la sesión abierta sigue existiendo hasta que se haga su corte
+    const overPlanOpen = !known && number > registerLimitOf(req.tenant?.plan) && !!(await db.GetOpenCashSession(req.tenantId, number));
+    if (!known && !overPlanOpen) {
       return res.status(409).json({ code: 'register_unknown', message: 'Esta caja ya no existe. Elige tu caja de nuevo.' });
     }
     req.registerId = number;
@@ -49,11 +70,11 @@ async function attachRegister(req, res, next) {
         });
       }
     }
-    return next();
+    return allowOverPlan ? next() : blockOverPlan(req, res, next);
   } catch (err) {
     console.error(err);
     return res.status(500).send('Error al revisar la caja');
   }
 }
 
-module.exports = { attachRegister };
+module.exports = { attachRegister, blockOverPlan };
