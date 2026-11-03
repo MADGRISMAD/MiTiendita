@@ -45,7 +45,7 @@ async function disconnect(tenantId) {
  * Mercado Pago solo deja cancelar por API un cobro que la terminal aún no muestra («created»); uno que ya está en pantalla
  * («at_terminal») solo se cancela en la terminal, y mientras siga ahí no recibe otro.
  */
-async function assertTerminalFree(tenantId, clientSaleId, terminalId) {
+async function assertTerminalFree(tenantId, clientSaleId, terminalId, registerId) {
   const tenant = await db.GetTenantById(tenantId);
   const recent = await db.ListPointChargesSince(tenantId, new Date(Date.now() - STALE_MS));
   for (const c of recent) {
@@ -53,8 +53,11 @@ async function assertTerminalFree(tenantId, clientSaleId, terminalId) {
     // Solo cuenta lo pendiente en ESA terminal (los cobros viejos, sin terminal, eran de la terminal de la tienda)
     if ((c.terminalId || tenant?.point?.terminalId) !== terminalId) continue;
     let now = await syncCharge(tenantId, c.id).catch(() => c);
-    if (now.status === 'pending') now = await cancelCharge(tenantId, c.id).catch(() => now);
+    // Solo se cancela solo el abandonado de la MISMA caja; el cobro vivo de otra caja se espera
+    const sameRegister = (c.registerId ?? 1) === (registerId ?? 1);
+    if (now.status === 'pending' && sameRegister) now = await cancelCharge(tenantId, c.id).catch(() => now);
     if (now.status === 'pending') {
+      if (!sameRegister) throw svc.httpError('La terminal está cobrando en otra caja, espera', 409, 'terminal_busy');
       const mins = Math.max(1, Math.round((Date.now() - new Date(c.createdAt).getTime()) / 60000));
       throw svc.httpError(
         `La terminal sigue mostrando un cobro anterior de $${Number(c.amount).toFixed(2)} (de hace ${mins} min). Termínalo o cancélalo en la terminal (sal de Servicios, Ajustes o de la confirmación) y vuelve a intentar.`,
@@ -75,7 +78,7 @@ async function startCharge({ tenantId, clientSaleId, amount, registerId }) {
   if (!check.ok) throw svc.httpError(check.message, 409, check.code);
 
   const { terminalId } = await svc.terminalOf(tenantId, registerId);
-  await assertTerminalFree(tenantId, String(clientSaleId), terminalId);
+  await assertTerminalFree(tenantId, String(clientSaleId), terminalId, registerId);
 
   const prev = await db.GetPointChargeBySale(clientSaleId, tenantId);
   if (prev && prev.status === 'pending' && prev.amount === Number(value)) return { id: prev.id, status: 'pending' };

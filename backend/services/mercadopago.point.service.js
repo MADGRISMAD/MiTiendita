@@ -190,6 +190,8 @@ async function terminalOf(tenantId, registerId) {
 async function registerTerminal(tenantId, terminalId, registerNumber) {
   const number = registerNumber == null || registerNumber === '' ? 1 : Number(registerNumber);
   if (!Number.isInteger(number) || number < 1 || number > 4) throw httpError('Caja inválida', 400);
+  // Antes de tocar Mercado Pago: la caja debe existir
+  if (number > 1 && !(await registersDb.ListRegisters(tenantId)).some((r) => r.number === number)) throw httpError('Esa caja no existe.', 404);
   const terminals = await listTerminals(tenantId);
   const t = terminals.find((x) => x.id === terminalId);
   if (!t) throw httpError('Esa terminal no pertenece a tu cuenta de Mercado Pago', 404, 'terminal_not_found');

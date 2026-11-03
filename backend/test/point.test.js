@@ -441,14 +441,14 @@ test('terminal por caja: el cobro de la caja 2 va a SU terminal y un pendiente e
   assert.equal(saved.terminalId, 'PAX_B');
   assert.equal(saved.registerId, 2);
   // la caja 1 sigue bloqueada por lo suyo
-  await assert.rejects(charges.startCharge({ tenantId: 't1', clientSaleId: 'C3', amount: 5, registerId: 1 }), (e) => e.code === 'terminal_busy');
+  await assert.rejects(charges.startCharge({ tenantId: 't1', clientSaleId: 'C3', amount: 5, registerId: 1 }), (e) => e.code === 'terminal_busy' && /Termínalo o cancélalo/.test(e.message));
 });
 
 test('terminal compartida: el cobro de la caja 2 espera mientras la caja 1 tiene uno pendiente, y sale por la terminal de la tienda', async () => {
   await twoTerminals({ shared: true });
   addCharge({ mpOrderId: 'ATT1', clientSaleId: 'C1', amount: 70, terminalId: 'PAX_A910__SN1', registerId: 1 });
   mp.orders.ATT1 = { id: 'ATT1', status: 'at_terminal', transactions: { payments: [{ amount: '70.00' }] } };
-  await assert.rejects(charges.startCharge({ tenantId: 't1', clientSaleId: 'C2', amount: 30, registerId: 2 }), (e) => e.code === 'terminal_busy');
+  await assert.rejects(charges.startCharge({ tenantId: 't1', clientSaleId: 'C2', amount: 30, registerId: 2 }), (e) => e.code === 'terminal_busy' && e.message === 'La terminal está cobrando en otra caja, espera');
   mp.orders.ATT1.status = 'processed';
   mp.orders.ATT1.transactions.payments[0].paid_amount = '70.00';
   mp.nextOrder = 'ORD-C2';
@@ -485,7 +485,9 @@ test('registrar terminal en la caja 2 guarda solo su terminal; la caja 1 sigue e
   await svc.registerTerminal('t1', 'PAX_B', 2);
   assert.equal(store.registers[1].terminalId, 'PAX_B');
   assert.equal(store.tenants.t1.point.terminalId, 'PAX_A910__SN1');
+  const before = mp.calls.length;
   await assert.rejects(svc.registerTerminal('t1', 'PAX_B', 3), (e) => e.status === 404);
+  assert.equal(mp.calls.length, before, 'caja inexistente: cero llamadas a Mercado Pago');
   await assert.rejects(svc.registerTerminal('t1', 'PAX_B', 9), (e) => e.status === 400);
   await svc.setSharedTerminal('t1', true);
   assert.equal(store.tenants.t1.point.sharedTerminal, true);
@@ -498,4 +500,16 @@ test('cobros huérfanos de cualquier terminal siguen apareciendo', async () => {
   const list = await charges.unconsumed('t1');
   assert.equal(list.length, 1);
   assert.equal(list[0].reason, 'no_sale');
+});
+
+test('terminal compartida: el cobro vivo (created) de la caja 1 NO se cancela desde la caja 2; la caja 2 espera', async () => {
+  await twoTerminals({ shared: true });
+  addCharge({ mpOrderId: 'CRE9', clientSaleId: 'C1', amount: 70, terminalId: 'PAX_A910__SN1', registerId: 1 });
+  mp.orders.CRE9 = { id: 'CRE9', status: 'created', transactions: { payments: [{ amount: '70.00' }] } };
+  await assert.rejects(
+    charges.startCharge({ tenantId: 't1', clientSaleId: 'C2', amount: 30, registerId: 2 }),
+    (e) => e.code === 'terminal_busy' && e.message === 'La terminal está cobrando en otra caja, espera'
+  );
+  assert.ok(!mp.calls.some((c) => c.url === '/v1/orders/CRE9/cancel'), 'no se cancela el cobro de otra caja');
+  assert.equal(store.charges.find((c) => c.clientSaleId === 'C1').status, 'pending');
 });
