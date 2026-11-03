@@ -111,12 +111,22 @@ function friendly(error) {
   return error?.message || "La impresora no respondió.";
 }
 
+const USB_BLOCKED =
+  "No se pudo abrir la impresora por USB: Windows la tiene con su propio driver (o otro programa la está usando). Usa el modo «Puerto COM» o cierra el otro programa.";
+/** El navegador no puede abrirla (driver de Windows u otro programa): se dice qué hacer en vez de «sin permiso». */
+const usbBlocked = (e) => (e?.name === "SecurityError" || e?.name === "NetworkError" ? new Error(USB_BLOCKED) : e);
+
 async function openUsb(prompt) {
   // Sin filtro: muchas térmicas genéricas no se anuncian como clase «impresora»
   const device = prompt ? await navigator.usb.requestDevice({ filters: [] }) : (await navigator.usb.getDevices())[0];
   if (!device) return null;
-  await device.open();
-  if (!device.configuration) await device.selectConfiguration(1);
+  try {
+    await device.open();
+    if (!device.configuration) await device.selectConfiguration(1);
+  } catch (e) {
+    await device.close().catch(() => {});
+    throw usbBlocked(e);
+  }
   let target = null;
   for (const iface of device.configuration.interfaces) {
     for (const alt of iface.alternates) {
@@ -128,7 +138,12 @@ async function openUsb(prompt) {
     await device.close().catch(() => {});
     throw new Error("Ese dispositivo USB no parece una impresora.");
   }
-  await device.claimInterface(target.iface.interfaceNumber);
+  try {
+    await device.claimInterface(target.iface.interfaceNumber);
+  } catch (e) {
+    await device.close().catch(() => {});
+    throw usbBlocked(e);
+  }
   if (target.iface.alternates.length > 1) {
     await device.selectAlternateInterface(target.iface.interfaceNumber, target.alt.alternateSetting).catch(() => {});
   }

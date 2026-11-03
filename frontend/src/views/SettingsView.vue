@@ -877,8 +877,8 @@ import { appBuiltAt, appVersion, applyUpdate, checkForUpdate, updateState } from
 
 const PRINTER_MODES = [
   { id: "browser", label: "Navegador (actual)", hint: "Abre el ticket y el diálogo de imprimir de Chrome. Sirve con cualquier impresora." },
-  { id: "usb", label: "Térmica USB", hint: "Sale directo, sin diálogo. Chrome en PC o Android (con cable OTG)." },
-  { id: "serial", label: "Térmica USB (puerto COM)", hint: "Para impresoras que Windows muestra como puerto COM. Chrome o Edge en PC." },
+  { id: "usb", label: "Térmica USB", hint: "Sale directo, sin diálogo. En Windows solo abre si la impresora no tiene su propio driver; si no abre, usa «puerto COM». Chrome en PC o Android (con cable OTG)." },
+  { id: "serial", label: "Térmica USB (puerto COM)", hint: "Para impresoras que Windows muestra como puerto COM: es lo que mejor funciona en Windows. Chrome o Edge en PC." },
   { id: "bluetooth", label: "Térmica Bluetooth", hint: "Sale directo, sin diálogo. Chrome en Android o PC con Bluetooth." },
 ];
 const PRINT_ROUTES = [

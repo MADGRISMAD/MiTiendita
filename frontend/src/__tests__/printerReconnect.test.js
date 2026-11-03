@@ -118,4 +118,26 @@ describe("la impresora se recupera sola", () => {
     expect(await t.reconnectPrinter()).toBe(true);
     expect(t.printerStore.error).toBe("");
   });
+
+  it("si Windows tiene la impresora con su driver (acceso denegado), dice que use Puerto COM y suelta el dispositivo", async () => {
+    const t = await load();
+    const denied = Object.assign(new Error("Access denied."), { name: "SecurityError" });
+    usb.device.open.mockRejectedValueOnce(denied);
+    await expect(t.connectPrinter({ prompt: true })).rejects.toThrow(/Puerto COM/);
+    expect(usb.device.close).toHaveBeenCalled();
+    expect(t.printerStore.connected).toBe(false);
+  });
+
+  it("lo mismo si falla al tomar la interfaz (otro programa la usa)", async () => {
+    const t = await load();
+    usb.device.claimInterface.mockRejectedValueOnce(Object.assign(new Error("Unable to claim interface."), { name: "NetworkError" }));
+    await expect(t.connectPrinter({ prompt: true })).rejects.toThrow(/Puerto COM/);
+    expect(usb.device.close).toHaveBeenCalled();
+  });
+
+  it("otro error al abrir no se disfraza de problema de driver", async () => {
+    const t = await load();
+    usb.device.open.mockRejectedValueOnce(new Error("algo distinto"));
+    await expect(t.connectPrinter({ prompt: true })).rejects.toThrow(/algo distinto/);
+  });
 });
