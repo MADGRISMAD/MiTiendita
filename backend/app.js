@@ -56,6 +56,7 @@ app.use('/org', require('./routers/org.router'));
 app.use('/invoices', require('./routers/invoices.router'));
 app.use('/invites', require('./routers/invites.router'));
 app.use('/cash', require('./routers/cash.router'));
+app.use('/registers', require('./routers/registers.router'));
 app.use('/billing', require('./routers/billing.router'));
 app.use('/ai', require('./routers/ai.router'));
 app.use('/platform', require('./routers/platform.router'));

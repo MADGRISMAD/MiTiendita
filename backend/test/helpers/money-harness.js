@@ -100,9 +100,11 @@ function createWorld() {
     },
     async addEntry(entry) { const e = { ...clone(entry), id: newId() }; w.entries.push(e); return clone(e); },
   };
-  const registersDb = { async ListRegisters() { return clone(w.registers); }, async ReplaceRegisters() {} };
+  const registersDb = { async ListRegisters() { return clone(w.registers); }, async ReplaceRegisters(_t, rows) { w.registers = clone(rows); } };
   // La sesión y la suscripción las pone el arnés (abajo); los routers reales solo revisan el rol
-  const auth = { requireAuth: (_q, _s, next) => next(), requireActiveSubscription: (_q, _s, next) => next(), requireRoles: () => (_q, _s, next) => next() };
+  // Los roles solo se exigen si la prueba manda `x-role` (sin él, todo pasa como antes)
+  const requireRoles = (...allowed) => (req, res, next) => (req.get('x-role') && !allowed.includes(req.user.role) ? res.status(403).send('Sin permiso para esta acción') : next());
+  const auth = { requireAuth: (_q, _s, next) => next(), requireActiveSubscription: (_q, _s, next) => next(), requireRoles };
   return { db, creditDb, registersDb, auth };
 }
 
@@ -128,6 +130,7 @@ async function start(options) {
         cash: require('../../routers/cash.router'),
         orders: require('../../routers/orders.router'),
         customers: require('../../routers/customers.router'),
+        registers: require('../../routers/registers.router'),
       },
     };
   }
@@ -139,7 +142,7 @@ async function start(options) {
     const role = req.get('x-role') || 'cashier';
     req.user = { username: req.get('x-user') || 'caja1', role };
     req.tenantId = T;
-    req.tenant = { plan: 'pro' };
+    req.tenant = { plan: req.get('x-plan') || 'pro' };
     next();
   });
   app.post('/orders/sale', attachRegister, orders.sale);
@@ -151,6 +154,7 @@ async function start(options) {
   app.use('/api/cash', routers.cash);
   app.use('/api/orders', routers.orders);
   app.use('/api/customers', routers.customers);
+  app.use('/api/registers', routers.registers);
 
   const server = http.createServer(app);
   await new Promise((r) => server.listen(0, r));
