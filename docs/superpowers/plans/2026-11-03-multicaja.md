@@ -214,7 +214,7 @@
 - Test: `frontend/src/__tests__/cutX.test.js`
 
 **Interfaces:**
-- Produces: `cutDifference(counted: number, expected: number): number` (a centavos) y `cutLabel(diff: number): 'cuadra'|'sobra'|'falta'`. `CutXDialog`: muestra lo esperado (`cashCutExpected`), pide lo contado, lista de receptores (`cashCutTeam`, el dueño incluido) y envía `createCashCut`. `CutConfirmDialog`: al iniciar sesión, si `pendingCashCuts()` trae uno, muestra «Recibes la Caja N con $X en efectivo» con «Confirmar» y «No coincide» (pide la cifra y envía `confirmCashCut(id, cifra)`); usa el servicio de diálogos existente (`dialog.js`).
+- Produces: `cutDifference(counted: number, expected: number): number` (a centavos) y `cutLabel(diff: number): 'cuadra'|'sobra'|'falta'`. `CutXDialog`: muestra lo esperado (`cashCutExpected`), pide lo contado, lista de receptores (`cashCutTeam`, el dueño incluido) y envía `createCashCut`. **Requisito (hallazgo de la Tarea 8):** `CutXDialog` no deja confirmar la entrega mientras haya ventas sin conexión esperando sincronizar (cola de `offlineDb.js`): se muestra «Hay ventas sin sincronizar; espera a que se envíen antes de entregar la caja», porque una venta sincronizada después se atribuiría al cajero que recibe. `CutConfirmDialog`: al iniciar sesión, si `pendingCashCuts()` trae uno, muestra «Recibes la Caja N con $X en efectivo» con «Confirmar» y «No coincide» (pide la cifra y envía `confirmCashCut(id, cifra)`); usa el servicio de diálogos existente (`dialog.js`).
 
 - [ ] **Step 1: Pruebas que fallen** — `cutDifference(790, 800) === -10`, `cutLabel(-10)==='falta'`, `(0,0)==='cuadra'`, redondeo a centavos (`0.1+0.2` vs `0.3` da 0).
 - [ ] **Step 2: Correr** → FALLA. **Step 3: Implementar** helper, diálogos y la revisión de pendientes al entrar (se repite al volver a la pestaña, sin bloquear la venta).
@@ -229,7 +229,7 @@
 
 **Interfaces:**
 - Consumes: `listCashCuts`, `segments` y `cuts` de `getCashSessionById` (Task 8).
-- Produces: tarjeta con tabla de Cortes X (caja, entrega, recibe, hora, esperado, contado, diferencia, estado) con faltantes y disputas marcados; el corte final impreso muestra una sección «Por cajero» y los cortes X de la sesión.
+- Produces: tarjeta con tabla de Cortes X (caja, entrega, recibe, hora, esperado, contado, diferencia, estado) con faltantes y disputas marcados; el corte final impreso muestra una sección «Por cajero» y los cortes X de la sesión. Un segmento con `user: ''` (ventas anteriores a MultiCaja) se rotula «Sin cajero». En la bitácora (`InventoryView.vue`, `LOG_GROUPS` e `iconOf`) los tipos `cash_cut`, `cash_cut_confirmed` y `cash_cut_disputed` entran al grupo «caja» y `cash_cut_disputed` lleva el tono de advertencia, para que una disputa sea visible al dueño.
 
 - [ ] **Step 1: Prueba que falle** — datos de corte con dos `segments` generan las filas esperadas en `cashCloseData` (nombres y totales).
 - [ ] **Step 2: Correr** → FALLA. **Step 3: Implementar. Step 4: Correr** → PASA; verificar en pantalla la tarjeta y el ticket del corte final.
