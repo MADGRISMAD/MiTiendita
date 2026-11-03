@@ -449,6 +449,11 @@
             <MultiCajaPanel />
           </template>
 
+          <!-- ======= Corte X (admin y cajero) ======= -->
+          <template v-else-if="section === 'cortex'">
+            <CutXDialog />
+          </template>
+
           <!-- ======= Impresora ======= -->
           <template v-else-if="section === 'impresora'">
             <section class="adm-card cfg-card">
@@ -851,6 +856,7 @@ import TicketHeader from "../components/TicketHeader.vue";
 import WhatsAppHelp from "../components/WhatsAppHelp.vue";
 import PointTerminalSettings from "../components/PointTerminalSettings.vue";
 import MultiCajaPanel from "../components/MultiCajaPanel.vue";
+import CutXDialog from "../components/CutXDialog.vue";
 import { MIN_PASSWORD, passwordProblem } from "../passwordPolicy";
 import { apiService, logoutSession } from "../apiService";
 import { currentVenueSettings, fetchVenueSettings, saveVenueSettings, venueStore } from "../venueStore";
@@ -940,6 +946,7 @@ const SECTIONS = {
   inventario: { label: "Inventario", icon: "box", desc: "Existencias y costo de compras", lead: "Cómo se mueven tus existencias y tus costos.", tone: "warn" },
   terminal: { label: "Terminal de cobro", icon: "card", desc: "Vincula tu terminal Mercado Pago", lead: "Cobra con tarjeta directo en tu terminal.", tone: "good" },
   multicaja: { label: "MultiCaja", icon: "store", desc: "Varias cajas a la vez", lead: "Cobra en varias cajas al mismo tiempo.", tone: "info" },
+  cortex: { label: "Corte X", icon: "cash", desc: "Cuadra el efectivo sin cerrar la caja", lead: "Cuenta el efectivo al entregar la caja a otro cajero; la caja sigue abierta.", tone: "good" },
   bascula: { label: "Báscula", icon: "hash", desc: "Pesar a granel y agregar solo", lead: "La báscula de esta caja.", tone: "good" },
   impresora: { label: "Impresora", icon: "printer", desc: "Ticket directo en térmica y cajón", lead: "Cómo sale el ticket en esta caja.", tone: "info" },
   apariencia: { label: "Apariencia", icon: "sun", desc: "Tema claro u oscuro", lead: "Cómo se ve la app en este dispositivo.", tone: "" },
@@ -955,7 +962,7 @@ const NAV = [
       { id: "billing", to: "/billing", label: "Plan y facturación", icon: "card", desc: "Tu suscripción y pagos", tone: "warn" },
     ],
   },
-  { title: "Esta app", items: ["impresora", "bascula", "apariencia", "cuenta", "soporte"].map((id) => ({ id, ...SECTIONS[id] })) },
+  { title: "Esta app", items: ["cortex", "impresora", "bascula", "apariencia", "cuenta", "soporte"].map((id) => ({ id, ...SECTIONS[id] })) },
 ];
 // MultiCaja es solo del dueño (el servidor también lo valida)
 const OWNER_ONLY = new Set(["multicaja"]);
