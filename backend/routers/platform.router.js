@@ -58,7 +58,7 @@ router.get('/tenants/:id', ...staff, platform.getTenant);
 router.get('/tenants/:id/mail', ...staff, platform.clientMail);
 router.get('/tenants/:id/activity', ...staff, platform.tenantActivity);
 router.post('/tenants/:id/mail', ...staff, writeLimit, platform.sendClientMail);
-router.post('/tenants/:id/remove-unpriced', ...adminOnly, writeLimit, platform.removeUnpricedProducts);
+router.post('/tenants/:id/remove-unpriced', ...adminOnly, writeLimit, notBranch, platform.removeUnpricedProducts);
 
 router.patch('/tenants/:id', ...adminOnly, writeLimit, notBranch, platform.updateTenant);
 router.post('/tenants/:id/suspend', ...adminOnly, writeLimit, notBranch, platform.suspend);

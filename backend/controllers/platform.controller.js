@@ -214,7 +214,7 @@ async function getTenant(req, res) {
       db.CountCatalogFoods(tenant.id).catch(() => null),
       isOwnerRequest(req),
     ]);
-    return res.status(200).json({ ...card, usage, referrer, ...relatives, catalog, canRemoveUnpriced: owner });
+    return res.status(200).json({ ...card, usage, referrer, ...relatives, catalog, canRemoveUnpriced: owner && !tenant.isBranch });
   } catch (err) {
     console.error(err);
     return res.status(500).send(err.message || 'No pude abrir ese cliente.');
