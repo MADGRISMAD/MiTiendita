@@ -527,6 +527,15 @@ async function CreateFoods(docs) {
   const result = await dbConnection.collection('foods').insertMany(docs);
   return result.insertedCount;
 }
+/** Cuántos productos tiene una tienda y cuántos son del catálogo maestro y siguen sin precio. */
+async function CountCatalogFoods(tenantId) {
+  const tid = String(tenantId);
+  const [total, unpriced] = await Promise.all([
+    dbConnection.collection('foods').countDocuments({ tenantId: tid }),
+    dbConnection.collection('foods').countDocuments({ tenantId: tid, catalogId: { $exists: true }, needsPrice: true }),
+  ]);
+  return { total, unpriced };
+}
 /** Quita los productos del catálogo maestro que siguen sin precio (la tienda cambió a un giro que no los usa). */
 async function DeleteUnpricedCatalogFoods(tenantId) {
   const result = await dbConnection.collection('foods').deleteMany({ tenantId: String(tenantId), catalogId: { $exists: true }, needsPrice: true });
@@ -1755,6 +1764,6 @@ module.exports = {
   CreatePurchase, GetPurchases, GetPurchaseById,
   CreateLot, GetLotsByFood, GetExpiringLots, TakeFromLot, CreateExchange, GetExchanges,
   GetEmailCode, SaveEmailCode, BumpEmailCodeTries, DeleteEmailCode,
-  ListCatalogItems, CountCatalogItems, GetCatalogItem, InsertCatalogItems, UpsertCatalogItem, DeleteCatalogItem, DeleteAllCatalogItems, ClearCatalogPrices, ListSoldRefs, IsCatalogSeeded, MarkCatalogSeeded,
+  ListCatalogItems, CountCatalogItems, GetCatalogItem, InsertCatalogItems, UpsertCatalogItem, DeleteCatalogItem, DeleteAllCatalogItems, ClearCatalogPrices, ListSoldRefs, CountCatalogFoods, IsCatalogSeeded, MarkCatalogSeeded,
   CreatePlatformAudit, ListPlatformAudit, CreateActivityLog, GetActivityLog, GetPaidItemQtySince,
 };

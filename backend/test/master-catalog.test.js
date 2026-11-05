@@ -93,6 +93,16 @@ function memoryDb({ foods = [], menus = [], settings = [], catalogItems = catalo
       for (const f of gone) foods.splice(foods.indexOf(f), 1);
       return gone.length;
     },
+    async DeleteFood(id, tenantId) {
+      const i = foods.findIndex((f) => f.id === id && f.tenantId === tenantId);
+      if (i < 0) return { deletedCount: 0 };
+      foods.splice(i, 1);
+      return { deletedCount: 1 };
+    },
+    async ListSoldRefs(tenantId) {
+      const sold = db.sold?.[tenantId] || { ids: [], names: [] };
+      return sold;
+    },
     async DeleteEmptyCatalogMenus(tenantId) {
       const gone = menus.filter((m) => m.tenantId === tenantId && m.fromCatalog && !foods.some((f) => f.menuId === m.id));
       for (const m of gone) menus.splice(menus.indexOf(m), 1);
@@ -488,4 +498,36 @@ test('quitar precios y costos: pide la palabra, solo toca ese catálogo, deja lo
   const food = catalog.toFood(papas, { menuId: 'm1', tenantId: 't1' });
   assert.equal(food.needsPrice, true);
   assert.equal(food.cost, 0);
+});
+
+test('la plataforma quita lo que sigue sin precio, pero no lo vendido ni lo que tiene existencias, y no vuelve solo', async () => {
+  const db = memoryDb({ settings: [{ tenantId: 'a', setupCompleted: true, businessType: 'abarrotes' }] });
+  await catalog.load(db, 'a', db.settings[0]);
+  const own = mine(db, 'a');
+  assert.equal(own.length, 181);
+  Object.assign(own[0], { price: 48, needsPrice: false }); // ya tiene precio: es del dueño
+  Object.assign(own[1], { stock: 3 }); // tiene existencias
+  const soldOne = own[2];
+  const soldByName = own[3];
+  db.sold = { a: { ids: [soldOne.id], names: [String(soldByName.name).toLowerCase()] } };
+  const out = await catalog.removeUnpricedForStore(db, 'a');
+  assert.deepEqual(out, { removed: 177, keptSold: 2, keptStock: 1 });
+  assert.equal(mine(db, 'a').length, 4, 'quedan el que tiene precio, el de existencias y los dos vendidos');
+  assert.equal(db.settings[0].masterCatalogSkipped, true);
+  assert.equal(await catalog.backfill(db), 0, 'no se vuelve a cargar solo');
+  // repetirlo no cambia nada
+  assert.deepEqual(await catalog.removeUnpricedForStore(db, 'a'), { removed: 0, keptSold: 2, keptStock: 1 });
+  // otra tienda no se toca
+  const other = memoryDb({ settings: [{ tenantId: 'b', setupCompleted: true, businessType: 'abarrotes' }] });
+  await catalog.load(other, 'b', other.settings[0]);
+  await catalog.removeUnpricedForStore(db, 'b');
+  assert.equal(mine(other, 'b').length, 181);
+});
+
+test('si no se quita nada, el catálogo no se marca como rechazado', async () => {
+  const db = memoryDb({ settings: [{ tenantId: 'a', setupCompleted: true, businessType: 'abarrotes' }] });
+  await catalog.load(db, 'a', db.settings[0]);
+  for (const f of mine(db, 'a')) Object.assign(f, { price: 10, needsPrice: false });
+  assert.deepEqual(await catalog.removeUnpricedForStore(db, 'a'), { removed: 0, keptSold: 0, keptStock: 0 });
+  assert.notEqual(db.settings[0].masterCatalogSkipped, true);
 });

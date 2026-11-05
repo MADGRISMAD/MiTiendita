@@ -768,6 +768,9 @@ export const apiService = {
   platformVoidCommission(id: string, reason = '') {
     return axios.post(`/platform/commissions/${id}/void`, { reason }).then((r) => r.data);
   },
+  platformRemoveUnpriced(tenantId: string, confirm: string) {
+    return axios.post(`/platform/tenants/${tenantId}/remove-unpriced`, { confirm }, { timeout: 60_000 }).then((r) => r.data);
+  },
   platformSetTenantReferrer(tenantId: string, code: string | null) {
     return axios.put(`/platform/tenants/${tenantId}/referrer`, { code }).then((r) => r.data);
   },
