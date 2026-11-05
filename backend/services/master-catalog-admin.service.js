@@ -113,6 +113,14 @@ async function clear(db, catalog, confirm) {
   return { removed };
 }
 
+const PRICES_WORD = 'QUITAR';
+/** Quita el precio sugerido de todo el catálogo (los costos y lo demás se quedan). Las tiendas que ya lo cargaron no cambian. */
+async function clearPrices(db, catalog, confirm) {
+  assertCatalog(catalog);
+  if (String(confirm || '').trim().toUpperCase() !== PRICES_WORD) throw httpError(400, `Para quitar los precios escribe ${PRICES_WORD}.`);
+  return { cleared: await db.ClearCatalogPrices(catalog) };
+}
+
 /**
  * Importa una lista (las filas ya leídas del archivo): crea lo nuevo y actualiza lo que ya existe, que se reconoce por
  * el código (o, sin código, por nombre y presentación). Nunca borra nada. Devuelve qué pasó con cada fila que falló.
@@ -195,4 +203,4 @@ async function addFromTenant(db, catalog, tenantId, foodIds) {
   return { ...result, skipped: wanted.size - rows.length };
 }
 
-module.exports = { summary, list, create, update, remove, clear, importRows, tenantProducts, addFromTenant, cleanItem };
+module.exports = { summary, list, create, update, remove, clear, clearPrices, importRows, tenantProducts, addFromTenant, cleanItem };

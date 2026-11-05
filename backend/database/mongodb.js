@@ -1632,6 +1632,11 @@ async function DeleteCatalogItem(catalog, key) {
 async function DeleteAllCatalogItems(catalog) {
   return (await dbConnection.collection('master_catalog_items').deleteMany({ catalog })).deletedCount;
 }
+/** Quita el precio sugerido de todos los productos de un catálogo (el costo se queda). Devuelve cuántos tenían precio. */
+async function ClearCatalogPrices(catalog) {
+  const r = await dbConnection.collection('master_catalog_items').updateMany({ catalog, price: { $exists: true } }, { $unset: { price: '' }, $set: { updatedAt: new Date() } });
+  return r.modifiedCount;
+}
 async function IsCatalogSeeded() {
   return Boolean(await dbConnection.collection('app_state').findOne({ _id: 'master_catalog_seeded' }));
 }
@@ -1732,6 +1737,6 @@ module.exports = {
   CreatePurchase, GetPurchases, GetPurchaseById,
   CreateLot, GetLotsByFood, GetExpiringLots, TakeFromLot, CreateExchange, GetExchanges,
   GetEmailCode, SaveEmailCode, BumpEmailCodeTries, DeleteEmailCode,
-  ListCatalogItems, CountCatalogItems, GetCatalogItem, InsertCatalogItems, UpsertCatalogItem, DeleteCatalogItem, DeleteAllCatalogItems, IsCatalogSeeded, MarkCatalogSeeded,
+  ListCatalogItems, CountCatalogItems, GetCatalogItem, InsertCatalogItems, UpsertCatalogItem, DeleteCatalogItem, DeleteAllCatalogItems, ClearCatalogPrices, IsCatalogSeeded, MarkCatalogSeeded,
   CreatePlatformAudit, ListPlatformAudit, CreateActivityLog, GetActivityLog, GetPaidItemQtySince,
 };

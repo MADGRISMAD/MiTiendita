@@ -4,6 +4,7 @@
       <template v-if="mode === 'catalog'">
         <button type="button" class="adm-btn" :disabled="!items.length" @click="exportCatalog">Exportar</button>
         <button type="button" class="adm-btn" @click="showImport = !showImport">Importar archivo</button>
+        <button type="button" class="adm-btn danger-ghost" :disabled="busy || !pricedCount" @click="clearPrices">Quitar precios</button>
         <button type="button" class="adm-btn danger-ghost" :disabled="busy || !items.length" @click="clearCatalog">Eliminar catálogo</button>
         <button type="button" class="adm-btn primary" @click="openEdit(null)">Agregar producto</button>
       </template>
@@ -367,6 +368,33 @@ async function removeItem(item) {
     await Promise.all([loadItems(), loadCatalogs()]);
   } catch (e) {
     error.value = errText(e, "No pude quitar el producto.");
+  } finally {
+    busy.value = false;
+  }
+}
+
+// ---------- Quitar los precios del catálogo ----------
+const pricedCount = computed(() => items.value.filter((i) => Number(i.price) > 0).length);
+async function clearPrices() {
+  const name = catalogLabel(catalog.value);
+  const word = await promptDialog(
+    `Vas a QUITAR el precio de ${pricedCount.value} productos del catálogo «${name}».\n\nAntes se descarga una copia en CSV. Los costos y los demás datos se quedan, y las tiendas que ya lo cargaron no se ven afectadas. Las tiendas nuevas recibirán esos productos sin precio.\n\nPara confirmar escribe QUITAR.`,
+    { placeholder: "QUITAR", confirmLabel: "Quitar precios", tone: "danger" }
+  );
+  if (word === null) return;
+  if (String(word).trim().toUpperCase() !== "QUITAR") {
+    error.value = "No se quitó nada: no escribiste QUITAR.";
+    return;
+  }
+  busy.value = true;
+  error.value = "";
+  try {
+    exportCatalog(); // copia de respaldo antes de quitar
+    const r = await apiService.platformCatalogClearPrices(catalog.value, "QUITAR");
+    say(`Se quitó el precio de ${r.cleared} productos del catálogo «${name}». La copia se descargó como catalogo-${catalog.value}.csv.`);
+    await Promise.all([loadItems(), loadCatalogs()]);
+  } catch (e) {
+    error.value = errText(e, "No pude quitar los precios.");
   } finally {
     busy.value = false;
   }

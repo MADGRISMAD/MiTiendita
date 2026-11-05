@@ -95,6 +95,17 @@ async function clearCatalog(req, res) {
   }
 }
 
+/** Quita el precio sugerido de todo el catálogo elegido (pide escribir QUITAR) y lo anota en la bitácora. */
+async function clearPrices(req, res) {
+  try {
+    const result = await admin.clearPrices(db, req.params.catalog, req.body?.confirm);
+    await audit.record(req, { type: 'catalog_prices_cleared', message: `Quitó el precio sugerido del catálogo ${label(req.params.catalog)} (${result.cleared} productos)`, meta: { catalog: req.params.catalog, cleared: result.cleared } });
+    return res.json(result);
+  } catch (err) {
+    return fail(res, err, 'No se pudieron quitar los precios.');
+  }
+}
+
 async function importRows(req, res) {
   try {
     const out = await admin.importRows(db, req.params.catalog, req.body?.rows);
@@ -131,4 +142,4 @@ async function addFromTenant(req, res) {
   }
 }
 
-module.exports = { summary, list, create, update, remove, importRows, tenantProducts, addFromTenant, recodePreview, recodeApply, clearCatalog };
+module.exports = { summary, list, create, update, remove, importRows, tenantProducts, addFromTenant, recodePreview, recodeApply, clearCatalog, clearPrices };

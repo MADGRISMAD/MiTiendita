@@ -65,6 +65,11 @@ function memoryDb({ foods = [], menus = [], settings = [], catalogItems = catalo
       for (let i = catalogItems.length - 1; i >= 0; i -= 1) if (catalogItems[i].catalog === c) catalogItems.splice(i, 1);
       return before - catalogItems.length;
     },
+    async ClearCatalogPrices(c) {
+      let n = 0;
+      for (const row of catalogItems) if (row.catalog === c && 'price' in row) { delete row.price; n += 1; }
+      return n;
+    },
     async IsCatalogSeeded() {
       return seeded;
     },
@@ -456,4 +461,27 @@ test('panel: no deja guardar un código con el dígito verificador mal, pero sí
   assert.equal(moved.section, 'B');
   // las claves propias y los PLU no son códigos de barras
   assert.ok(await admin.create(db, 'pharmacy', { name: 'Clave propia', code: 'MT-0001' }));
+});
+
+test('quitar los precios: pide la palabra, solo toca ese catálogo, deja los costos y las tiendas no cambian', async () => {
+  const db = memoryDb({ catalogItems: [] });
+  await catalog.ensureSeeded(db);
+  await admin.create(db, 'abarrotes', { section: 'Botanas', name: 'Papas Sal', presentation: '45 g', code: '7501000000012', price: 20, cost: 16.8 });
+  await admin.create(db, 'abarrotes', { section: 'Botanas', name: 'Papas Adobadas', presentation: '45 g', code: '7501000000029', price: 20 });
+  await admin.create(db, 'pharmacy', { section: 'Analgésicos', name: 'Paracetamol', code: '7502000000019', price: 35 });
+  await assert.rejects(admin.clearPrices(db, 'abarrotes', ''), (e) => e.status === 400);
+  await assert.rejects(admin.clearPrices(db, 'abarrotes', 'si'), (e) => e.status === 400);
+  await assert.rejects(admin.clearPrices(db, 'nada', 'QUITAR'), (e) => e.status === 404);
+  assert.equal(db.catalogItems.filter((i) => i.price > 0).length, 3, 'sin confirmar no se toca nada');
+  assert.deepEqual(await admin.clearPrices(db, 'abarrotes', ' quitar '), { cleared: 2 });
+  const papas = db.catalogItems.find((i) => i.code === '7501000000012');
+  assert.equal('price' in papas, false);
+  assert.equal(papas.cost, 16.8, 'el costo se queda');
+  assert.equal(papas.name, 'Papas Sal');
+  assert.equal(db.catalogItems.find((i) => i.catalog === 'pharmacy').price, 35, 'los demás catálogos no se tocan');
+  assert.deepEqual(await admin.clearPrices(db, 'abarrotes', 'QUITAR'), { cleared: 0 }, 'repetirlo no cambia nada');
+  // una tienda nueva que cargue estos productos los recibe sin precio, con su costo
+  const food = catalog.toFood(papas, { menuId: 'm1', tenantId: 't1' });
+  assert.equal(food.needsPrice, true);
+  assert.equal(food.cost, 16.8);
 });
