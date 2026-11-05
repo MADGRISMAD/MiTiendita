@@ -42,8 +42,6 @@ router.post('/catalogs/:catalog/recode/preview', ...adminOnly, catalogs.recodePr
 router.post('/catalogs/:catalog/recode/apply', ...adminOnly, writeLimit, catalogs.recodeApply);
 router.post('/catalogs/:catalog/items', ...adminOnly, writeLimit, catalogs.create);
 router.post('/catalogs/:catalog/clear', ...adminOnly, writeLimit, catalogs.clearCatalog);
-router.post('/catalogs/:catalog/clear-prices', ...adminOnly, writeLimit, catalogs.clearPrices);
-router.post('/catalogs/:catalog/store-prices', ...adminOnly, writeLimit, catalogs.storePricesAction);
 router.post('/catalogs/:catalog/import', ...adminOnly, writeLimit, catalogs.importRows);
 router.post('/catalogs/:catalog/from-tenant', ...adminOnly, writeLimit, catalogs.addFromTenant);
 router.put('/catalogs/:catalog/items/:key', ...adminOnly, writeLimit, catalogs.update);
@@ -58,7 +56,6 @@ router.get('/tenants/:id', ...staff, platform.getTenant);
 router.get('/tenants/:id/mail', ...staff, platform.clientMail);
 router.get('/tenants/:id/activity', ...staff, platform.tenantActivity);
 router.post('/tenants/:id/mail', ...staff, writeLimit, platform.sendClientMail);
-router.post('/tenants/:id/remove-unpriced', ...adminOnly, writeLimit, notBranch, platform.removeUnpricedProducts);
 
 router.patch('/tenants/:id', ...adminOnly, writeLimit, notBranch, platform.updateTenant);
 router.post('/tenants/:id/suspend', ...adminOnly, writeLimit, notBranch, platform.suspend);

@@ -179,31 +179,6 @@ async function removeUnpriced(db, tenantId) {
   return { removed };
 }
 
-/**
- * La plataforma quita de una tienda los productos del catálogo que siguen sin precio (cargados de ejemplo por error).
- * No toca lo que ya se vendió ni lo que tiene existencias. Si quitó algo, el catálogo no se vuelve a cargar solo.
- */
-async function removeUnpricedForStore(db, tenantId) {
-  const foods = (await db.GetFoods(tenantId)).filter((f) => f.catalogId && f.needsPrice);
-  const sold = foods.length ? await db.ListSoldRefs(tenantId) : { ids: [], names: [] };
-  const soldIds = new Set(sold.ids);
-  const soldNames = new Set(sold.names);
-  const out = { removed: 0, keptSold: 0, keptStock: 0 };
-  for (const food of foods) {
-    if (soldIds.has(String(food.id)) || soldNames.has(String(food.name || '').toLowerCase())) out.keptSold += 1;
-    else if (Number(food.stock) > 0) out.keptStock += 1;
-    else {
-      await db.DeleteFood(food.id, tenantId);
-      out.removed += 1;
-    }
-  }
-  if (out.removed) {
-    await db.DeleteEmptyCatalogMenus(tenantId);
-    await db.UpdateSettings({ masterCatalogVersion: null, masterCatalogKey: null, masterCatalogSkipped: true }, tenantId);
-  }
-  return out;
-}
-
 /** Al arrancar el servidor: carga el catálogo en las tiendas que ya existían. Devuelve cuántas tiendas recibieron. */
 async function backfill(db) {
   let tiendas = 0;
@@ -235,6 +210,5 @@ module.exports = {
   status,
   load,
   removeUnpriced,
-  removeUnpricedForStore,
   backfill,
 };

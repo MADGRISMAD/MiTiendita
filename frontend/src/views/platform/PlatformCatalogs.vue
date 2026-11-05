@@ -4,8 +4,6 @@
       <template v-if="mode === 'catalog'">
         <button type="button" class="adm-btn" :disabled="!items.length" @click="exportCatalog">Exportar</button>
         <button type="button" class="adm-btn" @click="showImport = !showImport">Importar archivo</button>
-        <button type="button" class="adm-btn danger-ghost" :disabled="busy" @click="clearStorePrices">Quitar en las tiendas</button>
-        <button type="button" class="adm-btn danger-ghost" :disabled="busy || !pricedCount" @click="clearPrices">Quitar precios y costos</button>
         <button type="button" class="adm-btn danger-ghost" :disabled="busy || !items.length" @click="clearCatalog">Eliminar catálogo</button>
         <button type="button" class="adm-btn primary" @click="openEdit(null)">Agregar producto</button>
       </template>
@@ -259,7 +257,7 @@
 </template>
 
 <script setup>
-import { alertDialog, confirmDialog, promptDialog } from "../../dialog";
+import { confirmDialog, promptDialog } from "../../dialog";
 import { computed, onMounted, reactive, ref } from "vue";
 import PlatformFrame from "../../components/platform/PlatformFrame.vue";
 import { apiService } from "../../apiService";
@@ -369,75 +367,6 @@ async function removeItem(item) {
     await Promise.all([loadItems(), loadCatalogs()]);
   } catch (e) {
     error.value = errText(e, "No pude quitar el producto.");
-  } finally {
-    busy.value = false;
-  }
-}
-
-// ---------- Quitar en las tiendas el precio que llegó del catálogo ----------
-async function clearStorePrices() {
-  const name = catalogLabel(catalog.value);
-  busy.value = true;
-  error.value = "";
-  let pre;
-  try {
-    pre = await apiService.platformCatalogStorePrices(catalog.value, { preview: true });
-  } catch (e) {
-    error.value = errText(e, "No pude revisar las tiendas.");
-    return;
-  } finally {
-    busy.value = false;
-  }
-  const t = pre.totals;
-  if (!t.products) {
-    await alertDialog(
-      `No hay nada que quitar en las tiendas.\n\nNinguna tiene productos del catálogo «${name}» con el precio original y sin vender. Ya vendidos: ${t.sold}. Con el precio cambiado: ${t.changed}.`
-    );
-    return;
-  }
-  const who = pre.stores.slice(0, 8).map((s) => `${s.name} (${s.products})`).join(", ");
-  const word = await promptDialog(
-    `Vas a quitar el precio de ${t.products} productos en ${t.stores} ${t.stores === 1 ? "tienda" : "tiendas"}.\n\nSe quita también el costo de ${t.costs} que no lo habían cambiado. No se toca lo que ya se vendió (${t.sold}) ni lo que cambiaron de precio (${t.changed}). Esos productos quedan «Sin precio» y el dueño tiene que ponerles el suyo para venderlos.\n\nTiendas: ${who}${pre.stores.length < t.stores ? ", …" : ""}.\n\nHazlo antes de quitar los precios y costos del catálogo. Para confirmar escribe QUITAR.`,
-    { placeholder: "QUITAR", confirmLabel: "Quitar en las tiendas", tone: "danger" }
-  );
-  if (word === null) return;
-  if (String(word).trim().toUpperCase() !== "QUITAR") {
-    error.value = "No se quitó nada: no escribiste QUITAR.";
-    return;
-  }
-  busy.value = true;
-  try {
-    const r = await apiService.platformCatalogStorePrices(catalog.value, { confirm: "QUITAR" });
-    say(`Listo: se quitó el precio de ${r.totals.products} productos en ${r.totals.stores} tiendas (${r.totals.costs} también sin costo).`);
-  } catch (e) {
-    error.value = errText(e, "No pude quitar los precios en las tiendas.");
-  } finally {
-    busy.value = false;
-  }
-}
-
-// ---------- Quitar los precios y costos del catálogo ----------
-const pricedCount = computed(() => items.value.filter((i) => Number(i.price) > 0 || Number(i.cost) > 0).length);
-async function clearPrices() {
-  const name = catalogLabel(catalog.value);
-  const word = await promptDialog(
-    `Vas a QUITAR el precio y el costo de ${pricedCount.value} productos del catálogo «${name}».\n\nAntes se descarga una copia en CSV. Los demás datos se quedan, y las tiendas que ya lo cargaron no se ven afectadas (para eso está «Quitar en las tiendas»). Las tiendas nuevas recibirán esos productos sin precio ni costo.\n\nPara confirmar escribe QUITAR.`,
-    { placeholder: "QUITAR", confirmLabel: "Quitar precios y costos", tone: "danger" }
-  );
-  if (word === null) return;
-  if (String(word).trim().toUpperCase() !== "QUITAR") {
-    error.value = "No se quitó nada: no escribiste QUITAR.";
-    return;
-  }
-  busy.value = true;
-  error.value = "";
-  try {
-    exportCatalog(); // copia de respaldo antes de quitar
-    const r = await apiService.platformCatalogClearPrices(catalog.value, "QUITAR");
-    say(`Se quitaron precios y costos de ${r.cleared} productos del catálogo «${name}». La copia se descargó como catalogo-${catalog.value}.csv.`);
-    await Promise.all([loadItems(), loadCatalogs()]);
-  } catch (e) {
-    error.value = errText(e, "No pude quitar los precios y costos.");
   } finally {
     busy.value = false;
   }

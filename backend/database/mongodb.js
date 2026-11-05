@@ -527,15 +527,6 @@ async function CreateFoods(docs) {
   const result = await dbConnection.collection('foods').insertMany(docs);
   return result.insertedCount;
 }
-/** Cuántos productos tiene una tienda y cuántos son del catálogo maestro y siguen sin precio. */
-async function CountCatalogFoods(tenantId) {
-  const tid = String(tenantId);
-  const [total, unpriced] = await Promise.all([
-    dbConnection.collection('foods').countDocuments({ tenantId: tid }),
-    dbConnection.collection('foods').countDocuments({ tenantId: tid, catalogId: { $exists: true }, needsPrice: true }),
-  ]);
-  return { total, unpriced };
-}
 /** Quita los productos del catálogo maestro que siguen sin precio (la tienda cambió a un giro que no los usa). */
 async function DeleteUnpricedCatalogFoods(tenantId) {
   const result = await dbConnection.collection('foods').deleteMany({ tenantId: String(tenantId), catalogId: { $exists: true }, needsPrice: true });
@@ -1641,29 +1632,6 @@ async function DeleteCatalogItem(catalog, key) {
 async function DeleteAllCatalogItems(catalog) {
   return (await dbConnection.collection('master_catalog_items').deleteMany({ catalog })).deletedCount;
 }
-/** Productos que una tienda ya vendió (en cualquier venta): ids y nombres en minúsculas, para no tocar lo que ya se cobró. */
-async function ListSoldRefs(tenantId) {
-  const rows = await dbConnection
-    .collection('orders')
-    .aggregate([
-      { $match: { tenantId: String(tenantId) } },
-      { $unwind: '$items' },
-      { $group: { _id: null, ids: { $addToSet: '$items.foodId' }, names: { $addToSet: '$items.name' } } },
-    ])
-    .toArray();
-  const r = rows[0] || {};
-  return {
-    ids: (r.ids || []).filter(Boolean).map(String),
-    names: (r.names || []).filter(Boolean).map((n) => String(n).toLowerCase()),
-  };
-}
-/** Quita el precio y el costo de todos los productos de un catálogo. Devuelve cuántos productos tenían alguno de los dos. */
-async function ClearCatalogPrices(catalog) {
-  const r = await dbConnection
-    .collection('master_catalog_items')
-    .updateMany({ catalog, $or: [{ price: { $exists: true } }, { cost: { $exists: true } }] }, { $unset: { price: '', cost: '' }, $set: { updatedAt: new Date() } });
-  return r.modifiedCount;
-}
 async function IsCatalogSeeded() {
   return Boolean(await dbConnection.collection('app_state').findOne({ _id: 'master_catalog_seeded' }));
 }
@@ -1764,6 +1732,6 @@ module.exports = {
   CreatePurchase, GetPurchases, GetPurchaseById,
   CreateLot, GetLotsByFood, GetExpiringLots, TakeFromLot, CreateExchange, GetExchanges,
   GetEmailCode, SaveEmailCode, BumpEmailCodeTries, DeleteEmailCode,
-  ListCatalogItems, CountCatalogItems, GetCatalogItem, InsertCatalogItems, UpsertCatalogItem, DeleteCatalogItem, DeleteAllCatalogItems, ClearCatalogPrices, ListSoldRefs, CountCatalogFoods, IsCatalogSeeded, MarkCatalogSeeded,
+  ListCatalogItems, CountCatalogItems, GetCatalogItem, InsertCatalogItems, UpsertCatalogItem, DeleteCatalogItem, DeleteAllCatalogItems, IsCatalogSeeded, MarkCatalogSeeded,
   CreatePlatformAudit, ListPlatformAudit, CreateActivityLog, GetActivityLog, GetPaidItemQtySince,
 };

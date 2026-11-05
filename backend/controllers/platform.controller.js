@@ -7,7 +7,6 @@ const supportMail = require('../services/support-mail.service');
 const { ownerMonthlyReport } = require('../utils/mail-templates');
 const hasher = require('../utils/bcrypt.utils');
 const audit = require('../services/platform-audit.service');
-const masterCatalog = require('../services/master-catalog.service');
 const limits = require('../services/plan-limits.service');
 const sessions = require('../services/session.service');
 const referrals = require('../services/referral.service');
@@ -206,38 +205,16 @@ async function getTenant(req, res) {
   try {
     const tenant = await db.GetTenantById(req.params.id);
     if (!tenant) return res.status(404).send('No encontré ese cliente.');
-    const [card, usage, referrer, relatives, catalog, owner] = await Promise.all([
+    const [card, usage, referrer, relatives] = await Promise.all([
       clientCard(tenant, { withUsers: true }),
       limits.usageFor(tenant.id, tenant.plan || 'basic').catch(() => null),
       referrals.brief(tenant.referrerId).catch(() => null),
       branchInfo(tenant),
-      db.CountCatalogFoods(tenant.id).catch(() => null),
-      isOwnerRequest(req),
     ]);
-    return res.status(200).json({ ...card, usage, referrer, ...relatives, catalog, canRemoveUnpriced: owner && !tenant.isBranch });
+    return res.status(200).json({ ...card, usage, referrer, ...relatives });
   } catch (err) {
     console.error(err);
     return res.status(500).send(err.message || 'No pude abrir ese cliente.');
-  }
-}
-
-/** Elimina de una tienda los productos del catálogo que siguen sin precio (cargados de ejemplo). Solo socios; pide escribir ELIMINAR. */
-async function removeUnpricedProducts(req, res) {
-  try {
-    if (!(await isOwnerRequest(req))) return res.status(403).send('Esto lo pueden hacer solo los socios.');
-    if (String(req.body?.confirm || '').trim().toUpperCase() !== 'ELIMINAR') return res.status(400).send('Para eliminarlos escribe ELIMINAR.');
-    const tenant = await db.GetTenantById(req.params.id);
-    if (!tenant) return res.status(404).send('No encontré esa tienda.');
-    const out = await masterCatalog.removeUnpricedForStore(db, String(tenant.id));
-    if (out.removed) {
-      const message = `Se eliminaron ${out.removed} productos del catálogo que no tenían precio (cargados de ejemplo).`;
-      await db.CreateActivityLog({ tenantId: String(tenant.id), type: 'catalog_unpriced_removed', message, meta: out, user: 'plataforma', createdAt: new Date() }).catch(() => {});
-      await audit.record(req, { tenantId: String(tenant.id), type: 'tenant_unpriced_removed', message: `Eliminó ${out.removed} productos sin precio de la tienda`, meta: out });
-    }
-    return res.status(200).json({ ...out, catalog: await db.CountCatalogFoods(tenant.id) });
-  } catch (err) {
-    console.error(err);
-    return res.status(500).send(err.message || 'No pude eliminar los productos.');
   }
 }
 
@@ -1326,7 +1303,6 @@ async function manualPayment(req, res) {
 
 module.exports = {
   removeReferrer,
-  removeUnpricedProducts,
   mySeller,
   activateMySeller,
   referrerUsers,

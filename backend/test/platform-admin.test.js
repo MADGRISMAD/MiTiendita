@@ -76,9 +76,6 @@ function platformDb() {
     async GetTenantById(id) {
       return tenants.find((t) => t.id === id) || null;
     },
-    async CountCatalogFoods() {
-      return { total: 12, unpriced: 3 };
-    },
     async UpdateTenant(id, patch) {
       // Como la base real: devuelve una copia nueva, no modifica el objeto que ya se leyó
       const i = tenants.findIndex((t) => t.id === id);
@@ -293,7 +290,6 @@ test('ficha del cliente: última vez que entró y uso del plan', async () => {
     assert.equal(new Date(detail.json.lastSeenAt).getTime() > Date.now() - 2 * DAY, true, 'Pedro entró ayer');
     assert.equal(detail.json.usage.users.used, 2);
     assert.equal(detail.json.usage.products.used, 12);
-    assert.deepEqual(detail.json.catalog, { total: 12, unpriced: 3 }, 'cuántos productos tiene y cuántos siguen sin precio');
     assert.ok(!JSON.stringify(detail.json).includes('password'));
     const list = await call('GET', '/platform/tenants', 'sofi');
     assert.equal(list.json.find((t) => t.id === 't1').waiting, 1, 'tickets por responder para quien pregunta');
@@ -366,41 +362,3 @@ test('equipo: los admins permanentes no se pueden quitar; los demás admins sí'
     close();
   }
 });
-
-test('quitar de una tienda los productos sin precio: solo socios, pide ELIMINAR y no toca lo que tiene existencias', async () => {
-  const { call, db, close } = await start();
-  try {
-    db.users.push({ _id: 'p1', username: 'mad', email: 'MadGrisMad@gmail.com', role: 'platform_admin', name: 'Mad', lastName: 'Admin', mfaEnabled: true, tokenVersion: 0 });
-    const foods = [
-      { id: 'f1', tenantId: 't1', name: 'Arroz', catalogId: 'k1', needsPrice: true, stock: 0 },
-      { id: 'f2', tenantId: 't1', name: 'Frijol', catalogId: 'k2', needsPrice: true, stock: 4 },
-      { id: 'f3', tenantId: 't1', name: 'Producto propio', price: 10, needsPrice: false, stock: 0 },
-    ];
-    const logs = [];
-    Object.assign(db, {
-      GetFoods: async (id) => foods.filter((f) => f.tenantId === id),
-      ListSoldRefs: async () => ({ ids: [], names: [] }),
-      DeleteFood: async (id) => {
-        foods.splice(foods.findIndex((f) => f.id === id), 1);
-        return { deletedCount: 1 };
-      },
-      DeleteEmptyCatalogMenus: async () => 0,
-      UpdateSettings: async () => ({}),
-      CreateActivityLog: async (e) => logs.push(e),
-      CountCatalogFoods: async () => ({ total: foods.length, unpriced: foods.filter((f) => f.needsPrice).length }),
-    });
-    const url = '/platform/tenants/t1/remove-unpriced';
-    assert.equal((await call('POST', url, 'admin', { confirm: 'ELIMINAR' })).status, 403, 'un admin que no es socio no puede');
-    assert.equal((await call('POST', url, 'mad', { confirm: 'si' })).status, 400, 'sin la palabra no se borra nada');
-    assert.equal(foods.length, 3);
-    const ok = await call('POST', url, 'mad', { confirm: 'eliminar' });
-    assert.equal(ok.status, 200);
-    assert.deepEqual([ok.json.removed, ok.json.keptStock, ok.json.keptSold], [1, 1, 0]);
-    assert.deepEqual(foods.map((f) => f.id), ['f2', 'f3'], 'se conserva lo que tiene existencias y lo propio');
-    assert.equal(logs.length, 1, 'la tienda ve en su bitácora qué pasó');
-    assert.ok(db.state.audit.some((a) => a.type === 'tenant_unpriced_removed'), 'queda en la bitácora de la plataforma');
-  } finally {
-    close();
-  }
-});
-

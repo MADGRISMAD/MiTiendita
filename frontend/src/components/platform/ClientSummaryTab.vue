@@ -63,7 +63,6 @@
     </section>
 
     <ClientReferralCard v-if="canEdit" :detail="detail" @changed="$emit('changed')" />
-    <ClientCatalogCard v-if="canEdit" :detail="detail" @changed="$emit('changed')" />
 
     <section v-if="detail.usage" class="pf-card-stack" aria-labelledby="usage-title">
       <h3 id="usage-title" class="pf-section-title">Uso del plan</h3>
@@ -113,7 +112,6 @@
 <script setup>
 import { computed } from "vue";
 import ClientReferralCard from "./ClientReferralCard.vue";
-import ClientCatalogCard from "./ClientCatalogCard.vue";
 import { ago, daysUntil, lastSeen, shortDate } from "../../platform/format";
 
 const props = defineProps({
