@@ -114,10 +114,10 @@ async function clear(db, catalog, confirm) {
 }
 
 const PRICES_WORD = 'QUITAR';
-/** Quita el precio sugerido de todo el catálogo (los costos y lo demás se quedan). Las tiendas que ya lo cargaron no cambian. */
+/** Quita el precio y el costo de todo el catálogo (lo demás se queda). Las tiendas que ya lo cargaron no cambian. */
 async function clearPrices(db, catalog, confirm) {
   assertCatalog(catalog);
-  if (String(confirm || '').trim().toUpperCase() !== PRICES_WORD) throw httpError(400, `Para quitar los precios escribe ${PRICES_WORD}.`);
+  if (String(confirm || '').trim().toUpperCase() !== PRICES_WORD) throw httpError(400, `Para quitar los precios y costos escribe ${PRICES_WORD}.`);
   return { cleared: await db.ClearCatalogPrices(catalog) };
 }
 

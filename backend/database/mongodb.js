@@ -1648,9 +1648,11 @@ async function ListSoldRefs(tenantId) {
     names: (r.names || []).filter(Boolean).map((n) => String(n).toLowerCase()),
   };
 }
-/** Quita el precio sugerido de todos los productos de un catálogo (el costo se queda). Devuelve cuántos tenían precio. */
+/** Quita el precio y el costo de todos los productos de un catálogo. Devuelve cuántos productos tenían alguno de los dos. */
 async function ClearCatalogPrices(catalog) {
-  const r = await dbConnection.collection('master_catalog_items').updateMany({ catalog, price: { $exists: true } }, { $unset: { price: '' }, $set: { updatedAt: new Date() } });
+  const r = await dbConnection
+    .collection('master_catalog_items')
+    .updateMany({ catalog, $or: [{ price: { $exists: true } }, { cost: { $exists: true } }] }, { $unset: { price: '', cost: '' }, $set: { updatedAt: new Date() } });
   return r.modifiedCount;
 }
 async function IsCatalogSeeded() {
