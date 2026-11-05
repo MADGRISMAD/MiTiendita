@@ -639,6 +639,9 @@ export const apiService = {
   platformCatalogRecodeApply(catalog: string, tenantId: string, clearOthers: boolean) {
     return axios.post(`/platform/catalogs/${catalog}/recode/apply`, { tenantId, clearOthers }, { timeout: 120_000 }).then((r) => r.data);
   },
+  platformCatalogStorePrices(catalog: string, body: { preview?: boolean; confirm?: string }) {
+    return axios.post(`/platform/catalogs/${catalog}/store-prices`, body, { timeout: 120_000 }).then((r) => r.data);
+  },
   platformCatalogClearPrices(catalog: string, confirm: string) {
     return axios.post(`/platform/catalogs/${catalog}/clear-prices`, { confirm }).then((r) => r.data);
   },

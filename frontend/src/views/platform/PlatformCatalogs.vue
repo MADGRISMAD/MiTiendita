@@ -4,6 +4,7 @@
       <template v-if="mode === 'catalog'">
         <button type="button" class="adm-btn" :disabled="!items.length" @click="exportCatalog">Exportar</button>
         <button type="button" class="adm-btn" @click="showImport = !showImport">Importar archivo</button>
+        <button type="button" class="adm-btn danger-ghost" :disabled="busy" @click="clearStorePrices">Quitar en las tiendas</button>
         <button type="button" class="adm-btn danger-ghost" :disabled="busy || !pricedCount" @click="clearPrices">Quitar precios</button>
         <button type="button" class="adm-btn danger-ghost" :disabled="busy || !items.length" @click="clearCatalog">Eliminar catálogo</button>
         <button type="button" class="adm-btn primary" @click="openEdit(null)">Agregar producto</button>
@@ -258,7 +259,7 @@
 </template>
 
 <script setup>
-import { confirmDialog, promptDialog } from "../../dialog";
+import { alertDialog, confirmDialog, promptDialog } from "../../dialog";
 import { computed, onMounted, reactive, ref } from "vue";
 import PlatformFrame from "../../components/platform/PlatformFrame.vue";
 import { apiService } from "../../apiService";
@@ -368,6 +369,48 @@ async function removeItem(item) {
     await Promise.all([loadItems(), loadCatalogs()]);
   } catch (e) {
     error.value = errText(e, "No pude quitar el producto.");
+  } finally {
+    busy.value = false;
+  }
+}
+
+// ---------- Quitar en las tiendas el precio que llegó del catálogo ----------
+async function clearStorePrices() {
+  const name = catalogLabel(catalog.value);
+  busy.value = true;
+  error.value = "";
+  let pre;
+  try {
+    pre = await apiService.platformCatalogStorePrices(catalog.value, { preview: true });
+  } catch (e) {
+    error.value = errText(e, "No pude revisar las tiendas.");
+    return;
+  } finally {
+    busy.value = false;
+  }
+  const t = pre.totals;
+  if (!t.products) {
+    await alertDialog(
+      `No hay nada que quitar en las tiendas.\n\nNinguna tiene productos del catálogo «${name}» con el precio original y sin vender. Ya vendidos: ${t.sold}. Con el precio cambiado: ${t.changed}.`
+    );
+    return;
+  }
+  const who = pre.stores.slice(0, 8).map((s) => `${s.name} (${s.products})`).join(", ");
+  const word = await promptDialog(
+    `Vas a quitar el precio de ${t.products} productos en ${t.stores} ${t.stores === 1 ? "tienda" : "tiendas"}.\n\nSe quita también el costo de ${t.costs} que no lo habían cambiado. No se toca lo que ya se vendió (${t.sold}) ni lo que cambiaron de precio (${t.changed}). Esos productos quedan «Sin precio» y el dueño tiene que ponerles el suyo para venderlos.\n\nTiendas: ${who}${pre.stores.length < t.stores ? ", …" : ""}.\n\nHazlo antes de quitar los precios del catálogo. Para confirmar escribe QUITAR.`,
+    { placeholder: "QUITAR", confirmLabel: "Quitar en las tiendas", tone: "danger" }
+  );
+  if (word === null) return;
+  if (String(word).trim().toUpperCase() !== "QUITAR") {
+    error.value = "No se quitó nada: no escribiste QUITAR.";
+    return;
+  }
+  busy.value = true;
+  try {
+    const r = await apiService.platformCatalogStorePrices(catalog.value, { confirm: "QUITAR" });
+    say(`Listo: se quitó el precio de ${r.totals.products} productos en ${r.totals.stores} tiendas (${r.totals.costs} también sin costo).`);
+  } catch (e) {
+    error.value = errText(e, "No pude quitar los precios en las tiendas.");
   } finally {
     busy.value = false;
   }

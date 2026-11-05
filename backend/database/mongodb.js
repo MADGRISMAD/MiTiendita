@@ -1632,6 +1632,22 @@ async function DeleteCatalogItem(catalog, key) {
 async function DeleteAllCatalogItems(catalog) {
   return (await dbConnection.collection('master_catalog_items').deleteMany({ catalog })).deletedCount;
 }
+/** Productos que una tienda ya vendió (en cualquier venta): ids y nombres en minúsculas, para no tocar lo que ya se cobró. */
+async function ListSoldRefs(tenantId) {
+  const rows = await dbConnection
+    .collection('orders')
+    .aggregate([
+      { $match: { tenantId: String(tenantId) } },
+      { $unwind: '$items' },
+      { $group: { _id: null, ids: { $addToSet: '$items.foodId' }, names: { $addToSet: '$items.name' } } },
+    ])
+    .toArray();
+  const r = rows[0] || {};
+  return {
+    ids: (r.ids || []).filter(Boolean).map(String),
+    names: (r.names || []).filter(Boolean).map((n) => String(n).toLowerCase()),
+  };
+}
 /** Quita el precio sugerido de todos los productos de un catálogo (el costo se queda). Devuelve cuántos tenían precio. */
 async function ClearCatalogPrices(catalog) {
   const r = await dbConnection.collection('master_catalog_items').updateMany({ catalog, price: { $exists: true } }, { $unset: { price: '' }, $set: { updatedAt: new Date() } });
@@ -1737,6 +1753,6 @@ module.exports = {
   CreatePurchase, GetPurchases, GetPurchaseById,
   CreateLot, GetLotsByFood, GetExpiringLots, TakeFromLot, CreateExchange, GetExchanges,
   GetEmailCode, SaveEmailCode, BumpEmailCodeTries, DeleteEmailCode,
-  ListCatalogItems, CountCatalogItems, GetCatalogItem, InsertCatalogItems, UpsertCatalogItem, DeleteCatalogItem, DeleteAllCatalogItems, ClearCatalogPrices, IsCatalogSeeded, MarkCatalogSeeded,
+  ListCatalogItems, CountCatalogItems, GetCatalogItem, InsertCatalogItems, UpsertCatalogItem, DeleteCatalogItem, DeleteAllCatalogItems, ClearCatalogPrices, ListSoldRefs, IsCatalogSeeded, MarkCatalogSeeded,
   CreatePlatformAudit, ListPlatformAudit, CreateActivityLog, GetActivityLog, GetPaidItemQtySince,
 };

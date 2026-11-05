@@ -203,4 +203,4 @@ async function addFromTenant(db, catalog, tenantId, foodIds) {
   return { ...result, skipped: wanted.size - rows.length };
 }
 
-module.exports = { summary, list, create, update, remove, clear, clearPrices, importRows, tenantProducts, addFromTenant, cleanItem };
+module.exports = { assertCatalog, summary, list, create, update, remove, clear, clearPrices, importRows, tenantProducts, addFromTenant, cleanItem };

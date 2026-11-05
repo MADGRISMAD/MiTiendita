@@ -3,6 +3,8 @@ const admin = require('../services/master-catalog-admin.service');
 const { catalogKeyFor, CATALOGS } = require('../services/master-catalog.service');
 const audit = require('../services/platform-audit.service');
 const recode = require('../services/catalog-recode.service');
+const storePrices = require('../services/catalog-store-prices.service');
+const { isPermanentAdmin } = require('../configurations/platform-owners');
 
 function fail(res, err, fallback) {
   if (err.status) return res.status(err.status).send(err.message);
@@ -106,6 +108,25 @@ async function clearPrices(req, res) {
   }
 }
 
+/** Quita de las tiendas el precio (y el costo) que les llegó del catálogo por error. Solo socios; `preview: true` no cambia nada. */
+async function storePricesAction(req, res) {
+  try {
+    const user = await db.FindUserByUsername(req.user.username);
+    const email = String(user?.email || req.user.email || '').trim().toLowerCase();
+    if (!isPermanentAdmin({ email })) return res.status(403).send('Esto lo pueden hacer solo los socios.');
+    if (req.body?.preview) return res.json(await storePrices.preview(db, req.params.catalog));
+    const out = await storePrices.apply(db, req.params.catalog, req.body?.confirm);
+    await audit.record(req, {
+      type: 'catalog_store_prices_removed',
+      message: `Quitó el precio de ${out.totals.products} productos en ${out.totals.stores} tiendas (catálogo ${label(req.params.catalog)}); costos: ${out.totals.costs}`,
+      meta: { catalog: req.params.catalog, ...out.totals },
+    });
+    return res.json(out);
+  } catch (err) {
+    return fail(res, err, 'No se pudieron quitar los precios en las tiendas.');
+  }
+}
+
 async function importRows(req, res) {
   try {
     const out = await admin.importRows(db, req.params.catalog, req.body?.rows);
@@ -142,4 +163,4 @@ async function addFromTenant(req, res) {
   }
 }
 
-module.exports = { summary, list, create, update, remove, importRows, tenantProducts, addFromTenant, recodePreview, recodeApply, clearCatalog, clearPrices };
+module.exports = { summary, list, create, update, remove, importRows, tenantProducts, addFromTenant, recodePreview, recodeApply, clearCatalog, clearPrices, storePricesAction };
