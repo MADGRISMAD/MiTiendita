@@ -16,6 +16,15 @@
     <meta name="description" content="Punto de venta (POS) en la nube para tiendas en México: cobra desde celular, tablet o PC, sigue vendiendo sin internet, controla inventario y cortes de caja. 3 días gratis." />
     <!--/seo-head-->
     <meta name="format-detection" content="telephone=no" />
+    <!-- Antes de que cargue la app: el texto para buscadores sigue en la página pero no se ve, y la landing muestra su fondo oscuro con el logo. Sin JavaScript el texto se ve normal. -->
+    <script>if (location.pathname === '/') document.documentElement.classList.add('pre-landing')</script>
+    <style>
+      .seo-static { position: absolute !important; width: 1px !important; height: 1px !important; margin: -1px !important; padding: 0 !important; overflow: hidden !important; clip: rect(0, 0, 0, 0) !important; white-space: nowrap !important; border: 0 !important; }
+      html.pre-landing:has(#app > .seo-static) { background: linear-gradient(180deg, #171e3f 0%, #140b1b 60%); }
+      html.pre-landing:has(#app > .seo-static) body { background: transparent; }
+      html.pre-landing:has(#app > .seo-static) body::before { content: ""; position: fixed; inset: 0; background: url(/logo.svg) center / 72px no-repeat; }
+    </style>
+    <noscript><style>.seo-static { position: static !important; width: auto !important; height: auto !important; margin: 0 auto !important; padding: 2rem 1.2rem !important; overflow: visible !important; clip: auto !important; white-space: normal !important; }</style></noscript>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&family=Figtree:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet" />
